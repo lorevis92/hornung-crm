@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-sand font-sans text-[17px] leading-relaxed text-ink-800 antialiased;
+  }
+
+  h1, h2, h3 {
+    @apply text-ink-900;
+  }
+
+  /* Visible, consistent focus for keyboard users */
+  :focus-visible {
+    @apply outline-none ring-2 ring-gold-500 ring-offset-2 ring-offset-white;
+  }
+
+  ::selection {
+    @apply bg-gold-200 text-ink-900;
+  }
+}
+
+@layer components {
+  .display {
+    @apply font-display font-semibold tracking-[-0.01em];
+  }
+
+  /* ---------------------------------------------------------------- cards -- */
+  .card {
+    @apply rounded-2xl border border-line bg-white shadow-card;
+  }
+
+  .card-pad {
+    @apply p-5 sm:p-7;
+  }
+
+  .section-title {
+    @apply display text-2xl text-ink-900 sm:text-[27px];
+  }
+
+  .section-sub {
+    @apply mt-1 text-[15px] text-ink-500;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.14em] text-gold-700;
+  }
+
+  /* -------------------------------------------------------------- buttons -- */
+  .btn {
+    @apply inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl px-5 text-[15px]
+           font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-gold-600 text-white shadow-sm hover:bg-gold-700 active:bg-gold-800;
+  }
+
+  .btn-secondary {
+    @apply btn border border-line bg-white text-ink-800 hover:border-gold-300 hover:bg-gold-50;
+  }
+
+  .btn-ghost {
+    @apply btn px-3 text-ink-600 hover:bg-ink-100 hover:text-ink-900;
+  }
+
+  .btn-danger {
+    @apply btn border border-red-200 bg-white text-red-700 hover:bg-red-50;
+  }
+
+  .btn-sm {
+    @apply min-h-[38px] rounded-lg px-3.5 text-sm;
+  }
+
+  /* --------------------------------------------------------------- forms --- */
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink-600;
+  }
+
+  .input,
+  .select,
+  .textarea {
+    @apply block w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-[16px] text-ink-900
+           placeholder:text-ink-400 focus:border-gold-400 focus:outline-none focus:ring-2
+           focus:ring-gold-200 disabled:bg-ink-50 disabled:text-ink-500;
+  }
+
+  .input,
+  .select {
+    @apply min-h-[46px];
+  }
+
+  .textarea {
+    @apply min-h-[96px] leading-relaxed;
+  }
+
+  .checkbox {
+    @apply h-5 w-5 rounded border-ink-300 text-gold-600 focus:ring-gold-400;
+  }
+
+  .hint {
+    @apply mt-1 text-[13px] leading-snug text-ink-400;
+  }
+
+  /* --------------------------------------------------------------- chips --- */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold ring-1 ring-inset;
+  }
+
+  .divider {
+    @apply border-t border-line;
+  }
+
+  .link {
+    @apply font-medium text-gold-700 underline-offset-4 hover:underline;
+  }
+
+  .table-head {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-400;
+  }
+
+  .table-cell {
+    @apply px-4 py-3.5 align-middle text-[15px];
+  }
+}
+
+/* Thin, discreet scrollbars (desktop) */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: #dcdad5;
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+}

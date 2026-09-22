@@ -1,0 +1,13 @@
+import { createClient } from '@supabase/supabase-js'
+import { IS_DEMO, SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
+
+// In demo mode we never instantiate a real client.
+export const supabase = IS_DEMO
+  ? null
+  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    })
