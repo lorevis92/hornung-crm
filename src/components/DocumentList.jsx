@@ -51,6 +51,8 @@ export default function DocumentList({ documents = [], documentTypes = [], onDel
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const changeView = (next) => {
     setView(next)
@@ -74,12 +76,22 @@ export default function DocumentList({ documents = [], documentTypes = [], onDel
     }
   }
 
-  const remove = async (doc) => {
-    if (!window.confirm(t('case.deleteConfirm'))) return
-    setBusyId(doc.id)
+  const askDelete = (doc) => setDeleteTarget(doc)
+
+  const cancelDelete = () => {
+    if (deleting) return
+    setDeleteTarget(null)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setBusyId(deleteTarget.id)
     try {
-      await onDelete(doc)
+      await onDelete(deleteTarget)
+      setDeleteTarget(null)
     } finally {
+      setDeleting(false)
       setBusyId(null)
     }
   }
@@ -172,7 +184,7 @@ export default function DocumentList({ documents = [], documentTypes = [], onDel
                   {canDelete ? (
                     <button
                       type="button"
-                      onClick={() => remove(doc)}
+                      onClick={() => askDelete(doc)}
                       className="btn-ghost btn-sm text-ink-400 hover:text-red-700"
                       title={t('common.delete')}
                       aria-label={t('common.delete')}
@@ -239,7 +251,7 @@ export default function DocumentList({ documents = [], documentTypes = [], onDel
                   {canDelete ? (
                     <button
                       type="button"
-                      onClick={() => remove(doc)}
+                      onClick={() => askDelete(doc)}
                       className="btn-ghost btn-sm text-ink-400 hover:text-red-700"
                       title={t('common.delete')}
                       aria-label={t('common.delete')}
@@ -291,6 +303,35 @@ export default function DocumentList({ documents = [], documentTypes = [], onDel
           </div>
         )}
       </Modal>
+
+      <Modal
+        open={!!deleteTarget}
+        onClose={cancelDelete}
+        title={t('case.deleteConfirm')}
+        description={deleteTarget ? t('case.deleteConfirmBody', { name: deleteTarget.file_name }) : ''}
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={cancelDelete}
+              disabled={deleting}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn-danger btn-sm"
+              onClick={confirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? <Spinner size={16} /> : <Trash2 size={16} aria-hidden="true" />}
+              {deleting ? t('common.deleting') : t('common.delete')}
+            </button>
+          </>
+        }
+      />
     </div>
   )
 }
