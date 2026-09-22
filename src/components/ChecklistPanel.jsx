@@ -5,6 +5,44 @@ import Modal from './Modal'
 import { useI18n } from '../i18n'
 import { docTypeLabel, groupByCategory } from '../lib/labels'
 import { DOC_CATEGORIES } from '../lib/constants'
+import { FEATURES } from '../lib/config'
+
+function DocTypeList({ grouped, uploadedTypes, lang, t }) {
+  return (
+    <div className="space-y-4">
+      {DOC_CATEGORIES.filter((cat) => grouped[cat]?.length).map((cat) => (
+        <div key={cat}>
+          <p className="eyebrow mb-1.5">{t(`docCat.${cat}`)}</p>
+          <ul className="space-y-1.5">
+            {grouped[cat].map((type) => {
+              const done = uploadedTypes.has(type.id)
+              return (
+                <li key={type.id} className="flex items-start gap-2.5">
+                  <span
+                    className={clsx(
+                      'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border',
+                      done
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                        : 'border-ink-200 bg-white text-transparent'
+                    )}
+                    aria-hidden="true"
+                  >
+                    <Check size={13} />
+                  </span>
+                  <span
+                    className={clsx('text-[14.5px] leading-snug', done ? 'text-ink-400' : 'text-ink-700')}
+                  >
+                    {docTypeLabel(type, lang)}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function ChecklistPanel({
   documentTypes = [],
@@ -14,17 +52,58 @@ export default function ChecklistPanel({
   onSave
 }) {
   const { t, lang } = useI18n()
+  const grouped = useMemo(() => groupByCategory(documentTypes), [documentTypes])
+  const uploadedTypes = useMemo(
+    () => new Set(documents.map((d) => d.document_type_id).filter(Boolean)),
+    [documents]
+  )
+
+  // ---------------------------------------------------------------------
+  // Default behaviour: the specialist agrees on documents by phone, so the
+  // panel always shows the full list of possible documents. The checkmark
+  // is only a reminder of what the client has already uploaded.
+  // ---------------------------------------------------------------------
+  if (!FEATURES.requestedDocumentsChecklist) {
+    return (
+      <div className="rounded-xl border border-line bg-white">
+        <div className="flex items-start gap-2.5 border-b border-line px-4 py-3">
+          <ListChecks size={19} className="mt-0.5 shrink-0 text-gold-600" aria-hidden="true" />
+          <div>
+            <p className="text-[15px] font-semibold text-ink-900">{t('case.possibleDocs')}</p>
+            <p className="text-[13px] text-ink-400">{t('case.possibleDocsHelp')}</p>
+          </div>
+        </div>
+        <div className="px-4 py-3">
+          <DocTypeList grouped={grouped} uploadedTypes={uploadedTypes} lang={lang} t={t} />
+        </div>
+      </div>
+    )
+  }
+
+  // ---------------------------------------------------------------------
+  // Future phase: a checklist agreed per client, editable by staff.
+  // ---------------------------------------------------------------------
+  return (
+    <RequestedChecklist
+      documentTypes={documentTypes}
+      requested={requested}
+      grouped={grouped}
+      uploadedTypes={uploadedTypes}
+      canEdit={canEdit}
+      onSave={onSave}
+      lang={lang}
+      t={t}
+    />
+  )
+}
+
+function RequestedChecklist({ documentTypes, requested, grouped, uploadedTypes, canEdit, onSave, lang, t }) {
   const [showAll, setShowAll] = useState(false)
   const [editing, setEditing] = useState(false)
   const [selection, setSelection] = useState([])
   const [saving, setSaving] = useState(false)
 
-  const uploadedTypes = useMemo(
-    () => new Set(documents.map((d) => d.document_type_id).filter(Boolean)),
-    [documents]
-  )
   const requestedIds = useMemo(() => requested.map((r) => r.document_type_id), [requested])
-  const grouped = useMemo(() => groupByCategory(documentTypes), [documentTypes])
 
   const openEditor = () => {
     setSelection(requestedIds)
@@ -108,19 +187,8 @@ export default function ChecklistPanel({
         </button>
 
         {showAll ? (
-          <div className="mt-3 space-y-4 border-t border-line pt-3">
-            {DOC_CATEGORIES.filter((cat) => grouped[cat]?.length).map((cat) => (
-              <div key={cat}>
-                <p className="eyebrow mb-1.5">{t(`docCat.${cat}`)}</p>
-                <ul className="space-y-1">
-                  {grouped[cat].map((type) => (
-                    <li key={type.id} className="text-[14px] leading-snug text-ink-600">
-                      · {docTypeLabel(type, lang)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+          <div className="mt-3 border-t border-line pt-3">
+            <DocTypeList grouped={grouped} uploadedTypes={uploadedTypes} lang={lang} t={t} />
           </div>
         ) : null}
       </div>

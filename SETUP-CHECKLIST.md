@@ -100,9 +100,15 @@ Settings → API, annota:
 | `RESEND_FROM` | `Hornung Consulting <no-reply@...>` |
 | `PUBLIC_SITE_URL` | URL del sito (senza `/` finale) |
 | `NOTIFY_BCC` | (facoltativo) copia delle e-mail allo studio |
+| `CRON_SECRET` | stringa segreta a caso — protegge `/api/open-tax-year` |
+| `AUTO_OPEN_MONTH_DAY` | (facoltativo) `MM-DD` da cui aprire l'anno, default `01-01` |
 
 - [ ] Deploy
 - [ ] Login con l'account specialista → si apre la dashboard "Clienti"
+- [ ] Verifica il cron: Vercel → progetto → tab **Cron Jobs** → `/api/open-tax-year` risulta
+      programmato (`0 6 1 * *`); per un test immediato, chiamalo con
+      `curl -H "Authorization: Bearer <CRON_SECRET>" https://<dominio>/api/open-tax-year` e
+      controlla la risposta `{ taxYear, created, skipped }`
 
 ---
 

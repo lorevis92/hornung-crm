@@ -307,10 +307,10 @@ export const supabaseApi = {
     return true
   },
 
-  async getDownloadUrl(doc) {
+  async getDownloadUrl(doc, { download = true } = {}) {
     const { data, error } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .createSignedUrl(doc.storage_path, 300, { download: doc.file_name })
+      .createSignedUrl(doc.storage_path, 300, download ? { download: doc.file_name } : {})
     if (error) throw error
     return data.signedUrl
   },

@@ -480,7 +480,7 @@ export const demoApi = {
     return wait(true)
   },
 
-  async getDownloadUrl(doc) {
+  async getDownloadUrl(doc, { download = true } = {}) {
     return blobs.get(doc.id) || null
   },
 

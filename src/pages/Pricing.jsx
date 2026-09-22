@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
+import clsx from 'clsx'
 import { Receipt, Sparkle } from 'lucide-react'
 import { PageLoader } from '../components/ui'
 import FeeEstimatePanel from '../components/FeeEstimatePanel'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
-import { currentTaxYear } from '../lib/config'
+import { currentTaxYear, FEATURES } from '../lib/config'
 import { formatChf } from '../lib/format'
 import { pricingLabel } from '../lib/pricing'
 
@@ -49,7 +50,7 @@ export default function Pricing() {
       if (!active) return
       setPricing(items)
 
-      if (client?.id) {
+      if (FEATURES.clientFeeEstimate && client?.id) {
         const [quest, cases] = await Promise.all([
           api.getQuestionnaire(client.id),
           api.listCases(client.id)
@@ -71,6 +72,7 @@ export default function Pricing() {
   const base = pricing.filter((p) => ['base', 'per_unit', 'tier'].includes(p.kind))
   const surcharges = pricing.filter((p) => p.kind === 'surcharge')
   const services = pricing.filter((p) => p.kind === 'service')
+  const showEstimate = FEATURES.clientFeeEstimate && !isStaff && questionnaire
 
   return (
     <div className="space-y-8">
@@ -80,7 +82,7 @@ export default function Pricing() {
         <p className="mt-1 max-w-2xl text-[16px] text-ink-500">{t('pricing.subtitle')}</p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className={clsx('grid gap-6', showEstimate && 'lg:grid-cols-[minmax(0,1fr)_340px]')}>
         <div className="space-y-6">
           <section className="card card-pad">
             <div className="mb-4 flex items-start gap-2.5">
@@ -116,7 +118,7 @@ export default function Pricing() {
           </section>
         </div>
 
-        {!isStaff && questionnaire ? (
+        {showEstimate ? (
           <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
             <p className="eyebrow">{t('pricing.yourEstimate')}</p>
             <FeeEstimatePanel

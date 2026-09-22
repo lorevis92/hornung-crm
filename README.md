@@ -141,6 +141,15 @@ alla domanda "da dove viene questo dato?".
 `export_jobs` registra i payload inviati. Da attivare quando Doctor Tax conferma se e come
 espone delle API.
 
+**Apertura automatica dell'anno fiscale**
+`api/open-tax-year.js` è una funzione serverless protetta da `CRON_SECRET`, richiamata dal
+Vercel Cron Job definito in `vercel.json` (ogni primo del mese). Per ogni cliente `active` senza
+una pratica per l'anno fiscale corrente ne crea una con stato `opened`, scadenza 31 marzo
+dell'anno successivo e un evento `case_opened`. Non fa nulla prima della data configurata in
+`AUTO_OPEN_MONTH_DAY` (default `01-01`), salta i clienti `invited`/`archived` ed è idempotente.
+Non invia e-mail in questa versione. Il pulsante manuale "Apri un nuovo anno fiscale" nella
+scheda cliente resta disponibile in aggiunta.
+
 ---
 
 ## 7. Note tecniche

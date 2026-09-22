@@ -6,6 +6,9 @@
   "rewrites": [
     { "source": "/((?!api/.*).*)", "destination": "/index.html" }
   ],
+  "crons": [
+    { "path": "/api/open-tax-year", "schedule": "0 6 1 * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

@@ -43,3 +43,10 @@ export function currentTaxYear() {
   if (override && /^\d{4}$/.test(override)) return Number(override)
   return new Date().getFullYear() - 1
 }
+
+// Feature flags — code stays in place, disabled until the future phase that
+// needs it is switched on.
+export const FEATURES = {
+  requestedDocumentsChecklist: false, // fase futura: checklist personalizzata per cliente
+  clientFeeEstimate: false            // fase futura: stima onorario visibile al cliente
+}
