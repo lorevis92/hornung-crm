@@ -48,9 +48,15 @@ SQL Editor → esegui **in quest'ordine**, uno alla volta:
 - [ ] `supabase/migrations/20260101000003_hornung_rls.sql`
 - [ ] `supabase/migrations/20260101000004_storage.sql`
 - [ ] `supabase/migrations/20260101000005_seed.sql`
+- [ ] `supabase/migrations/20260101000006_fk_set_null_app_profiles.sql`
 
 > Il primo file crea `apps` e `app_profiles`, che sono le tabelle condivise fra le app.
 > Non tocca nulla di quello che già esiste per WisiHealth.
+> Il file 06 è già incluso (senza effetto pratico) se parti da zero: le FK verso
+> `app_profiles` create dal file 02 hanno già `on delete set null`. Se invece il
+> progetto Supabase esisteva già prima di questa modifica, il file 06 è
+> **indispensabile**: senza di esso cancellare un utente da Authentication →
+> Users può bloccarsi con un errore di foreign key.
 
 ### 2.2 Account dello specialista
 

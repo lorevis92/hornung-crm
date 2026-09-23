@@ -21,7 +21,7 @@ create table if not exists public.clients (
   internal_notes      text,                     -- staff only (never sent to the client)
   invited_at          timestamptz,
   activated_at        timestamptz,
-  created_by          uuid references public.app_profiles(id),
+  created_by          uuid references public.app_profiles(id) on delete set null,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()
 );
@@ -176,7 +176,7 @@ create table if not exists public.case_events (
   from_status text,
   to_status   text,
   note        text,
-  actor_id    uuid references public.app_profiles(id),
+  actor_id    uuid references public.app_profiles(id) on delete set null,
   created_at  timestamptz not null default now()
 );
 create index if not exists case_events_case_idx on public.case_events (case_id, created_at desc);
@@ -239,7 +239,7 @@ create table if not exists public.case_documents (
   file_size        bigint,
   mime_type        text,
   note             text,
-  uploaded_by      uuid references public.app_profiles(id),
+  uploaded_by      uuid references public.app_profiles(id) on delete set null,
   created_at       timestamptz not null default now()
 );
 create index if not exists case_documents_case_idx on public.case_documents (case_id, direction, created_at desc);
@@ -287,7 +287,7 @@ create table if not exists public.extracted_fields (
   source_snippet text,             -- quote from the document -> "where does this come from?"
   status         text not null default 'pending'
                  check (status in ('pending','confirmed','rejected')),
-  reviewed_by    uuid references public.app_profiles(id),
+  reviewed_by    uuid references public.app_profiles(id) on delete set null,
   reviewed_at    timestamptz,
   created_at     timestamptz not null default now()
 );
@@ -301,7 +301,7 @@ create table if not exists public.export_jobs (
   status       text not null default 'queued' check (status in ('queued','sent','failed','acknowledged')),
   payload      jsonb,
   response     jsonb,
-  created_by   uuid references public.app_profiles(id),
+  created_by   uuid references public.app_profiles(id) on delete set null,
   created_at   timestamptz not null default now(),
   completed_at timestamptz
 );
