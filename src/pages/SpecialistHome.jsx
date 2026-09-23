@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CheckCircle2, Clock, FolderOpen, Search, UserPlus, Users } from 'lucide-react'
+import {
+  ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Clock, FolderOpen, Search, UserPlus, Users
+} from 'lucide-react'
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
 import { EmptyState, Field, PageLoader, Select, Spinner, Stat, TextInput } from '../components/ui'
@@ -20,6 +22,8 @@ const emptyForm = {
   canton: ''
 }
 
+const PAGE_SIZE = 10
+
 export default function SpecialistHome() {
   const { t, lang } = useI18n()
   const toast = useToast()
@@ -29,8 +33,12 @@ export default function SpecialistHome() {
   const [clients, setClients] = useState([])
   const [stats, setStats] = useState(null)
   const [query, setQuery] = useState('')
-  const [yearFilter, setYearFilter] = useState(String(year))
+  // Defaults to "All" — a client with no case for the current tax year (e.g.
+  // just invited, or only worked on in a previous year) must not disappear
+  // from the list until the specialist actively filters for a year.
+  const [yearFilter, setYearFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [page, setPage] = useState(1)
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [creating, setCreating] = useState(false)
@@ -53,6 +61,15 @@ export default function SpecialistHome() {
     const timer = setTimeout(load, 180)
     return () => clearTimeout(timer)
   }, [load])
+
+  // Any filter change invalidates the current page — go back to the top.
+  useEffect(() => {
+    setPage(1)
+  }, [query, yearFilter, statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(clients.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageClients = clients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const createClient = async (e) => {
     e.preventDefault()
@@ -159,7 +176,7 @@ export default function SpecialistHome() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {clients.map((client) => {
+                {pageClients.map((client) => {
                   const latest = client.latest_case
                   return (
                     <tr key={client.id} className="transition hover:bg-sand/60">
@@ -193,11 +210,41 @@ export default function SpecialistHome() {
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : null}
+
+        {!loading && clients.length > PAGE_SIZE ? (
+          <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
+            <p className="text-[13.5px] text-ink-400">
+              {t('specialist.pageOf', { page: currentPage, pages: totalPages })}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft size={16} aria-hidden="true" />
+                {t('common.previous')}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                {t('common.next')}
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {!loading && !clients.length ? (
           <div className="p-6">
             <EmptyState icon={Users} title={t('specialist.noClients')} />
           </div>
-        )}
+        ) : null}
       </section>
 
       <Modal
