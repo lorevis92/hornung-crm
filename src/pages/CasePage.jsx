@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import clsx from 'clsx'
 import {
-  ArrowLeft, FileCheck2, FolderOpen, Lock, Mail, MessageSquare, Save, ShieldCheck, Upload
+  ArrowLeft, FileCheck2, FolderOpen, Info, Mail, MessageSquare, Save, ShieldCheck, Upload
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import StatusStepper from '../components/StatusStepper'
@@ -16,7 +17,7 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
-import { CASE_STATUSES } from '../lib/constants'
+import { CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES } from '../lib/constants'
 import { fullName } from '../lib/format'
 
 export default function CasePage() {
@@ -93,7 +94,10 @@ export default function CasePage() {
     [documents]
   )
 
-  const locked = caseRow?.status === 'finished'
+  // A client can always upload (see the "documents: client upload" RLS
+  // policy) — this only gates deleting their own documents, matching
+  // "documents: client delete own" / case_is_open_for_client() exactly.
+  const locked = !CLIENT_DELETE_OPEN_STATUSES.includes(caseRow?.status)
   const clientRecord = caseRow?.client || myClient
 
   const upload = async (file, meta, direction) => {
@@ -106,6 +110,15 @@ export default function CasePage() {
     })
     setDocuments((list) => [doc, ...list])
     toast.success(t('common.saved'))
+
+    // The client uploaded to their own case (not staff acting on their
+    // behalf) while it's already in review/finished — RLS lets this through
+    // on purpose, so alert staff instead of silently accepting it.
+    if (direction === 'client_upload' && !isStaff && locked) {
+      api.notifyLateUpload({ caseId, fileName: file.name }).catch((err) => {
+        console.error('[notifyLateUpload]', err)
+      })
+    }
   }
 
   const removeDocument = async (doc) => {
@@ -227,9 +240,16 @@ export default function CasePage() {
       </header>
 
       {/* ------------------------------------------------ client documents -- */}
-      <section className="card card-pad">
+      {/* This is the client's own upload zone — primary/prominent for them,
+          secondary/muted for staff, who can still use it on the client's
+          behalf but shouldn't mistake it for their own upload flow below. */}
+      <section className={clsx('card card-pad', isStaff && 'border-dashed bg-sand/30')}>
         <div className="mb-4 flex items-start gap-2.5">
-          <Upload size={20} className="mt-1 shrink-0 text-gold-600" aria-hidden="true" />
+          <Upload
+            size={20}
+            className={clsx('mt-1 shrink-0', isStaff ? 'text-ink-400' : 'text-gold-600')}
+            aria-hidden="true"
+          />
           <div>
             <h2 className="section-title text-xl">{t('case.yourDocuments')}</h2>
             <p className="section-sub">{t('case.yourDocumentsHelp')}</p>
@@ -238,16 +258,30 @@ export default function CasePage() {
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-4">
-            {locked && !isStaff ? (
-              <div className="flex items-center gap-2 rounded-xl bg-sand px-4 py-3 text-[14.5px] text-ink-500">
-                <Lock size={16} aria-hidden="true" />
-                {t('case.lockedNotice')}
+            {isStaff ? (
+              <div className="space-y-2">
+                <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">
+                  {t('case.staffUploadOnBehalf')}
+                </p>
+                <Uploader
+                  compact
+                  documentTypes={documentTypes}
+                  onUpload={(file, meta) => upload(file, meta, 'client_upload')}
+                />
               </div>
             ) : (
-              <Uploader
-                documentTypes={documentTypes}
-                onUpload={(file, meta) => upload(file, meta, 'client_upload')}
-              />
+              <>
+                {locked ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-sand px-4 py-3 text-[14.5px] text-ink-500">
+                    <Info size={16} aria-hidden="true" />
+                    {t('case.lateUploadNotice')}
+                  </div>
+                ) : null}
+                <Uploader
+                  documentTypes={documentTypes}
+                  onUpload={(file, meta) => upload(file, meta, 'client_upload')}
+                />
+              </>
             )}
 
             {clientDocs.length ? (
@@ -275,9 +309,15 @@ export default function CasePage() {
       </section>
 
       {/* -------------------------------------------- specialist documents -- */}
-      <section className="card card-pad">
+      {/* Staff's own upload zone — primary/prominent for them, secondary/
+          view-only for the client (who never gets an uploader here). */}
+      <section className={clsx('card card-pad', !isStaff && 'border-dashed bg-sand/30')}>
         <div className="mb-4 flex items-start gap-2.5">
-          <FileCheck2 size={20} className="mt-1 shrink-0 text-gold-600" aria-hidden="true" />
+          <FileCheck2
+            size={20}
+            className={clsx('mt-1 shrink-0', !isStaff ? 'text-ink-400' : 'text-gold-600')}
+            aria-hidden="true"
+          />
           <div>
             <h2 className="section-title text-xl">{t('case.fromSpecialist')}</h2>
             <p className="section-sub">{t('case.fromSpecialistHelp')}</p>
@@ -287,7 +327,6 @@ export default function CasePage() {
         <div className="space-y-4">
           {isStaff ? (
             <Uploader
-              compact
               documentTypes={[]}
               onUpload={(file, meta) => upload(file, meta, 'specialist_upload')}
             />

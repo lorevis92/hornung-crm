@@ -35,6 +35,15 @@ export const STATUS_META = {
 
 export const DOC_CATEGORIES = ['base', 'income', 'deductions', 'assets', 'property', 'other']
 
+// Case statuses during which a client may delete a document they uploaded
+// themselves. Mirrors public.case_is_open_for_client() in
+// supabase/migrations/20260101000003_hornung_rls.sql exactly ("documents:
+// client delete own" policy) — keep both lists in sync if either changes.
+// NOTE: uploading is intentionally NOT gated by this anymore — clients can
+// always upload regardless of status (see the "documents: client upload"
+// policy and api/notify-late-upload.js, which alerts staff instead).
+export const CLIENT_DELETE_OPEN_STATUSES = ['opened', 'waiting_client', 'in_process']
+
 // How long Login.jsx / Register.jsx wait, after a successful sign-in, for the
 // app profile to resolve (app_profiles lookup + the /api/claim-profile
 // fallback in AuthContext) before giving up and showing an explicit error

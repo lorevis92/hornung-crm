@@ -338,6 +338,10 @@ export const supabaseApi = {
     return true
   },
 
+  async notifyLateUpload(payload) {
+    return callApi('/api/notify-late-upload', payload)
+  },
+
   async getDownloadUrl(doc, { download = true } = {}) {
     const { data, error } = await supabase.storage
       .from(STORAGE_BUCKET)

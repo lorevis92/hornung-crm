@@ -160,6 +160,8 @@ export default {
     deleteConfirm: 'Rimuovere questo documento?',
     deleteConfirmBody: 'Il file «{name}» verrà eliminato definitivamente. L\'azione non può essere annullata.',
     lockedNotice: 'Questo anno è chiuso. Contattaci se devi aggiungere qualcosa.',
+    lateUploadNotice: 'Questo anno è già chiuso, ma puoi comunque caricare documenti se qualcosa cambia — verremo avvisati.',
+    staffUploadOnBehalf: 'Carica per conto del cliente (solo staff)',
     messageFromUs: 'Messaggio da Hornung Consulting',
     timeline: 'Cronologia',
     staffArea: 'Area specialista',

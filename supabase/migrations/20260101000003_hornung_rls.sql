@@ -171,12 +171,16 @@ drop policy if exists "documents: read own" on public.case_documents;
 create policy "documents: read own" on public.case_documents for select to authenticated
   using (public.owns_case(case_id));
 
+-- Clients can always upload their own documents, regardless of the case
+-- status (opened/waiting_client/in_process/review/finished) — intentionally
+-- NOT gated by case_is_open_for_client() here. If they upload while the case
+-- is already in review/finished, api/notify-late-upload.js alerts staff by
+-- e-mail instead of the database silently rejecting the insert.
 drop policy if exists "documents: client upload" on public.case_documents;
 create policy "documents: client upload" on public.case_documents for insert to authenticated
   with check (
     public.owns_case(case_id)
     and direction = 'client_upload'
-    and public.case_is_open_for_client(case_id)
   );
 
 -- A client may remove a file they uploaded themselves, as long as the case has

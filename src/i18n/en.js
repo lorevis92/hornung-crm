@@ -160,6 +160,8 @@ export default {
     deleteConfirm: 'Remove this document?',
     deleteConfirmBody: 'This will permanently delete "{name}". This cannot be undone.',
     lockedNotice: 'This year is closed. Contact us if you need to add something.',
+    lateUploadNotice: "This year is already closed for review, but you can still upload documents if something changes — we'll be notified.",
+    staffUploadOnBehalf: 'Upload on behalf of the client (staff only)',
     messageFromUs: 'Message from Hornung Consulting',
     timeline: 'History',
     // staff only

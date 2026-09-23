@@ -161,6 +161,8 @@ export default {
     deleteConfirm: 'Retirer ce document ?',
     deleteConfirmBody: 'Ceci supprimera définitivement « {name} ». Cette action est irréversible.',
     lockedNotice: 'Cette année est clôturée. Contactez-nous pour tout ajout.',
+    lateUploadNotice: "Cette année est déjà clôturée, mais vous pouvez toujours téléverser des documents en cas de changement — nous serons notifiés.",
+    staffUploadOnBehalf: 'Téléverser au nom du client (réservé au personnel)',
     messageFromUs: 'Message de Hornung Consulting',
     timeline: 'Historique',
     staffArea: 'Espace spécialiste',

@@ -161,6 +161,8 @@ export default {
     deleteConfirm: 'Dieses Dokument entfernen?',
     deleteConfirmBody: '„{name}" wird endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.',
     lockedNotice: 'Dieses Jahr ist abgeschlossen. Kontaktieren Sie uns für Ergänzungen.',
+    lateUploadNotice: 'Dieses Jahr ist bereits abgeschlossen, aber Sie können weiterhin Dokumente hochladen, falls sich etwas ändert — wir werden benachrichtigt.',
+    staffUploadOnBehalf: 'Im Namen des Kunden hochladen (nur für Mitarbeitende)',
     messageFromUs: 'Nachricht von Hornung Consulting',
     timeline: 'Verlauf',
     staffArea: 'Spezialisten-Bereich',

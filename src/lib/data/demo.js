@@ -502,6 +502,11 @@ export const demoApi = {
     return wait(true)
   },
 
+  // Demo mode has no backend to send a real e-mail from.
+  async notifyLateUpload() {
+    return wait({ notified: false, demo: true })
+  },
+
   async getDownloadUrl(doc, { download = true } = {}) {
     return blobs.get(doc.id) || null
   },
