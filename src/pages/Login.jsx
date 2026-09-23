@@ -4,7 +4,7 @@ import { LogIn, Mail, ArrowLeft, UserRound, Briefcase, UserPlus } from 'lucide-r
 import Brand from '../components/Brand'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { PlainLayout } from '../components/Layout'
-import { Field, Spinner, TextInput } from '../components/ui'
+import { Field, PasswordInput, Spinner, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
@@ -73,9 +73,8 @@ export default function Login() {
 
             {mode === 'signin' ? (
               <Field label={t('auth.password')} htmlFor="password">
-                <TextInput
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   required
                   value={password}

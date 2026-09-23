@@ -5,13 +5,28 @@ import { Resend } from 'resend'
 
 export const APP_ID = 'hornung_crm'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+// Same guard as the front-end (src/lib/config.js): catch a mistyped/corrupted
+// SUPABASE_URL env var here, with a clear message, instead of letting every
+// admin call fail deep inside supabase-js with an opaque DNS/network error.
+const SUPABASE_URL_PATTERN = /^https:\/\/[a-z0-9]{20}\.supabase\.co\/?$/i
+const RAW_SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+if (RAW_SUPABASE_URL && !SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL)) {
+  console.error(
+    `[api/_lib] SUPABASE_URL doesn't look like a valid Supabase project URL: "${RAW_SUPABASE_URL}". ` +
+      'Expected "https://xxxxxxxxxxxxxxxxxxxx.supabase.co" with no extra characters.'
+  )
+}
+const SUPABASE_URL = SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL) ? RAW_SUPABASE_URL.replace(/\/$/, '') : ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
 
 export function serviceClient() {
   if (!SUPABASE_URL || !SERVICE_KEY) {
-    throw httpError(500, 'MISSING_SUPABASE_ENV', 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not configured.')
+    throw httpError(
+      500,
+      'MISSING_SUPABASE_ENV',
+      'SUPABASE_URL is missing or malformed, or SUPABASE_SERVICE_ROLE_KEY is not configured. Check the Vercel environment variables.'
+    )
   }
   return createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false }

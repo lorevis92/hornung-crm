@@ -1,0 +1,495 @@
+From 11fb8ae798977978489f6e715de37a659b6d3d93 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 23 Sep 2026 10:09:49 +0200
+Subject: [PATCH 1/2] Add show/hide toggle to password fields
+
+Adds a PasswordInput component with an eye-icon toggle so users can
+verify what they typed, and swaps it in on login, self-registration
+and set-password.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016ici8AbYj73icYwNgUinzM
+---
+ src/components/ui.jsx     | 25 ++++++++++++++++++++++++-
+ src/pages/Login.jsx       |  5 ++---
+ src/pages/Register.jsx    |  8 +++-----
+ src/pages/SetPassword.jsx |  8 +++-----
+ 4 files changed, 32 insertions(+), 14 deletions(-)
+
+diff --git a/src/components/ui.jsx b/src/components/ui.jsx
+index 32fb151..b04de72 100644
+--- a/src/components/ui.jsx
++++ b/src/components/ui.jsx
+@@ -1,4 +1,5 @@
+-import { Loader2 } from 'lucide-react'
++import { useState } from 'react'
++import { Eye, EyeOff, Loader2 } from 'lucide-react'
+ import clsx from 'clsx'
+ 
+ export function Spinner({ size = 20, className = '' }) {
+@@ -61,6 +62,28 @@ export function TextInput({ className = '', ...props }) {
+   return <input className={clsx('input', className)} {...props} />
+ }
+ 
++export function PasswordInput({ className = '', ...props }) {
++  const [visible, setVisible] = useState(false)
++  return (
++    <div className="relative">
++      <input
++        type={visible ? 'text' : 'password'}
++        className={clsx('input pr-10', className)}
++        {...props}
++      />
++      <button
++        type="button"
++        onClick={() => setVisible((v) => !v)}
++        className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-400 hover:text-ink-700"
++        aria-label={visible ? 'Hide password' : 'Show password'}
++        tabIndex={-1}
++      >
++        {visible ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
++      </button>
++    </div>
++  )
++}
++
+ export function Select({ className = '', children, ...props }) {
+   return (
+     <select className={clsx('select', className)} {...props}>
+diff --git a/src/pages/Login.jsx b/src/pages/Login.jsx
+index 1c4c1f2..ec855be 100644
+--- a/src/pages/Login.jsx
++++ b/src/pages/Login.jsx
+@@ -4,7 +4,7 @@ import { LogIn, Mail, ArrowLeft, UserRound, Briefcase, UserPlus } from 'lucide-r
+ import Brand from '../components/Brand'
+ import LanguageSwitcher from '../components/LanguageSwitcher'
+ import { PlainLayout } from '../components/Layout'
+-import { Field, Spinner, TextInput } from '../components/ui'
++import { Field, PasswordInput, Spinner, TextInput } from '../components/ui'
+ import { useAuth } from '../context/AuthContext'
+ import { useToast } from '../context/ToastContext'
+ import { useI18n } from '../i18n'
+@@ -73,9 +73,8 @@ export default function Login() {
+ 
+             {mode === 'signin' ? (
+               <Field label={t('auth.password')} htmlFor="password">
+-                <TextInput
++                <PasswordInput
+                   id="password"
+-                  type="password"
+                   autoComplete="current-password"
+                   required
+                   value={password}
+diff --git a/src/pages/Register.jsx b/src/pages/Register.jsx
+index 3fd1415..795cb37 100644
+--- a/src/pages/Register.jsx
++++ b/src/pages/Register.jsx
+@@ -4,7 +4,7 @@ import { UserPlus, MailCheck, FlaskConical } from 'lucide-react'
+ import Brand from '../components/Brand'
+ import LanguageSwitcher from '../components/LanguageSwitcher'
+ import { PlainLayout } from '../components/Layout'
+-import { Field, Spinner, TextInput } from '../components/ui'
++import { Field, PasswordInput, Spinner, TextInput } from '../components/ui'
+ import { useAuth } from '../context/AuthContext'
+ import { useI18n } from '../i18n'
+ import { IS_DEMO } from '../lib/config'
+@@ -107,9 +107,8 @@ export default function Register() {
+                   />
+                 </Field>
+                 <Field label={t('auth.password')} htmlFor="reg-password">
+-                  <TextInput
++                  <PasswordInput
+                     id="reg-password"
+-                    type="password"
+                     autoComplete="new-password"
+                     required
+                     value={password}
+@@ -117,9 +116,8 @@ export default function Register() {
+                   />
+                 </Field>
+                 <Field label={t('auth.repeatPassword')} htmlFor="reg-password2">
+-                  <TextInput
++                  <PasswordInput
+                     id="reg-password2"
+-                    type="password"
+                     autoComplete="new-password"
+                     required
+                     value={repeat}
+diff --git a/src/pages/SetPassword.jsx b/src/pages/SetPassword.jsx
+index 8cd9b02..fbee8f6 100644
+--- a/src/pages/SetPassword.jsx
++++ b/src/pages/SetPassword.jsx
+@@ -4,7 +4,7 @@ import { KeyRound } from 'lucide-react'
+ import Brand from '../components/Brand'
+ import LanguageSwitcher from '../components/LanguageSwitcher'
+ import { PlainLayout } from '../components/Layout'
+-import { Field, Spinner, TextInput } from '../components/ui'
++import { Field, PasswordInput, Spinner } from '../components/ui'
+ import { useAuth } from '../context/AuthContext'
+ import { useToast } from '../context/ToastContext'
+ import { useI18n } from '../i18n'
+@@ -88,9 +88,8 @@ export default function SetPassword() {
+           ) : (
+             <form onSubmit={submit} className="mt-6 space-y-4">
+               <Field label={t('auth.newPassword')} htmlFor="pw">
+-                <TextInput
++                <PasswordInput
+                   id="pw"
+-                  type="password"
+                   autoComplete="new-password"
+                   required
+                   value={password}
+@@ -98,9 +97,8 @@ export default function SetPassword() {
+                 />
+               </Field>
+               <Field label={t('auth.repeatPassword')} htmlFor="pw2">
+-                <TextInput
++                <PasswordInput
+                   id="pw2"
+-                  type="password"
+                   autoComplete="new-password"
+                   required
+                   value={repeat}
+-- 
+2.43.0
+
+
+From cf2a18ffe28848a51aa05b1f92288e53ed224a67 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 23 Sep 2026 10:17:25 +0200
+Subject: [PATCH 2/2] Make self-registration independent of Supabase's built-in
+ mailer
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Root-cause fixes for the two issues hit today (a corrupted
+VITE_SUPABASE_URL causing ERR_NAME_NOT_RESOLVED, and a confirmation
+e-mail whose link went nowhere):
+
+- src/lib/config.js and api/_lib.js now validate the Supabase project
+  URL shape at startup and fail loudly to the console instead of
+  silently sending every request to a broken host.
+- /register no longer calls supabase.auth.signUp() from the browser,
+  which was at the mercy of the dashboard's "Confirm email" toggle and
+  its own unbranded e-mail/redirect handling. It now posts to the new
+  api/register.js, which uses the admin API directly:
+    * REQUIRE_EMAIL_CONFIRMATION unset/"false" (today's setup):
+      the account is created already confirmed, no e-mail involved,
+      the client signs the person straight in.
+    * REQUIRE_EMAIL_CONFIRMATION="true" (future option): the account
+      is created unconfirmed and we send our own Hornung-branded
+      confirmation e-mail (same Resend pattern as client invites),
+      with a redirect computed from PUBLIC_SITE_URL server-side —
+      never Supabase's default template or Site URL setting.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016ici8AbYj73icYwNgUinzM
+---
+ .env.example           |   6 ++
+ api/_lib.js            |  19 ++++++-
+ api/register.js        | 125 +++++++++++++++++++++++++++++++++++++++++
+ src/lib/config.js      |  26 ++++++++-
+ src/pages/Register.jsx |  53 ++++++++++-------
+ 5 files changed, 205 insertions(+), 24 deletions(-)
+ create mode 100644 api/register.js
+
+diff --git a/.env.example b/.env.example
+index 63ff92a..92de1b0 100644
+--- a/.env.example
++++ b/.env.example
+@@ -31,6 +31,12 @@ PUBLIC_SITE_URL=http://localhost:5173
+ # Optional: BCC a copy of every automatic email to the office
+ NOTIFY_BCC=
+ 
++# Self sign-up (/register): "true" requires clients to confirm their e-mail
++# before they can sign in (a branded confirmation link is sent through
++# Resend). Default/unset = accounts are activated immediately, no
++# confirmation e-mail at all. See api/register.js for details.
++REQUIRE_EMAIL_CONFIRMATION=false
++
+ # Secret shared with the Vercel Cron Job that calls /api/open-tax-year.
+ # Vercel automatically sends it as "Authorization: Bearer <value>" for
+ # scheduled invocations when this env var is set on the project.
+diff --git a/api/_lib.js b/api/_lib.js
+index 5726657..f40fa12 100644
+--- a/api/_lib.js
++++ b/api/_lib.js
+@@ -5,13 +5,28 @@ import { Resend } from 'resend'
+ 
+ export const APP_ID = 'hornung_crm'
+ 
+-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
++// Same guard as the front-end (src/lib/config.js): catch a mistyped/corrupted
++// SUPABASE_URL env var here, with a clear message, instead of letting every
++// admin call fail deep inside supabase-js with an opaque DNS/network error.
++const SUPABASE_URL_PATTERN = /^https:\/\/[a-z0-9]{20}\.supabase\.co\/?$/i
++const RAW_SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
++if (RAW_SUPABASE_URL && !SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL)) {
++  console.error(
++    `[api/_lib] SUPABASE_URL doesn't look like a valid Supabase project URL: "${RAW_SUPABASE_URL}". ` +
++      'Expected "https://xxxxxxxxxxxxxxxxxxxx.supabase.co" with no extra characters.'
++  )
++}
++const SUPABASE_URL = SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL) ? RAW_SUPABASE_URL.replace(/\/$/, '') : ''
+ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+ const ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+ 
+ export function serviceClient() {
+   if (!SUPABASE_URL || !SERVICE_KEY) {
+-    throw httpError(500, 'MISSING_SUPABASE_ENV', 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not configured.')
++    throw httpError(
++      500,
++      'MISSING_SUPABASE_ENV',
++      'SUPABASE_URL is missing or malformed, or SUPABASE_SERVICE_ROLE_KEY is not configured. Check the Vercel environment variables.'
++    )
+   }
+   return createClient(SUPABASE_URL, SERVICE_KEY, {
+     auth: { autoRefreshToken: false, persistSession: false }
+diff --git a/api/register.js b/api/register.js
+new file mode 100644
+index 0000000..9a5bfd8
+--- /dev/null
++++ b/api/register.js
+@@ -0,0 +1,125 @@
++// POST /api/register  { email, password, preferred_language } -> self sign-up
++//
++// Why this exists instead of calling supabase.auth.signUp() straight from the
++// browser (which the app used to do): that client-side call is at the mercy
++// of the "Confirm email" toggle in the Supabase dashboard — when it's on,
++// Supabase sends its own generic "Confirm your email address" mail and the
++// confirmation link depends on the Site URL / Redirect URLs configured
++// there, which is exactly what broke on 2026-09-22 (a corrupted env var
++// produced a dead link, wrapped in an unbranded email).
++//
++// This endpoint uses the service-role ("admin") API instead, which gives us
++// full control and removes that whole class of failure:
++//   - REQUIRE_EMAIL_CONFIRMATION unset/"false" (the current default): the
++//     account is created already confirmed (email_confirm: true) and no
++//     e-mail is sent by Supabase at all — the client signs the person in
++//     immediately with the password they just chose. Nothing depends on
++//     Supabase's mailer or its Site URL setting, so there is nothing left to
++//     break.
++//   - REQUIRE_EMAIL_CONFIRMATION="true" (for later, if ever needed): the
++//     account is created unconfirmed and we generate the confirmation link
++//     ourselves, then send it through our own Resend-based, Hornung-branded
++//     e-mail (emailLayout) — the same pattern already used for client
++//     invites in invite-client.js — instead of Supabase's default template.
++//     The redirect target is computed from PUBLIC_SITE_URL server-side
++//     (siteUrl()), so it always matches the domain this API is actually
++//     deployed on.
++import { emailLayout, httpError, readBody, sendEmail, serviceClient, siteUrl } from './_lib.js'
++
++const COPY = {
++  en: {
++    subject: 'Confirm your Hornung Consulting access',
++    title: 'Confirm your e-mail address',
++    intro: 'One last step: confirm your e-mail address to activate your client portal access.',
++    cta: 'Confirm my e-mail',
++    footer: 'You received this e-mail because you registered on the Hornung Consulting client portal.'
++  },
++  de: {
++    subject: 'Bestätigen Sie Ihren Zugang zu Hornung Consulting',
++    title: 'Bestätigen Sie Ihre E-Mail-Adresse',
++    intro: 'Nur noch ein Schritt: Bestätigen Sie Ihre E-Mail-Adresse, um Ihren Zugang zum Kundenportal zu aktivieren.',
++    cta: 'E-Mail bestätigen',
++    footer: 'Sie erhalten diese E-Mail, weil Sie sich im Kundenportal von Hornung Consulting registriert haben.'
++  },
++  fr: {
++    subject: 'Confirmez votre accès à Hornung Consulting',
++    title: 'Confirmez votre adresse e-mail',
++    intro: "Dernière étape : confirmez votre adresse e-mail pour activer votre accès au portail client.",
++    cta: 'Confirmer mon e-mail',
++    footer: 'Vous recevez cet e-mail car vous vous êtes inscrit sur le portail client de Hornung Consulting.'
++  },
++  it: {
++    subject: 'Conferma il tuo accesso a Hornung Consulting',
++    title: 'Conferma il tuo indirizzo e-mail',
++    intro: 'Ultimo passo: conferma il tuo indirizzo e-mail per attivare il tuo accesso al portale clienti.',
++    cta: 'Conferma la mia e-mail',
++    footer: 'Ricevi questa e-mail perché ti sei registrato sul portale clienti di Hornung Consulting.'
++  }
++}
++
++export default async function handler(req, res) {
++  if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' })
++
++  try {
++    const body = readBody(req)
++    const email = String(body.email || '').trim().toLowerCase()
++    const password = String(body.password || '')
++
++    if (!email) throw httpError(400, 'EMAIL_REQUIRED', 'An e-mail address is required.')
++    if (password.length < 8) throw httpError(400, 'PASSWORD_TOO_SHORT', 'Password must be at least 8 characters.')
++
++    const admin = serviceClient()
++
++    const { data: existingUserId } = await admin.rpc('auth_user_id_by_email', { p_email: email })
++    if (existingUserId) throw httpError(409, 'EMAIL_IN_USE', 'An account with this e-mail already exists.')
++
++    const language = ['en', 'de', 'fr', 'it'].includes(body.preferred_language) ? body.preferred_language : 'en'
++    const requireConfirmation = process.env.REQUIRE_EMAIL_CONFIRMATION === 'true'
++    const redirectTo = `${siteUrl()}/login`
++
++    if (requireConfirmation) {
++      // Creates the (unconfirmed) user and hands back a one-time link, all in
++      // one call — we never let Supabase send its own mail for it.
++      const { data: link, error: linkError } = await admin.auth.admin.generateLink({
++        type: 'signup',
++        email,
++        password,
++        options: { redirectTo }
++      })
++      if (linkError) throw httpError(400, 'SIGNUP_FAILED', linkError.message)
++
++      const copy = COPY[language]
++      const mail = await sendEmail({
++        to: email,
++        subject: copy.subject,
++        html: emailLayout({
++          title: copy.title,
++          intro: copy.intro,
++          ctaLabel: copy.cta,
++          ctaUrl: link?.properties?.action_link,
++          footerNote: copy.footer
++        })
++      })
++      return res.status(200).json({ needsConfirmation: true, emailSent: mail.sent })
++    }
++
++    const { error: createError } = await admin.auth.admin.createUser({
++      email,
++      password,
++      email_confirm: true
++    })
++    if (createError) {
++      if (/registered|exists/i.test(createError.message)) {
++        throw httpError(409, 'EMAIL_IN_USE', 'An account with this e-mail already exists.')
++      }
++      throw httpError(400, 'SIGNUP_FAILED', createError.message)
++    }
++
++    return res.status(200).json({ needsConfirmation: false })
++  } catch (error) {
++    console.error('[register]', error)
++    return res
++      .status(error.status || 500)
++      .json({ error: error.message || 'UNEXPECTED_ERROR', code: error.code })
++  }
++}
+diff --git a/src/lib/config.js b/src/lib/config.js
+index 257865e..c32e822 100644
+--- a/src/lib/config.js
++++ b/src/lib/config.js
+@@ -3,8 +3,30 @@
+ // works against seeded local data so the UI can be reviewed before the backend
+ // is connected.
+ 
+-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
+-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
++// A valid Supabase project URL always looks like https://<ref>.supabase.co
++// (no extra characters glued onto the host). Validating it here means a
++// mistyped/corrupted VITE_SUPABASE_URL env var fails loudly, in the console,
++// with a clear message — instead of silently sending every request to a
++// non-existent host (ERR_NAME_NOT_RESOLVED) that's hard to trace back to
++// "the env var is wrong".
++const RAW_SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').trim()
++const SUPABASE_URL_PATTERN = /^https:\/\/[a-z0-9]{20}\.supabase\.co\/?$/i
++
++function resolveSupabaseUrl() {
++  if (!RAW_SUPABASE_URL) return ''
++  if (!SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL)) {
++    console.error(
++      `[config] VITE_SUPABASE_URL doesn't look like a valid Supabase project URL: "${RAW_SUPABASE_URL}". ` +
++        'Expected something like "https://xxxxxxxxxxxxxxxxxxxx.supabase.co" with no extra characters. ' +
++        'Falling back to demo mode until this is fixed on Vercel (Settings → Environment Variables).'
++    )
++    return ''
++  }
++  return RAW_SUPABASE_URL.replace(/\/$/, '')
++}
++
++export const SUPABASE_URL = resolveSupabaseUrl()
++export const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
+ 
+ export const APP_ID = import.meta.env.VITE_APP_ID || 'hornung_crm'
+ 
+diff --git a/src/pages/Register.jsx b/src/pages/Register.jsx
+index 795cb37..e7cd0cb 100644
+--- a/src/pages/Register.jsx
++++ b/src/pages/Register.jsx
+@@ -10,8 +10,27 @@ import { useI18n } from '../i18n'
+ import { IS_DEMO } from '../lib/config'
+ import { supabase } from '../lib/supabaseClient'
+ 
++// Goes through our own /api/register instead of calling supabase.auth.signUp()
++// directly from the browser — see api/register.js for why: it keeps the
++// confirmation e-mail (if ever re-enabled) fully under our control, branded,
++// and independent from the Supabase dashboard's "Confirm email" toggle.
++async function registerAccount({ email, password, preferred_language }) {
++  const res = await fetch('/api/register', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify({ email, password, preferred_language })
++  })
++  const json = await res.json().catch(() => ({}))
++  if (!res.ok) {
++    const err = new Error(json.error || 'REQUEST_FAILED')
++    err.code = json.code
++    throw err
++  }
++  return json
++}
++
+ export default function Register() {
+-  const { t } = useI18n()
++  const { t, lang } = useI18n()
+   const { profile, loading } = useAuth()
+   const [email, setEmail] = useState('')
+   const [password, setPassword] = useState('')
+@@ -32,29 +51,23 @@ export default function Register() {
+ 
+     setBusy(true)
+     try {
+-      const { data, error: signUpError } = await supabase.auth.signUp({
+-        email,
+-        password,
+-        options: { emailRedirectTo: `${window.location.origin}/login` }
+-      })
+-      if (signUpError) {
+-        if (/registered|exists/i.test(signUpError.message)) {
+-          setEmailInUse(true)
+-        } else {
+-          setError(signUpError.message || t('common.error'))
+-        }
+-        return
+-      }
+-      // Supabase returns a user with no identities (and no error) when the
+-      // e-mail is already registered and confirmed.
+-      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+-        setEmailInUse(true)
++      const result = await registerAccount({ email, password, preferred_language: lang })
++      if (result.needsConfirmation) {
++        setCheckEmail(true)
+         return
+       }
+-      setCheckEmail(true)
++      // No confirmation required (the default): the account already exists
++      // and is confirmed server-side, so sign the person straight in with
++      // the password they just chose.
++      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
++      if (signInError) throw signInError
+     } catch (err) {
+       console.error(err)
+-      setError(err.message || t('common.error'))
++      if (err.code === 'EMAIL_IN_USE') {
++        setEmailInUse(true)
++      } else {
++        setError(err.message || t('common.error'))
++      }
+     } finally {
+       setBusy(false)
+     }
+-- 
+2.43.0
+

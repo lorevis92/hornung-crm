@@ -1,4 +1,5 @@
-import { Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import clsx from 'clsx'
 
 export function Spinner({ size = 20, className = '' }) {
@@ -59,6 +60,28 @@ export function Field({ label, hint, htmlFor, children, className = '', required
 
 export function TextInput({ className = '', ...props }) {
   return <input className={clsx('input', className)} {...props} />
+}
+
+export function PasswordInput({ className = '', ...props }) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div className="relative">
+      <input
+        type={visible ? 'text' : 'password'}
+        className={clsx('input pr-10', className)}
+        {...props}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-400 hover:text-ink-700"
+        aria-label={visible ? 'Hide password' : 'Show password'}
+        tabIndex={-1}
+      >
+        {visible ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+      </button>
+    </div>
+  )
 }
 
 export function Select({ className = '', children, ...props }) {

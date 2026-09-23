@@ -4,7 +4,7 @@ import { KeyRound } from 'lucide-react'
 import Brand from '../components/Brand'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { PlainLayout } from '../components/Layout'
-import { Field, Spinner, TextInput } from '../components/ui'
+import { Field, PasswordInput, Spinner } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
@@ -88,9 +88,8 @@ export default function SetPassword() {
           ) : (
             <form onSubmit={submit} className="mt-6 space-y-4">
               <Field label={t('auth.newPassword')} htmlFor="pw">
-                <TextInput
+                <PasswordInput
                   id="pw"
-                  type="password"
                   autoComplete="new-password"
                   required
                   value={password}
@@ -98,9 +97,8 @@ export default function SetPassword() {
                 />
               </Field>
               <Field label={t('auth.repeatPassword')} htmlFor="pw2">
-                <TextInput
+                <PasswordInput
                   id="pw2"
-                  type="password"
                   autoComplete="new-password"
                   required
                   value={repeat}

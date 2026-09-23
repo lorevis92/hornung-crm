@@ -4,14 +4,33 @@ import { UserPlus, MailCheck, FlaskConical } from 'lucide-react'
 import Brand from '../components/Brand'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { PlainLayout } from '../components/Layout'
-import { Field, Spinner, TextInput } from '../components/ui'
+import { Field, PasswordInput, Spinner, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n'
 import { IS_DEMO } from '../lib/config'
 import { supabase } from '../lib/supabaseClient'
 
+// Goes through our own /api/register instead of calling supabase.auth.signUp()
+// directly from the browser — see api/register.js for why: it keeps the
+// confirmation e-mail (if ever re-enabled) fully under our control, branded,
+// and independent from the Supabase dashboard's "Confirm email" toggle.
+async function registerAccount({ email, password, preferred_language }) {
+  const res = await fetch('/api/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, preferred_language })
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(json.error || 'REQUEST_FAILED')
+    err.code = json.code
+    throw err
+  }
+  return json
+}
+
 export default function Register() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const { profile, loading } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,29 +51,23 @@ export default function Register() {
 
     setBusy(true)
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/login` }
-      })
-      if (signUpError) {
-        if (/registered|exists/i.test(signUpError.message)) {
-          setEmailInUse(true)
-        } else {
-          setError(signUpError.message || t('common.error'))
-        }
+      const result = await registerAccount({ email, password, preferred_language: lang })
+      if (result.needsConfirmation) {
+        setCheckEmail(true)
         return
       }
-      // Supabase returns a user with no identities (and no error) when the
-      // e-mail is already registered and confirmed.
-      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        setEmailInUse(true)
-        return
-      }
-      setCheckEmail(true)
+      // No confirmation required (the default): the account already exists
+      // and is confirmed server-side, so sign the person straight in with
+      // the password they just chose.
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) throw signInError
     } catch (err) {
       console.error(err)
-      setError(err.message || t('common.error'))
+      if (err.code === 'EMAIL_IN_USE') {
+        setEmailInUse(true)
+      } else {
+        setError(err.message || t('common.error'))
+      }
     } finally {
       setBusy(false)
     }
@@ -107,9 +120,8 @@ export default function Register() {
                   />
                 </Field>
                 <Field label={t('auth.password')} htmlFor="reg-password">
-                  <TextInput
+                  <PasswordInput
                     id="reg-password"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={password}
@@ -117,9 +129,8 @@ export default function Register() {
                   />
                 </Field>
                 <Field label={t('auth.repeatPassword')} htmlFor="reg-password2">
-                  <TextInput
+                  <PasswordInput
                     id="reg-password2"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={repeat}
