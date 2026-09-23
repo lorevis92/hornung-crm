@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { LogIn, Mail, ArrowLeft, UserRound, Briefcase, UserPlus } from 'lucide-react'
 import Brand from '../components/Brand'
@@ -9,18 +9,21 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { IS_DEMO } from '../lib/config'
+import { PROFILE_WAIT_TIMEOUT_MS } from '../lib/constants'
 
 export default function Login() {
   const { t } = useI18n()
   const toast = useToast()
-  const { profile, loading, signIn, signInDemo, sendResetEmail } = useAuth()
+  const { profile, loading, access, signIn, signInDemo, sendResetEmail } = useAuth()
   const [mode, setMode] = useState('signin') // signin | reset
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-
-  if (!loading && profile) return <Navigate to="/" replace />
+  // true from the moment signIn() resolves until we know whether the app
+  // profile could be loaded — keeps the spinner/disabled state visible
+  // instead of silently returning to an apparently-idle form.
+  const [awaitingProfile, setAwaitingProfile] = useState(false)
 
   const submit = async (e) => {
     e.preventDefault()
@@ -31,16 +34,54 @@ export default function Login() {
         await sendResetEmail(email)
         toast.success(t('auth.resetSent'))
         setMode('signin')
+        setBusy(false)
       } else {
         await signIn(email, password)
+        // Don't clear busy yet: wait for the profile to resolve (see effects
+        // below) so the user always gets either a redirect or an error.
+        setAwaitingProfile(true)
       }
     } catch (err) {
       console.error(err)
-      setError(mode === 'reset' ? err.message : t('auth.wrongCredentials'))
-    } finally {
+      const message = mode === 'reset' ? err.message || t('common.error') : t('auth.wrongCredentials')
+      setError(message)
+      toast.error(message)
       setBusy(false)
     }
   }
+
+  // Resolve the "waiting for profile" state once AuthContext settles.
+  useEffect(() => {
+    if (!awaitingProfile || loading) return
+    if (profile) {
+      setAwaitingProfile(false)
+      setBusy(false)
+      return
+    }
+    if (access === 'no-profile') {
+      setAwaitingProfile(false)
+      setBusy(false)
+      setError(t('auth.noAccessShort'))
+      toast.error(t('auth.noAccessShort'))
+    }
+  }, [awaitingProfile, loading, profile, access]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Safety net: never leave the user staring at a spinner indefinitely if the
+  // profile lookup (or its /api/claim-profile fallback) hangs.
+  useEffect(() => {
+    if (!awaitingProfile) return undefined
+    const timer = setTimeout(() => {
+      setAwaitingProfile(false)
+      setBusy(false)
+      setError(t('auth.signInTimeout'))
+      toast.error(t('auth.signInTimeout'))
+    }, PROFILE_WAIT_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [awaitingProfile]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Every hook above must run on every render (Rules of Hooks) — this early
+  // return has to come after all of them, never before.
+  if (!loading && profile) return <Navigate to="/" replace />
 
   return (
     <PlainLayout>
