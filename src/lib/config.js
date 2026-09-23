@@ -48,5 +48,10 @@ export function currentTaxYear() {
 // needs it is switched on.
 export const FEATURES = {
   requestedDocumentsChecklist: false, // fase futura: checklist personalizzata per cliente
-  clientFeeEstimate: false            // fase futura: stima onorario visibile al cliente
+  clientFeeEstimate: false,           // fase futura: stima onorario visibile al cliente
+  // Quando true, ogni nuova registrazione cliente (self sign-up da /register)
+  // manda una mail di cortesia allo specialista (OWNER_EMAIL) con l'indirizzo
+  // del nuovo iscritto. Letta anche (ridichiarata minimale) da
+  // api/claim-profile.js, che gira in Node e non può importare questo file.
+  notifySpecialistOnSelfRegistration: false
 }

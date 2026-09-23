@@ -8,6 +8,7 @@ import { useI18n } from './i18n'
 import { CONTACT } from './lib/config'
 
 import Login from './pages/Login'
+import Register from './pages/Register'
 import SetPassword from './pages/SetPassword'
 import ClientHome from './pages/ClientHome'
 import CasePage from './pages/CasePage'
@@ -15,6 +16,7 @@ import MyData from './pages/MyData'
 import Pricing from './pages/Pricing'
 import SpecialistHome from './pages/SpecialistHome'
 import SpecialistClient from './pages/SpecialistClient'
+import Account from './pages/Account'
 import NotFound from './pages/NotFound'
 
 function NoAccess() {
@@ -71,6 +73,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route path="/set-password" element={<SetPassword />} />
 
       <Route
@@ -102,6 +105,14 @@ export default function App() {
         element={
           <Protected>
             <Pricing />
+          </Protected>
+        }
+      />
+      <Route
+        path="/account"
+        element={
+          <Protected>
+            <Account />
           </Protected>
         }
       />

@@ -62,7 +62,15 @@ export default {
     activate: 'Activate my access',
     sendReset: 'Send reset link',
     resetSent: 'If the address exists, a reset link is on its way.',
-    linkExpired: 'This link is no longer valid. Please ask for a new one.'
+    linkExpired: 'This link is no longer valid. Please ask for a new one.',
+    newClientPrompt: 'New client?',
+    newClientPromptHelp: 'If Hornung Consulting shared this link with you, create your access here.',
+    createAccess: 'Create my access',
+    registerTitle: 'Create your access',
+    registerSubtitle: 'For clients Hornung Consulting has shared this link with.',
+    registerDemoNotice: 'Demo mode — sign-up is disabled here. Use the demo buttons on the sign-in page instead.',
+    registerCheckEmail: 'Almost done — check your inbox to confirm your e-mail, then sign in.',
+    emailInUse: 'This e-mail is already registered.'
   },
 
   nav: {
@@ -329,5 +337,27 @@ export default {
     separated: 'Separated',
     divorced: 'Divorced',
     widowed: 'Widowed'
+  },
+
+  account: {
+    title: 'My account',
+    subtitle: 'Manage your access and preferences.',
+    details: 'Account details',
+    fullName: 'Name',
+    role: 'Role',
+    roleClient: 'Client',
+    roleSpecialist: 'Specialist',
+    roleAdmin: 'Administrator',
+    changePassword: 'Change password',
+    changePasswordHelp: 'Choose a new password for your account.',
+    passwordUpdated: 'Password updated.',
+    inviteColleague: 'Invite a colleague',
+    inviteColleagueHelp:
+      'Give another Hornung Consulting specialist access to this portal. They will see every client file.',
+    colleagueName: 'Name',
+    colleagueEmail: 'E-mail',
+    sendInvite: 'Send invitation',
+    inviteSent: 'Invitation sent to {email}',
+    inviteFailed: 'Profile created, but the invitation e-mail could not be sent.'
   }
 }

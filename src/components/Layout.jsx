@@ -59,12 +59,13 @@ export default function Layout({ children }) {
           <div className="hidden items-center gap-3 md:flex">
             <LanguageSwitcher compact />
             <div className="flex items-center gap-2 border-l border-line pl-3">
-              <span
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-gold-100 text-[13px] font-semibold text-gold-800"
-                aria-hidden="true"
+              <Link
+                to="/account"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-gold-100 text-[13px] font-semibold text-gold-800 transition hover:bg-gold-200"
+                title={t('account.title')}
               >
                 {initials(profile?.full_name || profile?.email || '?')}
-              </span>
+              </Link>
               <button type="button" onClick={signOut} className="btn-ghost btn-sm" title={t('common.logout')}>
                 <LogOut size={17} aria-hidden="true" />
                 <span className="sr-only sm:not-sr-only">{t('common.logout')}</span>
@@ -97,6 +98,9 @@ export default function Layout({ children }) {
                   {l.label}
                 </NavLink>
               ))}
+              <NavLink to="/account" onClick={() => setMenuOpen(false)} className={navLinkClass}>
+                {t('account.title')}
+              </NavLink>
             </nav>
             <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
               <LanguageSwitcher />

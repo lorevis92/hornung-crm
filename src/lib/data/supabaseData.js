@@ -119,6 +119,10 @@ export const supabaseApi = {
     return callApi('/api/invite-client', { clientId, resend: true })
   },
 
+  async inviteStaff(payload) {
+    return callApi('/api/invite-staff', payload)
+  },
+
   async updateClient(id, patch) {
     return unwrap(await supabase.from('clients').update(patch).eq('id', id).select().single())
   },

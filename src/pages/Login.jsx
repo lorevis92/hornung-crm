@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
-import { LogIn, Mail, ArrowLeft, UserRound, Briefcase } from 'lucide-react'
+import { Link, Navigate } from 'react-router-dom'
+import { LogIn, Mail, ArrowLeft, UserRound, Briefcase, UserPlus } from 'lucide-react'
 import Brand from '../components/Brand'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { PlainLayout } from '../components/Layout'
@@ -8,7 +8,7 @@ import { Field, Spinner, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
-import { CONTACT, IS_DEMO } from '../lib/config'
+import { IS_DEMO } from '../lib/config'
 
 export default function Login() {
   const { t } = useI18n()
@@ -112,15 +112,18 @@ export default function Login() {
             )}
           </div>
 
-          <div className="mt-6 rounded-xl bg-sand px-4 py-3.5">
-            <p className="text-[14px] font-semibold text-ink-700">{t('auth.inviteOnly')}</p>
-            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-500">
-              {t('auth.inviteOnlyHelp')}{' '}
-              <a className="link" href={`mailto:${CONTACT.email}`}>
-                {CONTACT.email}
-              </a>
-            </p>
-          </div>
+          {!IS_DEMO ? (
+            <div className="mt-6 rounded-xl bg-sand px-4 py-3.5">
+              <p className="text-[14px] font-semibold text-ink-700">{t('auth.newClientPrompt')}</p>
+              <p className="mt-1 text-[13.5px] leading-relaxed text-ink-500">
+                {t('auth.newClientPromptHelp')}
+              </p>
+              <Link to="/register" className="btn-secondary btn-sm mt-3">
+                <UserPlus size={16} aria-hidden="true" />
+                {t('auth.createAccess')}
+              </Link>
+            </div>
+          ) : null}
 
           {IS_DEMO ? (
             <div className="mt-5 border-t border-line pt-5">

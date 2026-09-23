@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { APP_ID, IS_DEMO } from '../lib/config'
 import { api } from '../lib/data'
+import { useI18n } from '../i18n'
 
 const AuthContext = createContext(null)
 const DEMO_KEY = 'hornung.demo.session'
@@ -29,12 +30,20 @@ const DEMO_USERS = {
 }
 
 export function AuthProvider({ children }) {
+  const { lang } = useI18n()
+  const langRef = useRef(lang)
+  useEffect(() => {
+    langRef.current = lang
+  }, [lang])
+
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [client, setClient] = useState(null)
   // 'ok' | 'no-profile' — a valid login that has no profile in THIS app
   const [access, setAccess] = useState('ok')
+  // Guards the one-time self-registration / owner claim call per user id.
+  const claimAttempted = useRef(new Set())
 
   // ------------------------------------------------------------------ demo --
   const loadDemoSession = useCallback(async () => {
@@ -56,6 +65,30 @@ export function AuthProvider({ children }) {
     setProfile(demo.profile)
     setClient(role === 'client' ? await api.getMyClient(demo.profile.id) : null)
     setLoading(false)
+  }, [])
+
+  // Attempts, at most once per user id, to turn a bare auth user into an
+  // app_profiles row (self sign-up on /register, or the owner's first
+  // login). Best-effort: any failure (network, 4xx…) is swallowed and the
+  // caller falls back to the existing 'no-profile' behaviour.
+  const claimProfile = useCallback(async (activeSession) => {
+    const userId = activeSession?.user?.id
+    const token = activeSession?.access_token
+    if (!userId || !token || claimAttempted.current.has(userId)) return null
+    claimAttempted.current.add(userId)
+
+    try {
+      const res = await fetch('/api/claim-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ locale: langRef.current })
+      })
+      if (!res.ok) return null
+      const json = await res.json().catch(() => null)
+      return json?.profile || null
+    } catch {
+      return null
+    }
   }, [])
 
   // -------------------------------------------------------------- supabase --
@@ -80,6 +113,20 @@ export function AuthProvider({ children }) {
       return
     }
     if (!data) {
+      const claimed = await claimProfile(activeSession)
+      if (claimed) {
+        setAccess('ok')
+        setProfile(claimed)
+        if (claimed.role === 'client') {
+          await supabase.rpc('mark_client_active').catch(() => {})
+          setClient(await api.getMyClient(claimed.id))
+        } else {
+          setClient(null)
+        }
+        setLoading(false)
+        return
+      }
+
       // Authenticated, but this person has no profile in this app.
       setProfile(null)
       setClient(null)

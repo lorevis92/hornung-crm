@@ -25,8 +25,9 @@ export function httpError(status, code, message) {
   return error
 }
 
-/** Verifies the caller's JWT and returns their Hornung profile (staff only). */
-export async function requireStaff(req) {
+/** Verifies the caller's JWT. Does NOT require any app_profiles row to exist
+ * yet — used by endpoints (like claim-profile) that create the first one. */
+export async function requireUser(req) {
   const header = req.headers.authorization || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
   if (!token) throw httpError(401, 'NO_TOKEN', 'Missing authorization header.')
@@ -37,18 +38,24 @@ export async function requireStaff(req) {
   const { data: userData, error: userError } = await anon.auth.getUser(token)
   if (userError || !userData?.user) throw httpError(401, 'INVALID_TOKEN', 'Invalid session.')
 
-  const admin = serviceClient()
+  return { user: userData.user, admin: serviceClient() }
+}
+
+/** Verifies the caller's JWT and returns their Hornung profile (staff only). */
+export async function requireStaff(req) {
+  const { user, admin } = await requireUser(req)
+
   const { data: profile } = await admin
     .from('app_profiles')
     .select('*')
-    .eq('user_id', userData.user.id)
+    .eq('user_id', user.id)
     .eq('app_id', APP_ID)
     .maybeSingle()
 
   if (!profile || !['specialist', 'admin'].includes(profile.role)) {
     throw httpError(403, 'NOT_STAFF', 'Only Hornung Consulting staff may perform this action.')
   }
-  return { user: userData.user, profile, admin }
+  return { user, profile, admin }
 }
 
 export function readBody(req) {

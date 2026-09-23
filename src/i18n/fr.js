@@ -62,7 +62,17 @@ export default {
     activate: 'Activer mon accès',
     sendReset: 'Envoyer le lien de réinitialisation',
     resetSent: "Si l'adresse existe, un lien est en route.",
-    linkExpired: "Ce lien n'est plus valable. Demandez-en un nouveau."
+    linkExpired: "Ce lien n'est plus valable. Demandez-en un nouveau.",
+    newClientPrompt: 'Nouveau client ?',
+    newClientPromptHelp:
+      'Si Hornung Consulting vous a transmis ce lien, créez votre accès ici.',
+    createAccess: 'Créer mon accès',
+    registerTitle: 'Créer votre accès',
+    registerSubtitle: 'Pour les clients à qui Hornung Consulting a transmis ce lien.',
+    registerDemoNotice:
+      "Mode démo — l'inscription est désactivée ici. Utilisez les boutons de démo sur la page de connexion.",
+    registerCheckEmail: 'Presque terminé — confirmez votre e-mail puis connectez-vous.',
+    emailInUse: 'Cette adresse e-mail est déjà enregistrée.'
   },
 
   nav: {
@@ -327,5 +337,27 @@ export default {
     separated: 'Séparé(e)',
     divorced: 'Divorcé(e)',
     widowed: 'Veuf / veuve'
+  },
+
+  account: {
+    title: 'Mon compte',
+    subtitle: 'Gérez votre accès et vos préférences.',
+    details: 'Détails du compte',
+    fullName: 'Nom',
+    role: 'Rôle',
+    roleClient: 'Client',
+    roleSpecialist: 'Spécialiste',
+    roleAdmin: 'Administrateur',
+    changePassword: 'Changer le mot de passe',
+    changePasswordHelp: 'Choisissez un nouveau mot de passe pour votre compte.',
+    passwordUpdated: 'Mot de passe mis à jour.',
+    inviteColleague: 'Inviter un collègue',
+    inviteColleagueHelp:
+      'Donnez à un autre spécialiste de Hornung Consulting accès à ce portail. Il verra tous les dossiers clients.',
+    colleagueName: 'Nom',
+    colleagueEmail: 'E-mail',
+    sendInvite: "Envoyer l'invitation",
+    inviteSent: 'Invitation envoyée à {email}',
+    inviteFailed: "Profil créé, mais l'e-mail d'invitation n'a pas pu être envoyé."
   }
 }

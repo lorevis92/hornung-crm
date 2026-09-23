@@ -62,7 +62,16 @@ export default {
     activate: 'Attiva il mio accesso',
     sendReset: 'Invia link di reimpostazione',
     resetSent: "Se l'indirizzo esiste, riceverai a breve un link.",
-    linkExpired: 'Questo link non è più valido. Richiedine uno nuovo.'
+    linkExpired: 'Questo link non è più valido. Richiedine uno nuovo.',
+    newClientPrompt: 'Nuovo cliente?',
+    newClientPromptHelp: 'Se Hornung Consulting ti ha condiviso questo link, crea qui il tuo accesso.',
+    createAccess: 'Crea il mio accesso',
+    registerTitle: 'Crea il tuo accesso',
+    registerSubtitle: 'Per i clienti a cui Hornung Consulting ha condiviso questo link.',
+    registerDemoNotice:
+      'Modalità demo — la registrazione qui è disattivata. Usa i pulsanti demo nella pagina di accesso.',
+    registerCheckEmail: 'Quasi fatto — controlla la tua casella per confermare l\'e-mail, poi accedi.',
+    emailInUse: 'Questo indirizzo e-mail è già registrato.'
   },
 
   nav: {
@@ -326,5 +335,27 @@ export default {
     separated: 'Separato/a',
     divorced: 'Divorziato/a',
     widowed: 'Vedovo/a'
+  },
+
+  account: {
+    title: 'Il mio account',
+    subtitle: 'Gestisci il tuo accesso e le tue preferenze.',
+    details: 'Dati account',
+    fullName: 'Nome',
+    role: 'Ruolo',
+    roleClient: 'Cliente',
+    roleSpecialist: 'Specialista',
+    roleAdmin: 'Amministratore',
+    changePassword: 'Cambia password',
+    changePasswordHelp: 'Scegli una nuova password per il tuo account.',
+    passwordUpdated: 'Password aggiornata.',
+    inviteColleague: 'Invita un collega',
+    inviteColleagueHelp:
+      'Dai a un altro specialista di Hornung Consulting accesso a questo portale. Vedrà tutte le pratiche dei clienti.',
+    colleagueName: 'Nome',
+    colleagueEmail: 'E-mail',
+    sendInvite: 'Invia invito',
+    inviteSent: 'Invito inviato a {email}',
+    inviteFailed: 'Profilo creato, ma non è stato possibile inviare l\'e-mail di invito.'
   }
 }

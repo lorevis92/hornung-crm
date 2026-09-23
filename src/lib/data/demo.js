@@ -327,6 +327,12 @@ export const demoApi = {
     return wait(c)
   },
 
+  // Demo mode has no backend to send a real invite — the UI shows a notice
+  // instead of calling this, but it's kept so callers behave consistently.
+  async inviteStaff(payload) {
+    return wait({ profile: { role: 'specialist', ...payload }, emailSent: false, demo: true })
+  },
+
   async getQuestionnaire(clientId) {
     const s = store()
     return wait({
