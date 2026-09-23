@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, FileCheck2, FolderOpen, Info, Mail, MessageSquare, Save, ShieldCheck, Upload
+  ArrowLeft, ChevronDown, ChevronUp, FileCheck2, FolderOpen, Info, Mail, MessageSquare, Save,
+  ShieldCheck, Upload
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import StatusStepper from '../components/StatusStepper'
@@ -43,6 +44,11 @@ export default function CasePage() {
   const [notify, setNotify] = useState(true)
   const [savingStatus, setSavingStatus] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
+  // Collapsible document sections: default open on whichever one is the
+  // current viewer's own primary upload zone, collapsed on the other
+  // (secondary/informational) one — see the primary/secondary styling below.
+  const [clientDocsOpen, setClientDocsOpen] = useState(!isStaff)
+  const [specialistDocsOpen, setSpecialistDocsOpen] = useState(isStaff)
 
   const load = useCallback(async () => {
     const row = await api.getCase(caseId)
@@ -53,6 +59,16 @@ export default function CasePage() {
     setCaseRow(row)
     setStatusDraft(row.status)
     setMessageDraft(row.client_message || '')
+
+    // Remember the last case the client actually opened, so ClientHome can
+    // feature it instead of always defaulting to the current tax year.
+    if (!isStaff) {
+      try {
+        localStorage.setItem(`hornung.lastCase.${row.client_id}`, caseId)
+      } catch {
+        /* private browsing — ignore, ClientHome just falls back */
+      }
+    }
     setNotesDraft(row.specialist_notes || '')
 
     const [docs, req, types, evts] = await Promise.all([
@@ -244,107 +260,145 @@ export default function CasePage() {
           secondary/muted for staff, who can still use it on the client's
           behalf but shouldn't mistake it for their own upload flow below. */}
       <section className={clsx('card card-pad', isStaff && 'border-dashed bg-sand/30')}>
-        <div className="mb-4 flex items-start gap-2.5">
-          <Upload
-            size={20}
-            className={clsx('mt-1 shrink-0', isStaff ? 'text-ink-400' : 'text-gold-600')}
-            aria-hidden="true"
-          />
-          <div>
-            <h2 className="section-title text-xl">{t('case.yourDocuments')}</h2>
-            <p className="section-sub">{t('case.yourDocumentsHelp')}</p>
+        <button
+          type="button"
+          onClick={() => setClientDocsOpen((v) => !v)}
+          className="flex w-full items-start justify-between gap-3 text-left"
+          aria-expanded={clientDocsOpen}
+        >
+          <div className="flex items-start gap-2.5">
+            <Upload
+              size={20}
+              className={clsx('mt-1 shrink-0', isStaff ? 'text-ink-400' : 'text-gold-600')}
+              aria-hidden="true"
+            />
+            <div>
+              <h2 className="section-title text-xl">{t('case.yourDocuments')}</h2>
+              <p className="section-sub">{t('case.yourDocumentsHelp')}</p>
+            </div>
           </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-4">
-            {isStaff ? (
-              <div className="space-y-2">
-                <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">
-                  {t('case.staffUploadOnBehalf')}
-                </p>
-                <Uploader
-                  compact
-                  documentTypes={documentTypes}
-                  onUpload={(file, meta) => upload(file, meta, 'client_upload')}
-                />
-              </div>
-            ) : (
-              <>
-                {locked ? (
-                  <div className="flex items-center gap-2 rounded-xl bg-sand px-4 py-3 text-[14.5px] text-ink-500">
-                    <Info size={16} aria-hidden="true" />
-                    {t('case.lateUploadNotice')}
-                  </div>
-                ) : null}
-                <Uploader
-                  documentTypes={documentTypes}
-                  onUpload={(file, meta) => upload(file, meta, 'client_upload')}
-                />
-              </>
-            )}
-
+          <div className="mt-1 flex shrink-0 items-center gap-2 text-ink-400">
             {clientDocs.length ? (
-              <DocumentList
-                documents={clientDocs}
-                documentTypes={documentTypes}
-                canDelete={isStaff || !locked}
-                onDelete={removeDocument}
-              />
+              <span className="text-[13px] font-medium">{clientDocs.length}</span>
+            ) : null}
+            {clientDocsOpen ? (
+              <ChevronUp size={20} aria-hidden="true" />
             ) : (
-              <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
-                {t('case.noDocuments')}
-              </p>
+              <ChevronDown size={20} aria-hidden="true" />
             )}
           </div>
+        </button>
 
-          <ChecklistPanel
-            documentTypes={documentTypes}
-            requested={requested}
-            documents={clientDocs}
-            canEdit={isStaff}
-            onSave={saveChecklist}
-          />
-        </div>
+        {clientDocsOpen ? (
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="space-y-4">
+              {isStaff ? (
+                <div className="space-y-2">
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">
+                    {t('case.staffUploadOnBehalf')}
+                  </p>
+                  <Uploader
+                    compact
+                    documentTypes={documentTypes}
+                    onUpload={(file, meta) => upload(file, meta, 'client_upload')}
+                  />
+                </div>
+              ) : (
+                <>
+                  {locked ? (
+                    <div className="flex items-center gap-2 rounded-xl bg-sand px-4 py-3 text-[14.5px] text-ink-500">
+                      <Info size={16} aria-hidden="true" />
+                      {t('case.lateUploadNotice')}
+                    </div>
+                  ) : null}
+                  <Uploader
+                    documentTypes={documentTypes}
+                    onUpload={(file, meta) => upload(file, meta, 'client_upload')}
+                  />
+                </>
+              )}
+
+              {clientDocs.length ? (
+                <DocumentList
+                  documents={clientDocs}
+                  documentTypes={documentTypes}
+                  canDelete={isStaff || !locked}
+                  onDelete={removeDocument}
+                />
+              ) : (
+                <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
+                  {t('case.noDocuments')}
+                </p>
+              )}
+            </div>
+
+            <ChecklistPanel
+              documentTypes={documentTypes}
+              requested={requested}
+              documents={clientDocs}
+              canEdit={isStaff}
+              onSave={saveChecklist}
+            />
+          </div>
+        ) : null}
       </section>
 
       {/* -------------------------------------------- specialist documents -- */}
       {/* Staff's own upload zone — primary/prominent for them, secondary/
           view-only for the client (who never gets an uploader here). */}
       <section className={clsx('card card-pad', !isStaff && 'border-dashed bg-sand/30')}>
-        <div className="mb-4 flex items-start gap-2.5">
-          <FileCheck2
-            size={20}
-            className={clsx('mt-1 shrink-0', !isStaff ? 'text-ink-400' : 'text-gold-600')}
-            aria-hidden="true"
-          />
-          <div>
-            <h2 className="section-title text-xl">{t('case.fromSpecialist')}</h2>
-            <p className="section-sub">{t('case.fromSpecialistHelp')}</p>
+        <button
+          type="button"
+          onClick={() => setSpecialistDocsOpen((v) => !v)}
+          className="flex w-full items-start justify-between gap-3 text-left"
+          aria-expanded={specialistDocsOpen}
+        >
+          <div className="flex items-start gap-2.5">
+            <FileCheck2
+              size={20}
+              className={clsx('mt-1 shrink-0', !isStaff ? 'text-ink-400' : 'text-gold-600')}
+              aria-hidden="true"
+            />
+            <div>
+              <h2 className="section-title text-xl">{t('case.fromSpecialist')}</h2>
+              <p className="section-sub">{t('case.fromSpecialistHelp')}</p>
+            </div>
           </div>
-        </div>
+          <div className="mt-1 flex shrink-0 items-center gap-2 text-ink-400">
+            {specialistDocs.length ? (
+              <span className="text-[13px] font-medium">{specialistDocs.length}</span>
+            ) : null}
+            {specialistDocsOpen ? (
+              <ChevronUp size={20} aria-hidden="true" />
+            ) : (
+              <ChevronDown size={20} aria-hidden="true" />
+            )}
+          </div>
+        </button>
 
-        <div className="space-y-4">
-          {isStaff ? (
-            <Uploader
-              documentTypes={[]}
-              onUpload={(file, meta) => upload(file, meta, 'specialist_upload')}
-            />
-          ) : null}
+        {specialistDocsOpen ? (
+          <div className="mt-4 space-y-4">
+            {isStaff ? (
+              <Uploader
+                documentTypes={[]}
+                onUpload={(file, meta) => upload(file, meta, 'specialist_upload')}
+              />
+            ) : null}
 
-          {specialistDocs.length ? (
-            <DocumentList
-              documents={specialistDocs}
-              documentTypes={documentTypes}
-              canDelete={isStaff}
-              onDelete={removeDocument}
-            />
-          ) : (
-            <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
-              {t('case.noSpecialistDocs')}
-            </p>
-          )}
-        </div>
+            {specialistDocs.length ? (
+              <DocumentList
+                documents={specialistDocs}
+                documentTypes={documentTypes}
+                canDelete={isStaff}
+                onDelete={removeDocument}
+              />
+            ) : (
+              <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
+                {t('case.noSpecialistDocs')}
+              </p>
+            )}
+          </div>
+        ) : null}
       </section>
 
       {/* ------------------------------------------------------ staff area -- */}

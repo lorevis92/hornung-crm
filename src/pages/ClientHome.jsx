@@ -32,10 +32,24 @@ export default function ClientHome() {
   }, [client?.id])
 
   const year = currentTaxYear()
-  const current = useMemo(
-    () => cases.find((c) => c.tax_year === year) || cases[0] || null,
-    [cases, year]
-  )
+
+  // Feature whichever case the client last actually opened (see CasePage.jsx,
+  // which records this on every visit), falling back to the current tax
+  // year — or the first case at all — if they haven't opened one yet.
+  const lastCaseId = useMemo(() => {
+    if (!client?.id) return null
+    try {
+      return localStorage.getItem(`hornung.lastCase.${client.id}`)
+    } catch {
+      return null
+    }
+  }, [client?.id])
+
+  const current = useMemo(() => {
+    const lastVisited = lastCaseId && cases.find((c) => c.id === lastCaseId)
+    return lastVisited || cases.find((c) => c.tax_year === year) || cases[0] || null
+  }, [cases, year, lastCaseId])
+
   const previous = useMemo(
     () => cases.filter((c) => c.id !== current?.id),
     [cases, current]
