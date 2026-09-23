@@ -355,6 +355,22 @@ export const demoApi = {
     replace('children', payload.children || [])
     replace('vehicles', payload.vehicles || [])
     replace('properties', payload.properties || [])
+
+    // Mirrors the supabase layer: the questionnaire's "primary" person is the
+    // only place a self-registered client can put their name, so reflect it
+    // onto the client record too (see saveQuestionnaire in supabaseData.js).
+    const primary = (payload.persons || []).find((p) => p.person_type === 'primary')
+    const primaryFirstName = primary?.first_name?.trim()
+    const primaryLastName = primary?.last_name?.trim()
+    if (primaryFirstName || primaryLastName) {
+      const c = s.clients.find((x) => x.id === clientId)
+      if (c) {
+        if (primaryFirstName) c.first_name = primaryFirstName
+        if (primaryLastName) c.last_name = primaryLastName
+        c.updated_at = iso(Date.now())
+      }
+    }
+
     commit()
     return this.getQuestionnaire(clientId)
   },

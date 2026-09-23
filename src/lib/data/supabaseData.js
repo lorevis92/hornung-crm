@@ -186,6 +186,33 @@ export const supabaseApi = {
     await replaceAll('client_vehicles', vehicles)
     await replaceAll('client_properties', properties)
 
+    // A self-registered client has no other way to put their name on file —
+    // the questionnaire's "primary" person is the only place they can enter
+    // it. Mirror it onto clients.first_name/last_name (and app_profiles.
+    // full_name) so the greeting and every other place reading from
+    // `clients` show the real name instead of the e-mail forever.
+    // update_my_contact() is a SECURITY DEFINER RPC (see
+    // 20260101000003_hornung_rls.sql): clients have no direct UPDATE policy
+    // on `clients`, so this is the only way for them to do it themselves.
+    // Note: supabase.rpc() returns a PostgrestBuilder, which is "thenable"
+    // but not a real Promise (no .catch()) — always await it inside a plain
+    // try/catch, never chain .catch() directly on it.
+    const primary = persons.find((p) => p.person_type === 'primary')
+    const primaryFirstName = primary?.first_name?.trim()
+    const primaryLastName = primary?.last_name?.trim()
+    if (primaryFirstName || primaryLastName) {
+      try {
+        await supabase.rpc('update_my_contact', {
+          p_first_name: primaryFirstName || null,
+          p_last_name: primaryLastName || null,
+          p_phone: null,
+          p_language: null
+        })
+      } catch (err) {
+        console.error('[saveQuestionnaire] update_my_contact failed', err)
+      }
+    }
+
     return this.getQuestionnaire(clientId)
   },
 
