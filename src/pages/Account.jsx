@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { KeyRound, ShieldCheck, UserCircle2, UserPlus } from 'lucide-react'
+import { KeyRound, Save, ShieldCheck, UserCircle2, UserPlus } from 'lucide-react'
 import LanguageSwitcher from '../components/LanguageSwitcher'
-import { Field, Spinner, TextInput } from '../components/ui'
+import { Field, PasswordInput, Spinner, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
@@ -10,10 +10,22 @@ import { IS_DEMO } from '../lib/config'
 
 const emptyInvite = { full_name: '', email: '' }
 
+function splitFullName(fullName = '') {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  return { first: parts[0] || '', last: parts.slice(1).join(' ') }
+}
+
 export default function Account() {
   const { t, lang } = useI18n()
   const toast = useToast()
-  const { profile, isStaff, updatePassword } = useAuth()
+  const { profile, client, isStaff, updatePassword, updateProfileName } = useAuth()
+
+  const initialName = client
+    ? { first: client.first_name || '', last: client.last_name || '' }
+    : splitFullName(profile?.full_name)
+  const [firstName, setFirstName] = useState(initialName.first)
+  const [lastName, setLastName] = useState(initialName.last)
+  const [savingName, setSavingName] = useState(false)
 
   const [password, setPassword] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -29,6 +41,20 @@ export default function Account() {
       : profile?.role === 'admin'
         ? t('account.roleAdmin')
         : t('account.roleSpecialist')
+
+  const submitName = async (e) => {
+    e.preventDefault()
+    setSavingName(true)
+    try {
+      await updateProfileName(firstName.trim(), lastName.trim())
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setSavingName(false)
+    }
+  }
 
   const submitPassword = async (e) => {
     e.preventDefault()
@@ -85,9 +111,21 @@ export default function Account() {
           <h2 className="section-title text-xl">{t('account.details')}</h2>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('account.fullName')}>
-            <p className="text-[15px] text-ink-800">{profile?.full_name || t('common.notProvided')}</p>
+        <form onSubmit={submitName} className="grid gap-4 sm:grid-cols-2">
+          <Field label={t('data.f.firstName')} htmlFor="acc-first">
+            <TextInput
+              id="acc-first"
+              required
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+            />
+          </Field>
+          <Field label={t('data.f.lastName')} htmlFor="acc-last">
+            <TextInput
+              id="acc-last"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+            />
           </Field>
           <Field label={t('auth.email')}>
             <p className="text-[15px] text-ink-800">{profile?.email}</p>
@@ -98,7 +136,13 @@ export default function Account() {
           <Field label={t('common.language')}>
             <LanguageSwitcher />
           </Field>
-        </div>
+          <div className="flex items-end">
+            <button type="submit" className="btn-primary" disabled={savingName}>
+              {savingName ? <Spinner size={18} /> : <Save size={18} aria-hidden="true" />}
+              {savingName ? t('common.saving') : t('common.save')}
+            </button>
+          </div>
+        </form>
       </section>
 
       <section className="card card-pad">
@@ -112,9 +156,8 @@ export default function Account() {
 
         <form onSubmit={submitPassword} className="grid max-w-md gap-4">
           <Field label={t('auth.newPassword')} htmlFor="acc-pw">
-            <TextInput
+            <PasswordInput
               id="acc-pw"
-              type="password"
               autoComplete="new-password"
               required
               value={password}
@@ -122,9 +165,8 @@ export default function Account() {
             />
           </Field>
           <Field label={t('auth.repeatPassword')} htmlFor="acc-pw2">
-            <TextInput
+            <PasswordInput
               id="acc-pw2"
-              type="password"
               autoComplete="new-password"
               required
               value={repeat}

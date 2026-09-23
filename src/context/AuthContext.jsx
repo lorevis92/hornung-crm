@@ -226,17 +226,59 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
   }, [])
 
+  // Goes through our own /api/reset-password instead of calling
+  // supabase.auth.resetPasswordForEmail() directly from the browser — same
+  // reason as api/register.js: keeps the e-mail branded and sent through
+  // Resend instead of Supabase's own generic template. In demo mode there is
+  // nothing to send; pretend it worked so the caller's existing
+  // toast.success(auth.resetSent) still makes sense.
   const sendResetEmail = useCallback(async (email) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/set-password`
+    if (IS_DEMO) return
+    const res = await fetch('/api/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, preferred_language: langRef.current })
     })
-    if (error) throw error
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      throw new Error(json.error || 'REQUEST_FAILED')
+    }
   }, [])
 
   const updatePassword = useCallback(async (password) => {
     const { error } = await supabase.auth.updateUser({ password })
     if (error) throw error
   }, [])
+
+  // Lets the signed-in user (client or staff) set their own display name.
+  // Uses the same update_my_contact() RPC as saveQuestionnaire() — clients
+  // have no direct UPDATE policy on `clients`, only on their own
+  // app_profiles row, so this SECURITY DEFINER RPC is the only way for a
+  // client to do it themselves. For staff it simply updates app_profiles.
+  // full_name (my_client_id() resolves to nothing for them, so the `clients`
+  // side of the RPC is a harmless no-op).
+  const updateProfileName = useCallback(async (firstName, lastName) => {
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim()
+
+    if (IS_DEMO) {
+      setProfile((p) => (p ? { ...p, full_name: fullName || p.full_name } : p))
+      setClient((c) => (c ? { ...c, first_name: firstName || c.first_name, last_name: lastName || c.last_name } : c))
+      return
+    }
+
+    const { error } = await supabase.rpc('update_my_contact', {
+      p_first_name: firstName || null,
+      p_last_name: lastName || null,
+      p_phone: null,
+      p_language: null
+    })
+    if (error) throw error
+
+    setProfile((p) => (p ? { ...p, full_name: fullName || p.full_name } : p))
+    if (profile?.role === 'client') {
+      setClient(await api.getMyClient(profile.id))
+    }
+  }, [profile])
 
   const refreshClient = useCallback(async () => {
     if (!profile || profile.role !== 'client') return
@@ -258,11 +300,12 @@ export function AuthProvider({ children }) {
       signOut,
       sendResetEmail,
       updatePassword,
+      updateProfileName,
       refreshClient
     }),
     [
       loading, session, profile, client, access,
-      signIn, signInDemo, signOut, sendResetEmail, updatePassword, refreshClient
+      signIn, signInDemo, signOut, sendResetEmail, updatePassword, updateProfileName, refreshClient
     ]
   )
 
