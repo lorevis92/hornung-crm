@@ -67,6 +67,24 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
+  // Best-effort: flips a client's status from 'invited' to 'active' on their
+  // first login. NOTE: supabase-js's `.rpc()` returns a PostgrestBuilder,
+  // which is "thenable" (has `.then()`) but is NOT a real Promise — it has no
+  // `.catch()` method. Calling `.catch()` on it directly throws
+  // "TypeError: ...catch is not a function" *synchronously*, which — since
+  // this runs inside an async function that nothing here awaits/catches from
+  // the caller's caller — used to abort loadProfile() before it ever reached
+  // its final `setLoading(false)`, leaving the app stuck in the loading
+  // state forever for every client login. A plain try/catch avoids relying
+  // on `.catch()` existing on the returned builder.
+  const markClientActive = async () => {
+    try {
+      await supabase.rpc('mark_client_active')
+    } catch (err) {
+      console.error('[markClientActive] mark_client_active RPC failed', err)
+    }
+  }
+
   // Attempts, at most once per user id, to turn a bare auth user into an
   // app_profiles row (self sign-up on /register, or the owner's first
   // login). Best-effort: any failure (network, 4xx…) is swallowed and the
@@ -123,7 +141,7 @@ export function AuthProvider({ children }) {
         setAccess('ok')
         setProfile(claimed)
         if (claimed.role === 'client') {
-          await supabase.rpc('mark_client_active').catch(() => {})
+          await markClientActive()
           setClient(await api.getMyClient(claimed.id))
         } else {
           setClient(null)
@@ -144,7 +162,7 @@ export function AuthProvider({ children }) {
     setProfile(data)
 
     if (data.role === 'client') {
-      await supabase.rpc('mark_client_active').catch(() => {})
+      await markClientActive()
       setClient(await api.getMyClient(data.id))
     } else {
       setClient(null)
