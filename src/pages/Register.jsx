@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { UserPlus, MailCheck, FlaskConical } from 'lucide-react'
+import { UserPlus, MailCheck, FlaskConical, CheckCircle2, LogIn } from 'lucide-react'
 import Brand from '../components/Brand'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { PlainLayout } from '../components/Layout'
 import { Field, PasswordInput, Spinner, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { IS_DEMO } from '../lib/config'
+import { PROFILE_WAIT_TIMEOUT_MS } from '../lib/constants'
 import { supabase } from '../lib/supabaseClient'
 
 // Goes through our own /api/register instead of calling supabase.auth.signUp()
@@ -31,7 +33,8 @@ async function registerAccount({ email, password, preferred_language }) {
 
 export default function Register() {
   const { t, lang } = useI18n()
-  const { profile, loading } = useAuth()
+  const toast = useToast()
+  const { profile, loading, access } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -39,8 +42,14 @@ export default function Register() {
   const [error, setError] = useState('')
   const [emailInUse, setEmailInUse] = useState(false)
   const [checkEmail, setCheckEmail] = useState(false)
-
-  if (!loading && profile) return <Navigate to="/" replace />
+  // The account was created (needsConfirmation: false) — we always show this
+  // explicitly instead of relying on a silent automatic redirect.
+  const [created, setCreated] = useState(false)
+  // true while we attempt the automatic sign-in and wait for the app profile
+  // to resolve; once it settles (or times out) we show an explicit "Sign in"
+  // action instead of leaving the user on a mute screen.
+  const [signingIn, setSigningIn] = useState(false)
+  const [entryError, setEntryError] = useState('')
 
   const submit = async (e) => {
     e.preventDefault()
@@ -57,10 +66,21 @@ export default function Register() {
         return
       }
       // No confirmation required (the default): the account already exists
-      // and is confirmed server-side, so sign the person straight in with
-      // the password they just chose.
+      // and is confirmed server-side. Always tell the user it worked, then
+      // try to sign them straight in with the password they just chose.
+      setCreated(true)
+      toast.success(t('auth.accountCreated'))
+      setSigningIn(true)
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-      if (signInError) throw signInError
+      if (signInError) {
+        console.error(signInError)
+        setSigningIn(false)
+        setEntryError(t('auth.autoSignInFailed'))
+        toast.error(t('auth.autoSignInFailed'))
+      }
+      // If sign-in succeeded, the effects below resolve `signingIn` once
+      // AuthContext finishes loading the profile — or the top-level
+      // `if (!loading && profile)` check above redirects away.
     } catch (err) {
       console.error(err)
       if (err.code === 'EMAIL_IN_USE') {
@@ -72,6 +92,33 @@ export default function Register() {
       setBusy(false)
     }
   }
+
+  // Resolve the "signing in…" state once AuthContext settles.
+  useEffect(() => {
+    if (!signingIn || loading) return
+    if (profile) return // handled by the top-level Navigate on next render
+    if (access === 'no-profile') {
+      setSigningIn(false)
+      setEntryError(t('auth.noAccessShort'))
+      toast.error(t('auth.noAccessShort'))
+    }
+  }, [signingIn, loading, profile, access]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Safety net: never leave the user staring at a spinner indefinitely if the
+  // profile lookup (or its /api/claim-profile fallback) hangs.
+  useEffect(() => {
+    if (!signingIn) return undefined
+    const timer = setTimeout(() => {
+      setSigningIn(false)
+      setEntryError(t('auth.autoSignInTimeout'))
+      toast.error(t('auth.autoSignInTimeout'))
+    }, PROFILE_WAIT_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [signingIn]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Every hook above must run on every render (Rules of Hooks) — this early
+  // return has to come after all of them, never before.
+  if (!loading && profile) return <Navigate to="/" replace />
 
   return (
     <PlainLayout>
@@ -93,6 +140,28 @@ export default function Register() {
                 <Link to="/login" className="link mt-2 inline-block text-[14px]">
                   {t('auth.signIn')}
                 </Link>
+              </div>
+            </div>
+          ) : created ? (
+            <div className="mt-6 flex gap-3 rounded-xl bg-emerald-50 px-4 py-3.5">
+              <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-700" aria-hidden="true" />
+              <div>
+                <p className="text-[14px] font-semibold text-emerald-900">{t('auth.accountCreated')}</p>
+                {signingIn ? (
+                  <p className="mt-2 flex items-center gap-2 text-[13.5px] text-emerald-800">
+                    <Spinner size={14} /> {t('auth.signingIn')}
+                  </p>
+                ) : (
+                  <>
+                    {entryError ? (
+                      <p className="mt-1 text-[13.5px] text-emerald-800">{entryError}</p>
+                    ) : null}
+                    <Link to="/login" className="btn-secondary btn-sm mt-3">
+                      <LogIn size={16} aria-hidden="true" />
+                      {t('auth.signIn')}
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           ) : checkEmail ? (
