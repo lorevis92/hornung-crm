@@ -72,7 +72,18 @@ export default {
     registerDemoNotice:
       'Demo-Modus — die Registrierung ist hier deaktiviert. Nutzen Sie die Demo-Buttons auf der Anmeldeseite.',
     registerCheckEmail: 'Fast geschafft — bestätigen Sie Ihre E-Mail und melden Sie sich dann an.',
-    emailInUse: 'Diese E-Mail-Adresse ist bereits registriert.'
+    emailInUse: 'Diese E-Mail-Adresse ist bereits registriert.',
+    noAccessTitle: 'Kein Zugang zu diesem Portal',
+    noAccessBody:
+      'Ihr Konto existiert, ist aber nicht als Kunde von Hornung Consulting registriert. Falls Sie glauben, dass dies ein Fehler ist, kontaktieren Sie bitte',
+    noAccessShort:
+      'Ihr Konto existiert, ist aber noch nicht als Kunde von Hornung Consulting registriert. Kontaktieren Sie uns, falls dies falsch erscheint.',
+    accountCreated: 'Konto erstellt.',
+    signingIn: 'Sie werden angemeldet…',
+    autoSignInFailed: 'Ihr Konto wurde erstellt, aber die automatische Anmeldung ist fehlgeschlagen. Bitte melden Sie sich manuell an.',
+    autoSignInTimeout:
+      'Ihr Konto wurde erstellt, aber die Anmeldung dauert länger als erwartet. Bitte melden Sie sich manuell an.',
+    signInTimeout: 'Die Anmeldung dauert länger als erwartet. Bitte versuchen Sie es erneut.'
   },
 
   nav: {

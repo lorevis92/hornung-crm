@@ -35,6 +35,12 @@ export const STATUS_META = {
 
 export const DOC_CATEGORIES = ['base', 'income', 'deductions', 'assets', 'property', 'other']
 
+// How long Login.jsx / Register.jsx wait, after a successful sign-in, for the
+// app profile to resolve (app_profiles lookup + the /api/claim-profile
+// fallback in AuthContext) before giving up and showing an explicit error
+// instead of leaving the spinner running forever.
+export const PROFILE_WAIT_TIMEOUT_MS = 12000
+
 export const LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'de', label: 'Deutsch' },

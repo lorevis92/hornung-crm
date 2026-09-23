@@ -70,7 +70,18 @@ export default {
     registerSubtitle: 'For clients Hornung Consulting has shared this link with.',
     registerDemoNotice: 'Demo mode — sign-up is disabled here. Use the demo buttons on the sign-in page instead.',
     registerCheckEmail: 'Almost done — check your inbox to confirm your e-mail, then sign in.',
-    emailInUse: 'This e-mail is already registered.'
+    emailInUse: 'This e-mail is already registered.',
+    noAccessTitle: 'No access to this portal',
+    noAccessBody:
+      'Your account exists, but it is not registered as a client of Hornung Consulting. If you think this is a mistake, please contact',
+    noAccessShort:
+      'Your account exists, but it is not yet registered as a Hornung Consulting client. Contact us if this seems wrong.',
+    accountCreated: 'Account created.',
+    signingIn: 'Signing you in…',
+    autoSignInFailed: 'Your account was created, but the automatic sign-in failed. Please sign in manually.',
+    autoSignInTimeout:
+      'Your account was created, but signing you in is taking longer than expected. Please sign in manually.',
+    signInTimeout: 'Signing you in is taking longer than expected. Please try again.'
   },
 
   nav: {

@@ -72,7 +72,18 @@ export default {
     registerDemoNotice:
       "Mode démo — l'inscription est désactivée ici. Utilisez les boutons de démo sur la page de connexion.",
     registerCheckEmail: 'Presque terminé — confirmez votre e-mail puis connectez-vous.',
-    emailInUse: 'Cette adresse e-mail est déjà enregistrée.'
+    emailInUse: 'Cette adresse e-mail est déjà enregistrée.',
+    noAccessTitle: 'Aucun accès à ce portail',
+    noAccessBody:
+      "Votre compte existe, mais n'est pas enregistré comme client de Hornung Consulting. Si vous pensez qu'il s'agit d'une erreur, veuillez contacter",
+    noAccessShort:
+      "Votre compte existe, mais n'est pas encore enregistré comme client de Hornung Consulting. Contactez-nous si cela vous semble incorrect.",
+    accountCreated: 'Compte créé.',
+    signingIn: 'Connexion en cours…',
+    autoSignInFailed: "Votre compte a été créé, mais la connexion automatique a échoué. Veuillez vous connecter manuellement.",
+    autoSignInTimeout:
+      'Votre compte a été créé, mais la connexion prend plus de temps que prévu. Veuillez vous connecter manuellement.',
+    signInTimeout: 'La connexion prend plus de temps que prévu. Veuillez réessayer.'
   },
 
   nav: {

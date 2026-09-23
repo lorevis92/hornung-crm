@@ -83,10 +83,15 @@ export function AuthProvider({ children }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ locale: langRef.current })
       })
-      if (!res.ok) return null
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        console.error('[claimProfile] /api/claim-profile responded with an error', res.status, body)
+        return null
+      }
       const json = await res.json().catch(() => null)
       return json?.profile || null
-    } catch {
+    } catch (err) {
+      console.error('[claimProfile] request failed', err)
       return null
     }
   }, [])

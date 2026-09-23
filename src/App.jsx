@@ -1,11 +1,9 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { ShieldAlert } from 'lucide-react'
 import Layout, { PlainLayout } from './components/Layout'
 import { PageLoader } from './components/ui'
-import Brand from './components/Brand'
+import NoAccessNotice from './components/NoAccessNotice'
 import { useAuth } from './context/AuthContext'
 import { useI18n } from './i18n'
-import { CONTACT } from './lib/config'
 
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -23,24 +21,7 @@ function NoAccess() {
   const { signOut } = useAuth()
   return (
     <PlainLayout>
-      <div className="card card-pad w-full max-w-md text-center">
-        <div className="mb-4 flex justify-center">
-          <Brand size="lg" showTagline={false} />
-        </div>
-        <ShieldAlert size={28} className="mx-auto mb-3 text-gold-600" aria-hidden="true" />
-        <h1 className="display text-2xl">No access to this portal</h1>
-        <p className="mt-2 text-[15px] text-ink-500">
-          Your account exists, but it is not registered as a client of Hornung Consulting. If you
-          think this is a mistake, please contact{' '}
-          <a className="link" href={`mailto:${CONTACT.email}`}>
-            {CONTACT.email}
-          </a>
-          .
-        </p>
-        <button type="button" onClick={signOut} className="btn-secondary mt-6 w-full">
-          Sign out
-        </button>
-      </div>
+      <NoAccessNotice onSignOut={signOut} />
     </PlainLayout>
   )
 }
