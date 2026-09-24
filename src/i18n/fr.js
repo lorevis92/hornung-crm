@@ -155,6 +155,8 @@ export default {
     typeNotAllowed: '{name} — type de fichier non pris en charge.',
     documentType: 'Type de document',
     chooseType: 'Non précisé',
+    taxCategory: 'Catégorie fiscale',
+    taxCategoryPlaceholder: 'Non catégorisé',
     noDocuments: 'Aucun document téléversé.',
     fromSpecialist: 'Documents de Hornung Consulting',
     fromSpecialistHelp: 'Votre déclaration terminée et les documents associés.',

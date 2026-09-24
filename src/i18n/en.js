@@ -154,6 +154,8 @@ export default {
     typeNotAllowed: '{name} — file type not supported.',
     documentType: 'Document type',
     chooseType: 'Not specified',
+    taxCategory: 'Tax category',
+    taxCategoryPlaceholder: 'Not categorized',
     noDocuments: 'No documents uploaded yet.',
     fromSpecialist: 'Documents from Hornung Consulting',
     fromSpecialistHelp: 'Your completed declaration and any related document.',

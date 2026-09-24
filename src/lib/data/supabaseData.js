@@ -293,12 +293,40 @@ export const supabaseApi = {
   },
 
   async listDocuments(caseId) {
-    return unwrap(
+    const rows = unwrap(
       await supabase
         .from('case_documents')
-        .select('*')
+        .select('*, client_documents(category_code)')
         .eq('case_id', caseId)
         .order('created_at', { ascending: false })
+    )
+    return (rows || []).map((r) => ({
+      ...r,
+      category_code: r.client_documents?.category_code ?? null
+    }))
+  },
+
+  // Catalogue for the extraction module (supabase/migrations/20260101000007_tax_extraction_schema.sql).
+  async listDocumentCategories() {
+    return unwrap(
+      await supabase
+        .from('document_categories')
+        .select('*')
+        .eq('active', true)
+        .order('sort_order', { ascending: true })
+    )
+  },
+
+  // Assigns/changes the category of the client_documents row mirrored from
+  // this case_documents row (see 20260101000008_client_documents_mirror.sql).
+  async setDocumentCategory(caseDocumentId, categoryCode) {
+    return unwrap(
+      await supabase
+        .from('client_documents')
+        .update({ category_code: categoryCode })
+        .eq('source_case_document_id', caseDocumentId)
+        .select()
+        .single()
     )
   },
 

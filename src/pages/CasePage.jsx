@@ -33,6 +33,7 @@ export default function CasePage() {
   const [documents, setDocuments] = useState([])
   const [requested, setRequested] = useState([])
   const [documentTypes, setDocumentTypes] = useState([])
+  const [documentCategories, setDocumentCategories] = useState([])
   const [events, setEvents] = useState([])
   // staff only
   const [pricing, setPricing] = useState([])
@@ -84,14 +85,16 @@ export default function CasePage() {
 
     if (isStaff) {
       const clientId = row.client_id
-      const [prices, quest, ext] = await Promise.all([
+      const [prices, quest, ext, cats] = await Promise.all([
         api.listPricing(),
         api.getQuestionnaire(clientId),
-        api.listExtracted(caseId)
+        api.listExtracted(caseId),
+        api.listDocumentCategories()
       ])
       setPricing(prices)
       setQuestionnaire(quest)
       setExtracted(ext)
+      setDocumentCategories(cats)
     }
     setLoading(false)
   }, [caseId, isStaff])
@@ -140,6 +143,14 @@ export default function CasePage() {
   const removeDocument = async (doc) => {
     await api.deleteDocument(doc)
     setDocuments((list) => list.filter((d) => d.id !== doc.id))
+    toast.success(t('common.saved'))
+  }
+
+  const changeDocumentCategory = async (doc, categoryCode) => {
+    await api.setDocumentCategory(doc.id, categoryCode)
+    setDocuments((list) =>
+      list.map((d) => (d.id === doc.id ? { ...d, category_code: categoryCode } : d))
+    )
     toast.success(t('common.saved'))
   }
 
@@ -322,6 +333,9 @@ export default function CasePage() {
                 <DocumentList
                   documents={clientDocs}
                   documentTypes={documentTypes}
+                  categories={documentCategories}
+                  canAssignCategory={isStaff}
+                  onCategoryChange={changeDocumentCategory}
                   canDelete={isStaff || !locked}
                   onDelete={removeDocument}
                 />
@@ -389,6 +403,9 @@ export default function CasePage() {
               <DocumentList
                 documents={specialistDocs}
                 documentTypes={documentTypes}
+                categories={documentCategories}
+                canAssignCategory={isStaff}
+                onCategoryChange={changeDocumentCategory}
                 canDelete={isStaff}
                 onDelete={removeDocument}
               />

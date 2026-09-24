@@ -4,7 +4,7 @@
 // The method signatures are identical to those of the Supabase layer.
 // ---------------------------------------------------------------------------
 import { currentTaxYear } from '../config'
-import { DOCUMENT_TYPES, PRICING_ITEMS } from '../demoSeed'
+import { DOCUMENT_CATEGORIES, DOCUMENT_TYPES, PRICING_ITEMS } from '../demoSeed'
 
 const KEY = 'hornung.demo.v2'
 const blobs = new Map() // document id -> object URL (this session only)
@@ -506,6 +506,7 @@ export const demoApi = {
       mime_type: file.type,
       note: meta.note || null,
       uploaded_by: meta.profileId || null,
+      category_code: null,
       created_at: iso(Date.now())
     }
     try {
@@ -532,6 +533,18 @@ export const demoApi = {
     blobs.delete(doc.id)
     commit()
     return wait(true)
+  },
+
+  async listDocumentCategories() {
+    return wait([...DOCUMENT_CATEGORIES].sort((a, b) => a.sort_order - b.sort_order))
+  },
+
+  async setDocumentCategory(caseDocumentId, categoryCode) {
+    const s = store()
+    const doc = s.documents.find((d) => d.id === caseDocumentId)
+    if (doc) doc.category_code = categoryCode
+    commit()
+    return wait(doc || null)
   },
 
   // Demo mode has no backend to send a real e-mail from.

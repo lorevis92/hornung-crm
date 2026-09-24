@@ -22,6 +22,30 @@ export const DOCUMENT_TYPES = [
   { id: 'other', category: 'other', sort_order: 900, label_en: 'Other document', label_de: 'Weiteres Dokument', label_fr: 'Autre document', label_it: 'Altro documento' }
 ]
 
+// Mirrors document_categories, seeded in
+// supabase/migrations/20260101000007_tax_extraction_schema.sql.
+export const DOCUMENT_CATEGORIES = [
+  { code: 'current_tax_sheet', sort_order: 10, label_en: "Current year's tax return form", label_de: 'Steuererklärungsformular (laufendes Jahr)', label_fr: "Formulaire de déclaration d'impôt (année en cours)", label_it: "Modulo dichiarazione d'imposta (anno corrente)" },
+  { code: 'previous_tax_return', sort_order: 20, label_en: "Previous year's tax return", label_de: 'Steuererklärung Vorjahr', label_fr: "Déclaration d'impôt de l'année précédente", label_it: 'Dichiarazione d\'imposta anno precedente' },
+  { code: 'previous_tax_assessment', sort_order: 30, label_en: "Previous year's tax assessment", label_de: 'Steuerveranlagung Vorjahr', label_fr: 'Décision de taxation de l\'année précédente', label_it: 'Tassazione anno precedente' },
+  { code: 'salary_statement', sort_order: 40, label_en: 'Salary statement', label_de: 'Lohnausweis', label_fr: 'Certificat de salaire', label_it: 'Certificato di salario' },
+  { code: 'self_employed_income_statement', sort_order: 50, label_en: 'Self-employment income statement', label_de: 'Erfolgsrechnung Selbständigerwerbende', label_fr: 'Compte de résultat (indépendant)', label_it: 'Conto economico (attività indipendente)' },
+  { code: 'alimony_received', sort_order: 60, label_en: 'Alimony received', label_de: 'Erhaltene Unterhaltsbeiträge', label_fr: 'Pensions alimentaires reçues', label_it: 'Alimenti ricevuti' },
+  { code: 'alimony_paid', sort_order: 70, label_en: 'Alimony paid', label_de: 'Geleistete Unterhaltsbeiträge', label_fr: 'Pensions alimentaires versées', label_it: 'Alimenti versati' },
+  { code: 'childcare_costs', sort_order: 80, label_en: 'Childcare costs', label_de: 'Fremdbetreuungskosten Kinder', label_fr: 'Frais de garde des enfants', label_it: 'Spese di custodia dei figli' },
+  { code: 'debt_certificate', sort_order: 90, label_en: 'Debt certificate', label_de: 'Schuldenverzeichnis / Schuldzinsbescheinigung', label_fr: 'Attestation de dettes', label_it: 'Attestato di debito' },
+  { code: 'pillar_3a_certificate', sort_order: 100, label_en: 'Pillar 3a certificate', label_de: 'Bescheinigung Säule 3a', label_fr: 'Attestation du pilier 3a', label_it: 'Attestato del pilastro 3a' },
+  { code: 'health_insurance_policy', sort_order: 110, label_en: 'Health insurance policy', label_de: 'Krankenkassenpolice', label_fr: "Police d'assurance-maladie", label_it: 'Polizza di assicurazione malattia' },
+  { code: 'medical_costs', sort_order: 120, label_en: 'Medical costs', label_de: 'Krankheitskosten', label_fr: 'Frais de maladie', label_it: 'Spese mediche' },
+  { code: 'donation_certificate', sort_order: 130, label_en: 'Donation certificate', label_de: 'Spendenbescheinigung', label_fr: 'Attestation de don', label_it: 'Attestato di donazione' },
+  { code: 'supported_person_transfer', sort_order: 140, label_en: 'Support payments to a dependent person', label_de: 'Unterstützungsleistungen an bedürftige Person', label_fr: 'Soutien à une personne dans le besoin', label_it: 'Sostegno a persona bisognosa' },
+  { code: 'bank_securities_crypto_statement', sort_order: 150, label_en: 'Bank, securities & crypto statement', label_de: 'Bank-, Wertschriften- und Krypto-Verzeichnis', label_fr: 'Relevé bancaire, titres et cryptomonnaies', label_it: 'Estratto conto banca, titoli e crypto' },
+  { code: 'pension_fund_statement', sort_order: 160, label_en: 'Pension fund statement', label_de: 'Pensionskassenausweis', label_fr: 'Certificat de la caisse de pension', label_it: 'Attestato cassa pensione' },
+  { code: 'inheritance_gift_lpp_payment', sort_order: 170, label_en: 'Inheritance, gift or pension lump-sum payment', label_de: 'Erbschaft, Schenkung oder Kapitalauszahlung Vorsorge', label_fr: 'Succession, donation ou versement en capital LPP', label_it: 'Successione, donazione o versamento in capitale LPP' },
+  { code: 'property_tax_value', sort_order: 180, label_en: 'Property tax value statement', label_de: 'Steuerwert Liegenschaft', label_fr: "Valeur fiscale de l'immeuble", label_it: 'Valore fiscale immobile' },
+  { code: 'rental_contract_zug', sort_order: 190, label_en: 'Zug rental contract', label_de: 'Mietvertrag Zug', label_fr: 'Contrat de bail Zoug', label_it: 'Contratto di locazione Zugo' }
+].map((item) => ({ id: item.code, active: true, ...item }))
+
 export const PRICING_ITEMS = [
   { code: 'base_single', kind: 'base', sort_order: 10, price: 240, unit: null, quantity_from: null, label_en: 'Single', label_fr: 'Célibataire', label_de: 'Alleinstehend', label_it: 'Celibe/nubile' },
   { code: 'base_married', kind: 'base', sort_order: 20, price: 320, unit: null, quantity_from: null, label_en: 'Married', label_fr: 'Marié', label_de: 'Verheiratet', label_it: 'Coniugato/a' },

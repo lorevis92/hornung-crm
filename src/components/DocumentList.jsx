@@ -9,7 +9,7 @@ import { useToast } from '../context/ToastContext'
 import { api } from '../lib/data'
 import { formatBytes, formatDate } from '../lib/format'
 import { docTypeLabel, findDocType } from '../lib/labels'
-import { Spinner } from './ui'
+import { Select, Spinner } from './ui'
 
 const VIEW_KEY = 'hornung.docview'
 const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
@@ -43,10 +43,19 @@ function previewKind(mime = '') {
   return 'none'
 }
 
-export default function DocumentList({ documents = [], documentTypes = [], onDelete, canDelete = false }) {
+export default function DocumentList({
+  documents = [],
+  documentTypes = [],
+  categories = [],
+  canAssignCategory = false,
+  onCategoryChange,
+  onDelete,
+  canDelete = false
+}) {
   const { t, lang } = useI18n()
   const toast = useToast()
   const [busyId, setBusyId] = useState(null)
+  const [categoryBusyId, setCategoryBusyId] = useState(null)
   const [view, setView] = useState(readStoredView)
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -93,6 +102,18 @@ export default function DocumentList({ documents = [], documentTypes = [], onDel
     } finally {
       setDeleting(false)
       setBusyId(null)
+    }
+  }
+
+  const changeCategory = async (doc, categoryCode) => {
+    setCategoryBusyId(doc.id)
+    try {
+      await onCategoryChange(doc, categoryCode)
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setCategoryBusyId(null)
     }
   }
 
@@ -170,6 +191,24 @@ export default function DocumentList({ documents = [], documentTypes = [], onDel
                   {doc.note ? <p className="mt-1 text-[13px] italic text-ink-500">{doc.note}</p> : null}
                 </button>
 
+                {canAssignCategory ? (
+                  <Select
+                    className="w-[190px] shrink-0"
+                    value={doc.category_code || ''}
+                    onChange={(e) => changeCategory(doc, e.target.value || null)}
+                    disabled={categoryBusyId === doc.id}
+                    aria-label={t('case.taxCategory')}
+                    title={t('case.taxCategory')}
+                  >
+                    <option value="">{t('case.taxCategoryPlaceholder')}</option>
+                    {categories.map((cat) => (
+                      <option key={cat.code} value={cat.code}>
+                        {docTypeLabel(cat, lang)}
+                      </option>
+                    ))}
+                  </Select>
+                ) : null}
+
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
@@ -226,6 +265,24 @@ export default function DocumentList({ documents = [], documentTypes = [], onDel
                 </p>
                 {type ? (
                   <p className="w-full truncate text-[11px] text-ink-400">{docTypeLabel(type, lang)}</p>
+                ) : null}
+
+                {canAssignCategory ? (
+                  <Select
+                    className="w-full text-[12.5px]"
+                    value={doc.category_code || ''}
+                    onChange={(e) => changeCategory(doc, e.target.value || null)}
+                    disabled={categoryBusyId === doc.id}
+                    aria-label={t('case.taxCategory')}
+                    title={t('case.taxCategory')}
+                  >
+                    <option value="">{t('case.taxCategoryPlaceholder')}</option>
+                    {categories.map((cat) => (
+                      <option key={cat.code} value={cat.code}>
+                        {docTypeLabel(cat, lang)}
+                      </option>
+                    ))}
+                  </Select>
                 ) : null}
 
                 <div className="mt-1 flex shrink-0 items-center gap-1 border-t border-line pt-2">
