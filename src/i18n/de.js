@@ -93,6 +93,7 @@ export default {
     myData: 'Meine Daten',
     pricing: 'Tarife',
     clients: 'Kunden',
+    taxSettings: 'Steuereinstellungen',
     menu: 'Menü'
   },
 
@@ -381,5 +382,30 @@ export default {
     sendInvite: 'Einladung senden',
     inviteSent: 'Einladung an {email} gesendet',
     inviteFailed: 'Profil erstellt, aber die Einladungs-E-Mail konnte nicht gesendet werden.'
+  },
+
+  taxSettings: {
+    title: 'Steuereinstellungen',
+    subtitle: 'Konfigurieren Sie die Daten, nach denen das Extraktionsmodul sucht, je Kategorie.',
+    fieldsTab: 'Dokumentfelder',
+    parametersTab: 'Steuerparameter',
+    parametersComingSoon: 'Kantonale und eidgenössische Steuerparameter werden hier in einem zukünftigen Update verwaltet.',
+    fieldsFor: 'Felder für {category}',
+    noFields: 'Für diese Kategorie sind noch keine Felder definiert.',
+    addField: 'Feld hinzufügen',
+    editField: 'Feld bearbeiten',
+    fieldKey: 'Feldschlüssel',
+    fieldKeyHint: 'z. B. gross_salary — intern verwendet, keine Leerzeichen.',
+    fieldLabel: 'Bezeichnung',
+    valueType: 'Werttyp',
+    valueType_text: 'Text',
+    valueType_numeric: 'Numerisch',
+    valueType_date: 'Datum',
+    valueType_boolean: 'Ja/Nein',
+    deleteFieldConfirm: 'Dieses Feld entfernen?',
+    deleteFieldConfirmBody: '„{label}" wird aus dem Extraktions-Wörterbuch dieser Kategorie entfernt.',
+    fieldKeyExists: 'Dieser Feldschlüssel existiert bereits für diese Kategorie.',
+    moveUp: 'Nach oben',
+    moveDown: 'Nach unten'
   }
 }

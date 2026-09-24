@@ -25,7 +25,8 @@ export default function Layout({ children }) {
   const links = isStaff
     ? [
         { to: '/clients', label: t('nav.clients') },
-        { to: '/pricing', label: t('nav.pricing') }
+        { to: '/pricing', label: t('nav.pricing') },
+        { to: '/tax-settings', label: t('nav.taxSettings') }
       ]
     : [
         { to: '/', label: t('nav.home') },

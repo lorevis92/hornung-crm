@@ -330,6 +330,40 @@ export const supabaseApi = {
     )
   },
 
+  // Tax settings — admin-editable dictionary of expected fields per document
+  // category (staff only, enforced by RLS: "field defs: staff write").
+  async listFieldDefinitions() {
+    return unwrap(
+      await supabase
+        .from('category_field_definitions')
+        .select('*')
+        .order('category_code', { ascending: true })
+        .order('sort_order', { ascending: true })
+    )
+  },
+
+  async createFieldDefinition(payload) {
+    return unwrap(
+      await supabase.from('category_field_definitions').insert(payload).select().single()
+    )
+  },
+
+  async updateFieldDefinition(id, patch) {
+    return unwrap(
+      await supabase
+        .from('category_field_definitions')
+        .update(patch)
+        .eq('id', id)
+        .select()
+        .single()
+    )
+  },
+
+  async deleteFieldDefinition(id) {
+    unwrap(await supabase.from('category_field_definitions').delete().eq('id', id))
+    return true
+  },
+
   async uploadDocument(caseId, file, meta = {}) {
     const { clientId, taxYear, direction = 'client_upload', profileId } = meta
     const path = [

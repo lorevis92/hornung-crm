@@ -92,6 +92,7 @@ export default {
     myData: 'I miei dati',
     pricing: 'Tariffe',
     clients: 'Clienti',
+    taxSettings: 'Impostazioni fiscali',
     menu: 'Menu'
   },
 
@@ -380,5 +381,30 @@ export default {
     sendInvite: 'Invia invito',
     inviteSent: 'Invito inviato a {email}',
     inviteFailed: 'Profilo creato, ma non è stato possibile inviare l\'e-mail di invito.'
+  },
+
+  taxSettings: {
+    title: 'Impostazioni fiscali',
+    subtitle: 'Configura i dati che il modulo di estrazione ricerca, categoria per categoria.',
+    fieldsTab: 'Campi documento',
+    parametersTab: 'Parametri fiscali',
+    parametersComingSoon: 'I parametri fiscali cantonali e federali verranno gestiti qui in un aggiornamento futuro.',
+    fieldsFor: 'Campi per {category}',
+    noFields: 'Nessun campo ancora definito per questa categoria.',
+    addField: 'Aggiungi campo',
+    editField: 'Modifica campo',
+    fieldKey: 'Chiave campo',
+    fieldKeyHint: 'es. gross_salary — uso interno, senza spazi.',
+    fieldLabel: 'Etichetta',
+    valueType: 'Tipo di valore',
+    valueType_text: 'Testo',
+    valueType_numeric: 'Numerico',
+    valueType_date: 'Data',
+    valueType_boolean: 'Sì/No',
+    deleteFieldConfirm: 'Eliminare questo campo?',
+    deleteFieldConfirmBody: 'Questo rimuoverà «{label}» dal dizionario di estrazione di questa categoria.',
+    fieldKeyExists: 'Questa chiave campo esiste già per questa categoria.',
+    moveUp: 'Sposta su',
+    moveDown: 'Sposta giù'
   }
 }

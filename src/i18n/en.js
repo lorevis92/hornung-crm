@@ -91,6 +91,7 @@ export default {
     myData: 'My data',
     pricing: 'Pricing',
     clients: 'Clients',
+    taxSettings: 'Tax settings',
     menu: 'Menu'
   },
 
@@ -382,5 +383,30 @@ export default {
     sendInvite: 'Send invitation',
     inviteSent: 'Invitation sent to {email}',
     inviteFailed: 'Profile created, but the invitation e-mail could not be sent.'
+  },
+
+  taxSettings: {
+    title: 'Tax settings',
+    subtitle: 'Configure the data the extraction module looks for, category by category.',
+    fieldsTab: 'Document fields',
+    parametersTab: 'Tax parameters',
+    parametersComingSoon: 'Cantonal and federal tax parameters will be managed here in a future update.',
+    fieldsFor: 'Fields for {category}',
+    noFields: 'No fields defined yet for this category.',
+    addField: 'Add field',
+    editField: 'Edit field',
+    fieldKey: 'Field key',
+    fieldKeyHint: 'e.g. gross_salary — used internally, no spaces.',
+    fieldLabel: 'Label',
+    valueType: 'Value type',
+    valueType_text: 'Text',
+    valueType_numeric: 'Numeric',
+    valueType_date: 'Date',
+    valueType_boolean: 'Yes/No',
+    deleteFieldConfirm: 'Remove this field?',
+    deleteFieldConfirmBody: 'This will remove "{label}" from the extraction dictionary for this category.',
+    fieldKeyExists: 'This field key already exists for this category.',
+    moveUp: 'Move up',
+    moveDown: 'Move down'
   }
 }

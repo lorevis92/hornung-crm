@@ -14,6 +14,7 @@ import MyData from './pages/MyData'
 import Pricing from './pages/Pricing'
 import SpecialistHome from './pages/SpecialistHome'
 import SpecialistClient from './pages/SpecialistClient'
+import TaxSettings from './pages/TaxSettings'
 import Account from './pages/Account'
 import NotFound from './pages/NotFound'
 
@@ -111,6 +112,14 @@ export default function App() {
         element={
           <Protected staffOnly>
             <SpecialistClient />
+          </Protected>
+        }
+      />
+      <Route
+        path="/tax-settings"
+        element={
+          <Protected staffOnly>
+            <TaxSettings />
           </Protected>
         }
       />

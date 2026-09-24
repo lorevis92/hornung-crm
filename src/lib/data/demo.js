@@ -4,7 +4,7 @@
 // The method signatures are identical to those of the Supabase layer.
 // ---------------------------------------------------------------------------
 import { currentTaxYear } from '../config'
-import { DOCUMENT_CATEGORIES, DOCUMENT_TYPES, PRICING_ITEMS } from '../demoSeed'
+import { CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES, PRICING_ITEMS } from '../demoSeed'
 
 const KEY = 'hornung.demo.v2'
 const blobs = new Map() // document id -> object URL (this session only)
@@ -206,14 +206,21 @@ function seed() {
     documents,
     requested,
     events,
-    extracted
+    extracted,
+    fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS))
   }
 }
 
 function load() {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      // Sessions started before the "Tax settings" field-definitions screen
+      // won't have this key in their saved state yet.
+      parsed.fieldDefinitions ||= JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS))
+      return parsed
+    }
   } catch {
     /* ignore */
   }
@@ -545,6 +552,39 @@ export const demoApi = {
     if (doc) doc.category_code = categoryCode
     commit()
     return wait(doc || null)
+  },
+
+  async listFieldDefinitions() {
+    const s = store()
+    return wait(
+      [...s.fieldDefinitions].sort(
+        (a, b) => a.category_code.localeCompare(b.category_code) || a.sort_order - b.sort_order
+      )
+    )
+  },
+
+  async createFieldDefinition(payload) {
+    const s = store()
+    const row = { id: uid('field'), required: false, sort_order: 0, ...payload }
+    s.fieldDefinitions.push(row)
+    commit()
+    return wait(row)
+  },
+
+  async updateFieldDefinition(id, patch) {
+    const s = store()
+    const row = s.fieldDefinitions.find((f) => f.id === id)
+    if (!row) throw new Error('NOT_FOUND')
+    Object.assign(row, patch)
+    commit()
+    return wait(row)
+  },
+
+  async deleteFieldDefinition(id) {
+    const s = store()
+    s.fieldDefinitions = s.fieldDefinitions.filter((f) => f.id !== id)
+    commit()
+    return wait(true)
   },
 
   // Demo mode has no backend to send a real e-mail from.

@@ -93,6 +93,7 @@ export default {
     myData: 'Mes données',
     pricing: 'Tarifs',
     clients: 'Clients',
+    taxSettings: 'Paramètres fiscaux',
     menu: 'Menu'
   },
 
@@ -382,5 +383,30 @@ export default {
     sendInvite: "Envoyer l'invitation",
     inviteSent: 'Invitation envoyée à {email}',
     inviteFailed: "Profil créé, mais l'e-mail d'invitation n'a pas pu être envoyé."
+  },
+
+  taxSettings: {
+    title: 'Paramètres fiscaux',
+    subtitle: "Configurez les données que le module d'extraction recherche, catégorie par catégorie.",
+    fieldsTab: 'Champs de document',
+    parametersTab: 'Paramètres fiscaux',
+    parametersComingSoon: 'Les paramètres fiscaux cantonaux et fédéraux seront gérés ici dans une prochaine mise à jour.',
+    fieldsFor: 'Champs pour {category}',
+    noFields: 'Aucun champ défini pour cette catégorie pour le moment.',
+    addField: 'Ajouter un champ',
+    editField: 'Modifier le champ',
+    fieldKey: 'Clé du champ',
+    fieldKeyHint: 'p. ex. gross_salary — usage interne, sans espaces.',
+    fieldLabel: 'Libellé',
+    valueType: 'Type de valeur',
+    valueType_text: 'Texte',
+    valueType_numeric: 'Numérique',
+    valueType_date: 'Date',
+    valueType_boolean: 'Oui/Non',
+    deleteFieldConfirm: 'Supprimer ce champ ?',
+    deleteFieldConfirmBody: "Ceci supprimera « {label} » du dictionnaire d'extraction de cette catégorie.",
+    fieldKeyExists: 'Cette clé de champ existe déjà pour cette catégorie.',
+    moveUp: 'Monter',
+    moveDown: 'Descendre'
   }
 }

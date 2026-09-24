@@ -46,6 +46,102 @@ export const DOCUMENT_CATEGORIES = [
   { code: 'rental_contract_zug', sort_order: 190, label_en: 'Zug rental contract', label_de: 'Mietvertrag Zug', label_fr: 'Contrat de bail Zoug', label_it: 'Contratto di locazione Zugo' }
 ].map((item) => ({ id: item.code, active: true, ...item }))
 
+// Mirrors category_field_definitions, seeded in
+// supabase/migrations/20260101000009_seed_category_field_definitions.sql.
+export const CATEGORY_FIELD_DEFINITIONS = [
+  { category_code: 'current_tax_sheet', field_key: 'full_name', field_label: 'Full name', value_type: 'text', sort_order: 10 },
+  { category_code: 'current_tax_sheet', field_key: 'date_of_birth', field_label: 'Date of birth', value_type: 'date', sort_order: 20 },
+  { category_code: 'current_tax_sheet', field_key: 'marital_status', field_label: 'Marital status', value_type: 'text', sort_order: 30 },
+  { category_code: 'current_tax_sheet', field_key: 'canton', field_label: 'Canton', value_type: 'text', sort_order: 40 },
+  { category_code: 'current_tax_sheet', field_key: 'municipality', field_label: 'Municipality', value_type: 'text', sort_order: 50 },
+  { category_code: 'current_tax_sheet', field_key: 'zip', field_label: 'ZIP code', value_type: 'text', sort_order: 60 },
+  { category_code: 'current_tax_sheet', field_key: 'children_count', field_label: 'Number of children', value_type: 'numeric', sort_order: 70 },
+  { category_code: 'current_tax_sheet', field_key: 'religious_affiliation', field_label: 'Religious affiliation', value_type: 'text', sort_order: 80 },
+  { category_code: 'current_tax_sheet', field_key: 'partner_full_name', field_label: "Partner's full name", value_type: 'text', sort_order: 90 },
+  { category_code: 'current_tax_sheet', field_key: 'partner_date_of_birth', field_label: "Partner's date of birth", value_type: 'date', sort_order: 100 },
+  { category_code: 'current_tax_sheet', field_key: 'partner_religious_affiliation', field_label: "Partner's religious affiliation", value_type: 'text', sort_order: 110 },
+
+  { category_code: 'previous_tax_return', field_key: 'tax_year', field_label: 'Tax year', value_type: 'numeric', sort_order: 10 },
+  { category_code: 'previous_tax_return', field_key: 'previous_taxable_income', field_label: 'Previous taxable income', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'previous_tax_return', field_key: 'previous_taxable_wealth', field_label: 'Previous taxable wealth', value_type: 'numeric', sort_order: 30 },
+
+  { category_code: 'previous_tax_assessment', field_key: 'assessment_date', field_label: 'Assessment date', value_type: 'date', sort_order: 10 },
+  { category_code: 'previous_tax_assessment', field_key: 'assessed_taxable_income', field_label: 'Assessed taxable income', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'previous_tax_assessment', field_key: 'assessed_taxable_wealth', field_label: 'Assessed taxable wealth', value_type: 'numeric', sort_order: 30 },
+
+  { category_code: 'salary_statement', field_key: 'employer_name', field_label: 'Employer name', value_type: 'text', sort_order: 10 },
+  { category_code: 'salary_statement', field_key: 'gross_salary', field_label: 'Gross salary', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'salary_statement', field_key: 'net_salary', field_label: 'Net salary', value_type: 'numeric', sort_order: 30 },
+  { category_code: 'salary_statement', field_key: 'withholding_tax', field_label: 'Withholding tax', value_type: 'numeric', sort_order: 40 },
+  { category_code: 'salary_statement', field_key: 'ahv_contributions', field_label: 'AHV contributions', value_type: 'numeric', sort_order: 50 },
+  { category_code: 'salary_statement', field_key: 'pension_fund_contributions', field_label: 'Pension fund contributions', value_type: 'numeric', sort_order: 60 },
+  { category_code: 'salary_statement', field_key: 'expense_allowances', field_label: 'Expense allowances', value_type: 'numeric', sort_order: 70 },
+  { category_code: 'salary_statement', field_key: 'employment_period_from', field_label: 'Employment period from', value_type: 'date', sort_order: 80 },
+  { category_code: 'salary_statement', field_key: 'employment_period_to', field_label: 'Employment period to', value_type: 'date', sort_order: 90 },
+
+  { category_code: 'self_employed_income_statement', field_key: 'business_name', field_label: 'Business name', value_type: 'text', sort_order: 10 },
+  { category_code: 'self_employed_income_statement', field_key: 'revenue', field_label: 'Revenue', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'self_employed_income_statement', field_key: 'expenses', field_label: 'Expenses', value_type: 'numeric', sort_order: 30 },
+  { category_code: 'self_employed_income_statement', field_key: 'net_profit', field_label: 'Net profit', value_type: 'numeric', sort_order: 40 },
+  { category_code: 'self_employed_income_statement', field_key: 'fiscal_year', field_label: 'Fiscal year', value_type: 'text', sort_order: 50 },
+
+  { category_code: 'alimony_received', field_key: 'payer_name', field_label: 'Payer name', value_type: 'text', sort_order: 10 },
+  { category_code: 'alimony_received', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'alimony_received', field_key: 'type', field_label: 'Type', value_type: 'text', sort_order: 30 },
+
+  { category_code: 'alimony_paid', field_key: 'recipient_name', field_label: 'Recipient name', value_type: 'text', sort_order: 10 },
+  { category_code: 'alimony_paid', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'alimony_paid', field_key: 'type', field_label: 'Type', value_type: 'text', sort_order: 30 },
+
+  { category_code: 'childcare_costs', field_key: 'child_name', field_label: 'Child name', value_type: 'text', sort_order: 10 },
+  { category_code: 'childcare_costs', field_key: 'provider_name', field_label: 'Provider name', value_type: 'text', sort_order: 20 },
+  { category_code: 'childcare_costs', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 30 },
+
+  { category_code: 'debt_certificate', field_key: 'creditor_name', field_label: 'Creditor name', value_type: 'text', sort_order: 10 },
+  { category_code: 'debt_certificate', field_key: 'debt_type', field_label: 'Debt type', value_type: 'text', sort_order: 20 },
+  { category_code: 'debt_certificate', field_key: 'debt_balance', field_label: 'Debt balance', value_type: 'numeric', sort_order: 30 },
+  { category_code: 'debt_certificate', field_key: 'annual_interest_paid', field_label: 'Annual interest paid', value_type: 'numeric', sort_order: 40 },
+
+  { category_code: 'pillar_3a_certificate', field_key: 'institution_name', field_label: 'Institution name', value_type: 'text', sort_order: 10 },
+  { category_code: 'pillar_3a_certificate', field_key: 'policy_number', field_label: 'Policy number', value_type: 'text', sort_order: 20 },
+  { category_code: 'pillar_3a_certificate', field_key: 'annual_contribution', field_label: 'Annual contribution', value_type: 'numeric', sort_order: 30 },
+
+  { category_code: 'health_insurance_policy', field_key: 'insurer_name', field_label: 'Insurer name', value_type: 'text', sort_order: 10 },
+  { category_code: 'health_insurance_policy', field_key: 'insured_persons_count', field_label: 'Insured persons count', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'health_insurance_policy', field_key: 'annual_premium', field_label: 'Annual premium', value_type: 'numeric', sort_order: 30 },
+
+  { category_code: 'medical_costs', field_key: 'description', field_label: 'Description', value_type: 'text', sort_order: 10 },
+  { category_code: 'medical_costs', field_key: 'total_amount', field_label: 'Total amount', value_type: 'numeric', sort_order: 20 },
+
+  { category_code: 'donation_certificate', field_key: 'recipient_organization', field_label: 'Recipient organization', value_type: 'text', sort_order: 10 },
+  { category_code: 'donation_certificate', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 20 },
+
+  { category_code: 'supported_person_transfer', field_key: 'supported_person_name', field_label: 'Supported person name', value_type: 'text', sort_order: 10 },
+  { category_code: 'supported_person_transfer', field_key: 'relationship', field_label: 'Relationship', value_type: 'text', sort_order: 20 },
+  { category_code: 'supported_person_transfer', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 30 },
+
+  { category_code: 'bank_securities_crypto_statement', field_key: 'institution_name', field_label: 'Institution name', value_type: 'text', sort_order: 10 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_type', field_label: 'Account type', value_type: 'text', sort_order: 20 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_balance_31_12', field_label: 'Account balance (31.12)', value_type: 'numeric', sort_order: 30 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'interest_income', field_label: 'Interest income', value_type: 'numeric', sort_order: 40 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'dividend_income', field_label: 'Dividend income', value_type: 'numeric', sort_order: 50 },
+
+  { category_code: 'pension_fund_statement', field_key: 'institution_name', field_label: 'Institution name', value_type: 'text', sort_order: 10 },
+  { category_code: 'pension_fund_statement', field_key: 'accumulated_capital', field_label: 'Accumulated capital', value_type: 'numeric', sort_order: 20 },
+
+  { category_code: 'inheritance_gift_lpp_payment', field_key: 'type', field_label: 'Type', value_type: 'text', sort_order: 10 },
+  { category_code: 'inheritance_gift_lpp_payment', field_key: 'amount', field_label: 'Amount', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'inheritance_gift_lpp_payment', field_key: 'date_received', field_label: 'Date received', value_type: 'date', sort_order: 30 },
+
+  { category_code: 'property_tax_value', field_key: 'property_address', field_label: 'Property address', value_type: 'text', sort_order: 10 },
+  { category_code: 'property_tax_value', field_key: 'tax_value', field_label: 'Tax value', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'property_tax_value', field_key: 'imputed_rental_value', field_label: 'Imputed rental value', value_type: 'numeric', sort_order: 30 },
+  { category_code: 'property_tax_value', field_key: 'maintenance_costs', field_label: 'Maintenance costs', value_type: 'numeric', sort_order: 40 },
+
+  { category_code: 'rental_contract_zug', field_key: 'property_address', field_label: 'Property address', value_type: 'text', sort_order: 10 },
+  { category_code: 'rental_contract_zug', field_key: 'annual_rent', field_label: 'Annual rent', value_type: 'numeric', sort_order: 20 }
+].map((item, index) => ({ id: `field-${index}`, required: false, ...item }))
+
 export const PRICING_ITEMS = [
   { code: 'base_single', kind: 'base', sort_order: 10, price: 240, unit: null, quantity_from: null, label_en: 'Single', label_fr: 'Célibataire', label_de: 'Alleinstehend', label_it: 'Celibe/nubile' },
   { code: 'base_married', kind: 'base', sort_order: 20, price: 320, unit: null, quantity_from: null, label_en: 'Married', label_fr: 'Marié', label_de: 'Verheiratet', label_it: 'Coniugato/a' },
