@@ -2,13 +2,50 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { ArrowDown, ArrowUp, FileCog, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import Modal from '../components/Modal'
-import { EmptyState, Field, PageLoader, Select, Spinner, TextInput } from '../components/ui'
+import { EmptyState, Field, PageLoader, Spinner, TextInput } from '../components/ui'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 
-const VALUE_TYPES = ['text', 'numeric', 'date', 'boolean']
+// Field keys are never shown to the (non-technical) staff — they only ever
+// type a natural-language name. Derived here from that name: lowercased,
+// accents stripped, anything non-alphanumeric collapsed to underscores.
+function slugify(label) {
+  return (
+    label
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'field'
+  )
+}
+
+function uniqueFieldKey(baseKey, existingKeys) {
+  if (!existingKeys.has(baseKey)) return baseKey
+  let i = 2
+  while (existingKeys.has(`${baseKey}_${i}`)) i++
+  return `${baseKey}_${i}`
+}
+
+// Simple keyword heuristic — no NLP needed, just enough to spare the
+// specialist from ever picking a value type by hand.
+const DATE_KEYWORDS = ['data', 'date', 'datum', 'birth', 'geburt', 'naissance', 'nascita']
+const NUMERIC_KEYWORDS = [
+  'importo', 'amount', 'saldo', 'balance', 'numero', 'number', 'anzahl', 'betrag',
+  'montant', 'nombre', 'count', 'percentuale', 'percent', 'salario', 'salary',
+  'gehalt', 'salaire', 'reddito', 'income', 'einkommen', 'revenu', 'capital',
+  'contribution', 'contributo', 'beitrag', 'cotisation'
+]
+
+function inferValueType(label) {
+  const lower = label.toLowerCase()
+  if (DATE_KEYWORDS.some((kw) => lower.includes(kw))) return 'date'
+  if (NUMERIC_KEYWORDS.some((kw) => lower.includes(kw))) return 'numeric'
+  return 'text'
+}
 
 export default function TaxSettings() {
   const { t, lang } = useI18n()
@@ -22,7 +59,7 @@ export default function TaxSettings() {
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
-  const [draft, setDraft] = useState({ field_key: '', field_label: '', value_type: 'text' })
+  const [draftLabel, setDraftLabel] = useState('')
   const [saving, setSaving] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -57,17 +94,13 @@ export default function TaxSettings() {
 
   const openAdd = () => {
     setEditingId(null)
-    setDraft({ field_key: '', field_label: '', value_type: 'text' })
+    setDraftLabel('')
     setModalOpen(true)
   }
 
   const openEdit = (field) => {
     setEditingId(field.id)
-    setDraft({
-      field_key: field.field_key,
-      field_label: field.field_label || '',
-      value_type: field.value_type
-    })
+    setDraftLabel(field.field_label || '')
     setModalOpen(true)
   }
 
@@ -77,26 +110,26 @@ export default function TaxSettings() {
   }
 
   const saveField = async () => {
-    const field_key = draft.field_key.trim()
-    if (!field_key) return
+    const label = draftLabel.trim()
+    if (!label) return
     setSaving(true)
     try {
       if (editingId) {
-        const updated = await api.updateFieldDefinition(editingId, {
-          field_key,
-          field_label: draft.field_label.trim() || null,
-          value_type: draft.value_type
-        })
+        // Renaming only ever touches the label — the field_key stays put so
+        // it keeps matching any data already extracted under that key.
+        const updated = await api.updateFieldDefinition(editingId, { field_label: label })
         setFields((list) => list.map((f) => (f.id === editingId ? updated : f)))
       } else {
+        const existingKeys = new Set(fieldsForSelected.map((f) => f.field_key))
+        const field_key = uniqueFieldKey(slugify(label), existingKeys)
         const nextSortOrder = fieldsForSelected.length
           ? Math.max(...fieldsForSelected.map((f) => f.sort_order)) + 10
           : 10
         const created = await api.createFieldDefinition({
           category_code: selectedCategory,
           field_key,
-          field_label: draft.field_label.trim() || null,
-          value_type: draft.value_type,
+          field_label: label,
+          value_type: inferValueType(label),
           sort_order: nextSortOrder
         })
         setFields((list) => [...list, created])
@@ -105,7 +138,7 @@ export default function TaxSettings() {
       setModalOpen(false)
     } catch (error) {
       console.error(error)
-      toast.error(error.code === '23505' ? t('taxSettings.fieldKeyExists') : error.message || t('common.error'))
+      toast.error(error.code === '23505' ? t('taxSettings.fieldExists') : error.message || t('common.error'))
     } finally {
       setSaving(false)
     }
@@ -227,18 +260,14 @@ export default function TaxSettings() {
                 <table className="w-full">
                   <thead className="bg-sand">
                     <tr>
-                      <th className="table-head">{t('taxSettings.fieldKey')}</th>
-                      <th className="table-head">{t('taxSettings.fieldLabel')}</th>
-                      <th className="table-head">{t('taxSettings.valueType')}</th>
+                      <th className="table-head">{t('taxSettings.fieldName')}</th>
                       <th className="table-head text-right">{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line bg-white">
                     {fieldsForSelected.map((field, idx) => (
                       <tr key={field.id}>
-                        <td className="table-cell font-mono text-[13px] text-ink-700">{field.field_key}</td>
-                        <td className="table-cell text-ink-700">{field.field_label || '—'}</td>
-                        <td className="table-cell text-ink-500">{t(`taxSettings.valueType_${field.value_type}`)}</td>
+                        <td className="table-cell text-ink-700">{field.field_label || field.field_key}</td>
                         <td className="table-cell">
                           <div className="flex items-center justify-end gap-1">
                             <button
@@ -313,7 +342,7 @@ export default function TaxSettings() {
               type="button"
               className="btn-primary btn-sm"
               onClick={saveField}
-              disabled={saving || !draft.field_key.trim()}
+              disabled={saving || !draftLabel.trim()}
             >
               {saving ? <Spinner size={16} /> : null}
               {saving ? t('common.saving') : t('common.save')}
@@ -321,35 +350,9 @@ export default function TaxSettings() {
           </>
         }
       >
-        <div className="space-y-4">
-          <Field label={t('taxSettings.fieldKey')} htmlFor="field-key" hint={t('taxSettings.fieldKeyHint')} required>
-            <TextInput
-              id="field-key"
-              value={draft.field_key}
-              onChange={(e) => setDraft((d) => ({ ...d, field_key: e.target.value }))}
-            />
-          </Field>
-          <Field label={t('taxSettings.fieldLabel')} htmlFor="field-label">
-            <TextInput
-              id="field-label"
-              value={draft.field_label}
-              onChange={(e) => setDraft((d) => ({ ...d, field_label: e.target.value }))}
-            />
-          </Field>
-          <Field label={t('taxSettings.valueType')} htmlFor="field-value-type">
-            <Select
-              id="field-value-type"
-              value={draft.value_type}
-              onChange={(e) => setDraft((d) => ({ ...d, value_type: e.target.value }))}
-            >
-              {VALUE_TYPES.map((vt) => (
-                <option key={vt} value={vt}>
-                  {t(`taxSettings.valueType_${vt}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
+        <Field label={t('taxSettings.fieldName')} htmlFor="field-name" required>
+          <TextInput id="field-name" value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} autoFocus />
+        </Field>
       </Modal>
 
       <Modal
