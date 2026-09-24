@@ -314,6 +314,7 @@ export default {
     filterStatus: 'Statut',
     searchPlaceholder: 'Rechercher par nom ou e-mail…',
     noClients: 'Aucun client ne correspond à ces filtres.',
+    showArchived: 'Afficher les archivés',
     pageOf: 'Page {page} sur {pages}',
     client: 'Client',
     year: 'Année',
@@ -324,6 +325,10 @@ export default {
     archive: 'Archiver',
     unarchive: 'Restaurer',
     archived: 'Archivé',
+    deleteClient: 'Supprimer le client',
+    deleteClientConfirm: 'Supprimer ce client ?',
+    deleteClientConfirmBody:
+      "Ceci supprimera définitivement « {name} » ainsi que tous ses dossiers fiscaux, documents et données de questionnaire dans cette application. Son accès n'est pas affecté — il peut toujours être utilisé pour d'autres produits Hornung/WisiApps. Cette action est irréversible.",
     openFile: 'Ouvrir le dossier',
     addYear: 'Ouvrir une nouvelle année fiscale',
     yearExists: 'Cette année fiscale existe déjà pour ce client.',

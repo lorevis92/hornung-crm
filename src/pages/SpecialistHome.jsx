@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
-import { EmptyState, Field, PageLoader, Select, Spinner, Stat, TextInput } from '../components/ui'
+import { Checkbox, EmptyState, Field, PageLoader, Select, Spinner, Stat, TextInput } from '../components/ui'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
@@ -38,6 +38,10 @@ export default function SpecialistHome() {
   // from the list until the specialist actively filters for a year.
   const [yearFilter, setYearFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  // Archived clients are hidden by default — an archived client otherwise
+  // looked identical to an active one in this list, with no way to tell
+  // them apart or hide them.
+  const [showArchived, setShowArchived] = useState(false)
   const [page, setPage] = useState(1)
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -48,14 +52,15 @@ export default function SpecialistHome() {
       api.listClients({
         q: query,
         year: yearFilter || null,
-        status: statusFilter || null
+        status: statusFilter || null,
+        includeArchived: showArchived
       }),
       api.getStats(year)
     ])
     setClients(rows)
     setStats(kpi)
     setLoading(false)
-  }, [query, yearFilter, statusFilter, year])
+  }, [query, yearFilter, statusFilter, showArchived, year])
 
   useEffect(() => {
     const timer = setTimeout(load, 180)
@@ -65,7 +70,7 @@ export default function SpecialistHome() {
   // Any filter change invalidates the current page — go back to the top.
   useEffect(() => {
     setPage(1)
-  }, [query, yearFilter, statusFilter])
+  }, [query, yearFilter, statusFilter, showArchived])
 
   const totalPages = Math.max(1, Math.ceil(clients.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
@@ -159,6 +164,13 @@ export default function SpecialistHome() {
               ))}
             </Select>
           </Field>
+
+          <Checkbox
+            id="show-archived"
+            label={t('specialist.showArchived')}
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+          />
         </div>
 
         {loading ? (
@@ -188,6 +200,11 @@ export default function SpecialistHome() {
                         {client.status === 'invited' ? (
                           <span className="chip mt-1 bg-ink-100 text-ink-600 ring-ink-200">
                             {t('specialist.invited')}
+                          </span>
+                        ) : null}
+                        {client.status === 'archived' ? (
+                          <span className="chip mt-1 bg-ink-100 text-ink-500 ring-ink-200">
+                            {t('specialist.archived')}
                           </span>
                         ) : null}
                       </td>

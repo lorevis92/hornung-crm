@@ -267,9 +267,12 @@ export const demoApi = {
     return wait(s.clients.find((c) => c.profile_id === profileId) || null)
   },
 
-  async listClients({ q = '', year = null, status = null } = {}) {
+  async listClients({ q = '', year = null, status = null, includeArchived = false } = {}) {
     const s = store()
     let rows = s.clients.map(withCounts)
+    if (!includeArchived) {
+      rows = rows.filter((c) => c.status !== 'archived')
+    }
     if (q) {
       const needle = q.toLowerCase()
       rows = rows.filter((c) =>
@@ -325,6 +328,35 @@ export const demoApi = {
     Object.assign(c, patch, { updated_at: iso(Date.now()) })
     commit()
     return wait(c)
+  },
+
+  // Mirrors the real cascade (clients -> questionnaire tables / tax_cases ->
+  // case_documents / case_events / case_requested_documents / extracted_fields)
+  // so demo mode behaves the same way. Never touches `profiles` — that's the
+  // demo stand-in for auth.users/app_profiles, which a real client deletion
+  // must not affect either.
+  async deleteClient(id) {
+    const s = store()
+    const caseIds = s.cases.filter((c) => c.client_id === id).map((c) => c.id)
+
+    s.documents
+      .filter((d) => caseIds.includes(d.case_id))
+      .forEach((d) => blobs.delete(d.id))
+
+    delete s.details[id]
+    s.persons = s.persons.filter((p) => p.client_id !== id)
+    s.children = s.children.filter((p) => p.client_id !== id)
+    s.vehicles = s.vehicles.filter((p) => p.client_id !== id)
+    s.properties = s.properties.filter((p) => p.client_id !== id)
+    s.documents = s.documents.filter((d) => !caseIds.includes(d.case_id))
+    s.requested = s.requested.filter((r) => !caseIds.includes(r.case_id))
+    s.events = s.events.filter((e) => !caseIds.includes(e.case_id))
+    s.extracted = s.extracted.filter((e) => !caseIds.includes(e.case_id))
+    s.cases = s.cases.filter((c) => c.client_id !== id)
+    s.clients = s.clients.filter((c) => c.id !== id)
+
+    commit()
+    return wait(true)
   },
 
   // Demo mode has no backend to send a real invite — the UI shows a notice

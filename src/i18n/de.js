@@ -313,6 +313,7 @@ export default {
     filterStatus: 'Status',
     searchPlaceholder: 'Nach Name oder E-Mail suchen…',
     noClients: 'Kein Kunde entspricht diesen Filtern.',
+    showArchived: 'Archivierte anzeigen',
     pageOf: 'Seite {page} von {pages}',
     client: 'Kunde',
     year: 'Jahr',
@@ -323,6 +324,10 @@ export default {
     archive: 'Archivieren',
     unarchive: 'Wiederherstellen',
     archived: 'Archiviert',
+    deleteClient: 'Kunde löschen',
+    deleteClientConfirm: 'Diesen Kunden löschen?',
+    deleteClientConfirmBody:
+      '„{name}" wird mit allen Steuerdossiers, Dokumenten und Fragebogendaten in dieser App endgültig gelöscht. Der Zugang bleibt unberührt — er kann weiterhin für andere Hornung/WisiApps-Produkte verwendet werden. Dies kann nicht rückgängig gemacht werden.',
     openFile: 'Dossier öffnen',
     addYear: 'Neues Steuerjahr eröffnen',
     yearExists: 'Dieses Steuerjahr existiert bereits für diesen Kunden.',

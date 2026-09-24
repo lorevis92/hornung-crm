@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, ArrowRight, Archive, CalendarPlus, Mail, Phone, RefreshCw, Save, FolderOpen
+  ArrowLeft, ArrowRight, Archive, CalendarPlus, Mail, Phone, RefreshCw, Save, FolderOpen, Trash2
 } from 'lucide-react'
+import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
 import QuestionnaireForm from '../components/QuestionnaireForm'
 import { EmptyState, Field, PageLoader, Select, Spinner, Textarea } from '../components/ui'
@@ -14,6 +15,7 @@ import { formatDate, fullName } from '../lib/format'
 
 export default function SpecialistClient() {
   const { clientId } = useParams()
+  const navigate = useNavigate()
   const { t, lang } = useI18n()
   const toast = useToast()
 
@@ -26,6 +28,8 @@ export default function SpecialistClient() {
   const [newYear, setNewYear] = useState(String(currentTaxYear()))
   const [addingYear, setAddingYear] = useState(false)
   const [resending, setResending] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deletingClient, setDeletingClient] = useState(false)
 
   const load = useCallback(async () => {
     const [row, rows] = await Promise.all([api.getClient(clientId), api.listCases(clientId)])
@@ -89,6 +93,24 @@ export default function SpecialistClient() {
     toast.success(t('common.saved'))
   }
 
+  const cancelDelete = () => {
+    if (deletingClient) return
+    setConfirmingDelete(false)
+  }
+
+  const confirmDelete = async () => {
+    setDeletingClient(true)
+    try {
+      await api.deleteClient(clientId)
+      toast.success(t('common.saved'))
+      navigate('/clients')
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+      setDeletingClient(false)
+    }
+  }
+
   if (loading) return <PageLoader label={t('common.loading')} />
   if (!client) return <EmptyState icon={FolderOpen} title={t('common.error')} />
 
@@ -137,6 +159,14 @@ export default function SpecialistClient() {
             <button type="button" className="btn-secondary btn-sm" onClick={toggleArchive}>
               <Archive size={15} aria-hidden="true" />
               {client.status === 'archived' ? t('specialist.unarchive') : t('specialist.archive')}
+            </button>
+            <button
+              type="button"
+              className="btn-danger btn-sm"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 size={15} aria-hidden="true" />
+              {t('specialist.deleteClient')}
             </button>
           </div>
         </div>
@@ -238,6 +268,35 @@ export default function SpecialistClient() {
           </div>
         </section>
       ) : null}
+
+      <Modal
+        open={confirmingDelete}
+        onClose={cancelDelete}
+        title={t('specialist.deleteClientConfirm')}
+        description={t('specialist.deleteClientConfirmBody', { name: fullName(client) || client.email })}
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={cancelDelete}
+              disabled={deletingClient}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn-danger btn-sm"
+              onClick={confirmDelete}
+              disabled={deletingClient}
+            >
+              {deletingClient ? <Spinner size={16} /> : <Trash2 size={16} aria-hidden="true" />}
+              {deletingClient ? t('common.deleting') : t('common.delete')}
+            </button>
+          </>
+        }
+      />
     </div>
   )
 }
