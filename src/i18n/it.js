@@ -326,7 +326,7 @@ export default {
     deleteClient: 'Elimina cliente',
     deleteClientConfirm: 'Eliminare questo cliente?',
     deleteClientConfirmBody:
-      'Il cliente «{name}» verrà eliminato definitivamente insieme a tutte le sue pratiche, documenti e dati del questionario in questa app. Il suo accesso non viene toccato — può comunque essere usato per altri prodotti Hornung/WisiApps. L\'azione non può essere annullata.',
+      'Il cliente «{name}» verrà eliminato definitivamente insieme a tutte le sue pratiche, documenti e dati del questionario. L\'azione non può essere annullata.',
     openFile: 'Apri pratica',
     addYear: 'Apri un nuovo anno fiscale',
     yearExists: 'Questo anno fiscale esiste già per questo cliente.',

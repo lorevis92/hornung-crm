@@ -327,7 +327,7 @@ export default {
     deleteClient: 'Kunde löschen',
     deleteClientConfirm: 'Diesen Kunden löschen?',
     deleteClientConfirmBody:
-      '„{name}" wird mit allen Steuerdossiers, Dokumenten und Fragebogendaten in dieser App endgültig gelöscht. Der Zugang bleibt unberührt — er kann weiterhin für andere Hornung/WisiApps-Produkte verwendet werden. Dies kann nicht rückgängig gemacht werden.',
+      '„{name}" wird mit allen Steuerdossiers, Dokumenten und Fragebogendaten endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.',
     openFile: 'Dossier öffnen',
     addYear: 'Neues Steuerjahr eröffnen',
     yearExists: 'Dieses Steuerjahr existiert bereits für diesen Kunden.',

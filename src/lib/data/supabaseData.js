@@ -34,26 +34,6 @@ function unwrap({ data, error }) {
   return data
 }
 
-// Supabase Storage's `.list()` only returns the immediate children of a
-// path — "folders" come back as entries with `id: null` (there's no real
-// folder row, just a shared path prefix among files). Recurses into every
-// such entry to collect the full, flat list of actual file paths under
-// `prefix`, so callers can hand it straight to `.remove()`.
-async function listAllStorageObjectPaths(prefix) {
-  const { data, error } = await supabase.storage.from(STORAGE_BUCKET).list(prefix, { limit: 1000 })
-  if (error) throw error
-  const paths = []
-  for (const item of data || []) {
-    const itemPath = `${prefix}/${item.name}`
-    if (item.id === null) {
-      paths.push(...(await listAllStorageObjectPaths(itemPath)))
-    } else {
-      paths.push(itemPath)
-    }
-  }
-  return paths
-}
-
 export const supabaseApi = {
   isDemo: false,
 
@@ -151,32 +131,13 @@ export const supabaseApi = {
     return unwrap(await supabase.from('clients').update(patch).eq('id', id).select().single())
   },
 
-  // Permanently removes the client and every row that hangs off it in THIS
-  // app (tax_cases, case_documents, questionnaire tables, …) — all already
-  // cascade on `clients` deletion (see 20260101000002_hornung_schema.sql).
-  // Deliberately does NOT touch app_profiles or auth.users: clients.profile_id
-  // only references app_profiles, it's never the other way around, and the
-  // same login may be shared with other WisiApps (see the shared-database
-  // note in api/invite-client.js) — it must survive this client being
-  // removed from Hornung.
-  //
-  // The DB cascade only deletes case_documents *rows*; the actual files in
-  // the storage bucket are separate objects with no FK to them, so they'd be
-  // left as orphaned storage without this. Best-effort: a storage cleanup
-  // failure is logged but never blocks deleting the client record itself.
+  // Permanently removes the client, every row that hangs off it in THIS app,
+  // its app_profiles row for hornung_crm, and — only if the same login isn't
+  // also used by another WisiApp — the underlying auth.users account. This
+  // needs service-role privileges (to see app_profiles rows across other
+  // apps, and to call the auth admin API), so it runs server-side.
   async deleteClient(id) {
-    try {
-      const paths = await listAllStorageObjectPaths(`${STORAGE_ROOT}/${id}`)
-      if (paths.length) {
-        const { error } = await supabase.storage.from(STORAGE_BUCKET).remove(paths)
-        if (error) throw error
-      }
-    } catch (err) {
-      console.error('[deleteClient] storage cleanup failed — files may remain orphaned', err)
-    }
-
-    unwrap(await supabase.from('clients').delete().eq('id', id))
-    return true
+    return callApi('/api/delete-client', { clientId: id })
   },
 
   async getQuestionnaire(clientId) {

@@ -328,7 +328,7 @@ export default {
     deleteClient: 'Delete client',
     deleteClientConfirm: 'Delete this client?',
     deleteClientConfirmBody:
-      'This will permanently delete "{name}" and all their tax cases, documents and questionnaire data in this app. Their login is not affected — it may still be used to access other Hornung/WisiApps products. This cannot be undone.',
+      'This will permanently delete "{name}" and all their tax cases, documents and questionnaire data. This cannot be undone.',
     openFile: 'Open file',
     addYear: 'Open a new tax year',
     yearExists: 'This tax year already exists for this client.',
