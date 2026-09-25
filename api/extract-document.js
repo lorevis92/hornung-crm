@@ -160,9 +160,20 @@ async function runExtraction(admin, anthropic, documentId) {
                 "when you actually find its value in the document — never invent, guess, or infer a " +
                 'value that is not written there.\n\n' +
                 `Fields:\n${fieldList}\n\n` +
+                'For each field you find, also copy its exact source text — verbatim, character-for-' +
+                'character as printed in the document, never paraphrased, summarized or translated ' +
+                '(it will be used afterwards to search for and highlight that exact text in the ' +
+                'document). ' +
+                (isPdf
+                  ? 'Also give the page number (starting at 1) that quote appears on.'
+                  : 'This is a single image with no page numbers — leave source_page null.') +
+                ' If you cannot pin down an exact quote (or, for a PDF, its page) for a field, leave ' +
+                'source_quote/source_page empty for that field rather than guessing — an empty value ' +
+                'is fine, an invented one is not.\n\n' +
                 'Respond with ONLY a JSON array, no other text: ' +
-                '[{"field_key": "<key>", "field_value": "<value as text>", "confidence": <0.0-1.0>}, ...] ' +
-                '— omit any field you did not find.'
+                '[{"field_key": "<key>", "field_value": "<value as text>", "confidence": <0.0-1.0>, ' +
+                '"source_quote": "<exact verbatim text, or null>", "source_page": <page number, or null>}, ...] ' +
+                '— omit any field you did not find at all.'
             }
           ]
         }
@@ -173,13 +184,18 @@ async function runExtraction(admin, anthropic, documentId) {
     const validKeys = new Set(fieldDefs.map((f) => f.field_key))
     const rows = (Array.isArray(extracted) ? extracted : [])
       .filter((row) => row && validKeys.has(row.field_key) && row.field_value !== null && row.field_value !== '')
-      .map((row) => ({
-        document_id: documentId,
-        field_key: row.field_key,
-        field_value: String(row.field_value),
-        confidence: typeof row.confidence === 'number' ? row.confidence : null,
-        verified_by_specialist: false
-      }))
+      .map((row) => {
+        const page = Number(row.source_page)
+        return {
+          document_id: documentId,
+          field_key: row.field_key,
+          field_value: String(row.field_value),
+          confidence: typeof row.confidence === 'number' ? row.confidence : null,
+          source_quote: typeof row.source_quote === 'string' && row.source_quote.trim() ? row.source_quote : null,
+          source_page: isPdf && Number.isInteger(page) ? page : null,
+          verified_by_specialist: false
+        }
+      })
 
     if (rows.length) {
       const { error: upsertError } = await admin
