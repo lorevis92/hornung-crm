@@ -1,9 +1,10 @@
 // POST /api/extract-document
 //   { documentId }  -- a client_documents.id
 //
-// Called automatically by a Postgres trigger (pg_net, see migration
-// 20260101000010_ai_extraction.sql) right after a row lands in
-// client_documents with status = 'uploaded' — never called from the browser,
+// Called automatically by a Postgres trigger (pg_net, see migrations
+// 20260101000010_ai_extraction.sql and 20260101000011_ai_extraction_settings.sql)
+// right after a row lands in client_documents with status = 'uploaded' —
+// never called from the browser,
 // and never carries a user session. Authenticated with a shared secret
 // instead (same pattern as the existing CRON_SECRET check in
 // api/open-tax-year.js).
