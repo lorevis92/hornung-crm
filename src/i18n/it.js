@@ -399,5 +399,23 @@ export default {
     fieldExists: 'Esiste già un campo con questo nome per questa categoria.',
     moveUp: 'Sposta su',
     moveDown: 'Sposta giù'
+  },
+
+  extraction: {
+    action: 'Verifica dati',
+    title: 'Verifica dati estratti',
+    subtitle: '{category} — {name}',
+    confirmAll: 'Conferma tutti così come sono ({count})',
+    confirm: 'Conferma',
+    confidence: 'Affidabilità {percent}%',
+    notFound: 'Non trovato — inseriscilo manualmente se disponibile',
+    notFoundPlaceholder: 'Non trovato nel documento',
+    verifiedOn: 'Verificato il {date}',
+    viewSource: 'Vedi nel documento',
+    backToVerification: 'Torna alla verifica',
+    previousPage: 'Pagina precedente',
+    nextPage: 'Pagina successiva',
+    pageOf: 'Pagina {page} di {total}',
+    noFieldDefs: 'Nessun campo ancora definito per questa categoria — aggiungine da Impostazioni fiscali.'
   }
 }

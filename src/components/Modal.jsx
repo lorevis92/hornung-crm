@@ -22,7 +22,7 @@ export default function Modal({ open, onClose, title, description, children, foo
 
   if (!open) return null
 
-  const widths = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl' }
+  const widths = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">

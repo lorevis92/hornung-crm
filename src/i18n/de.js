@@ -400,5 +400,23 @@ export default {
     fieldExists: 'Für diese Kategorie existiert bereits ein Feld mit diesem Namen.',
     moveUp: 'Nach oben',
     moveDown: 'Nach unten'
+  },
+
+  extraction: {
+    action: 'Daten prüfen',
+    title: 'Extrahierte Daten prüfen',
+    subtitle: '{category} — {name}',
+    confirmAll: 'Alle so bestätigen ({count})',
+    confirm: 'Bestätigen',
+    confidence: '{percent}% Konfidenz',
+    notFound: 'Nicht gefunden — bei Bedarf manuell eingeben',
+    notFoundPlaceholder: 'Im Dokument nicht gefunden',
+    verifiedOn: 'Geprüft am {date}',
+    viewSource: 'Im Dokument anzeigen',
+    backToVerification: 'Zurück zur Prüfung',
+    previousPage: 'Vorherige Seite',
+    nextPage: 'Nächste Seite',
+    pageOf: 'Seite {page} von {total}',
+    noFieldDefs: 'Für diese Kategorie sind noch keine Felder definiert — fügen Sie welche in den Steuereinstellungen hinzu.'
   }
 }

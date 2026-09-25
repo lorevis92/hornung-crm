@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import {
-  FileText, Download, Trash2, Eye, Image as ImageIcon, FileSpreadsheet, List, LayoutGrid
+  FileText, Download, Trash2, Eye, Image as ImageIcon, FileSpreadsheet, List, LayoutGrid, ClipboardCheck
 } from 'lucide-react'
 import clsx from 'clsx'
 import Modal from './Modal'
+import DocumentVerificationPanel from './DocumentVerificationPanel'
 import { useI18n } from '../i18n'
 import { useToast } from '../context/ToastContext'
 import { api } from '../lib/data'
@@ -62,6 +63,7 @@ export default function DocumentList({
   const [previewLoading, setPreviewLoading] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [verifyDoc, setVerifyDoc] = useState(null)
 
   const changeView = (next) => {
     setView(next)
@@ -210,6 +212,17 @@ export default function DocumentList({
                 ) : null}
 
                 <div className="flex shrink-0 items-center gap-1">
+                  {canAssignCategory && doc.category_code ? (
+                    <button
+                      type="button"
+                      onClick={() => setVerifyDoc(doc)}
+                      className="btn-ghost btn-sm"
+                      title={t('extraction.action')}
+                      aria-label={t('extraction.action')}
+                    >
+                      <ClipboardCheck size={17} aria-hidden="true" />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => download(doc)}
@@ -295,6 +308,17 @@ export default function DocumentList({
                   >
                     <Eye size={16} aria-hidden="true" />
                   </button>
+                  {canAssignCategory && doc.category_code ? (
+                    <button
+                      type="button"
+                      onClick={() => setVerifyDoc(doc)}
+                      className="btn-ghost btn-sm"
+                      title={t('extraction.action')}
+                      aria-label={t('extraction.action')}
+                    >
+                      <ClipboardCheck size={16} aria-hidden="true" />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => download(doc)}
@@ -388,6 +412,13 @@ export default function DocumentList({
             </button>
           </>
         }
+      />
+
+      <DocumentVerificationPanel
+        open={!!verifyDoc}
+        onClose={() => setVerifyDoc(null)}
+        doc={verifyDoc}
+        categories={categories}
       />
     </div>
   )

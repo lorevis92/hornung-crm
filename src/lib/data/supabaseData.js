@@ -364,6 +364,39 @@ export const supabaseApi = {
     return true
   },
 
+  // Specialist verification of AI-extracted values (extracted_document_fields
+  // is keyed by client_documents.id, so we resolve it from the case_documents
+  // id every caller actually has — same indirection as setDocumentCategory).
+  async listExtractedFields(caseDocumentId) {
+    const { data: clientDoc, error: clientDocError } = await supabase
+      .from('client_documents')
+      .select('id')
+      .eq('source_case_document_id', caseDocumentId)
+      .maybeSingle()
+    if (clientDocError) throw clientDocError
+    if (!clientDoc) return []
+    return unwrap(
+      await supabase.from('extracted_document_fields').select('*').eq('document_id', clientDoc.id)
+    )
+  },
+
+  async saveExtractedField(caseDocumentId, payload) {
+    const { data: clientDoc, error: clientDocError } = await supabase
+      .from('client_documents')
+      .select('id')
+      .eq('source_case_document_id', caseDocumentId)
+      .maybeSingle()
+    if (clientDocError) throw clientDocError
+    if (!clientDoc) throw new Error('CLIENT_DOCUMENT_NOT_FOUND')
+    return unwrap(
+      await supabase
+        .from('extracted_document_fields')
+        .upsert({ document_id: clientDoc.id, ...payload }, { onConflict: 'document_id,field_key' })
+        .select()
+        .single()
+    )
+  },
+
   async uploadDocument(caseId, file, meta = {}) {
     const { clientId, taxYear, direction = 'client_upload', profileId } = meta
     const path = [

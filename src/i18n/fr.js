@@ -401,5 +401,23 @@ export default {
     fieldExists: 'Un champ portant ce nom existe déjà pour cette catégorie.',
     moveUp: 'Monter',
     moveDown: 'Descendre'
+  },
+
+  extraction: {
+    action: 'Vérifier les données',
+    title: 'Vérifier les données extraites',
+    subtitle: '{category} — {name}',
+    confirmAll: 'Tout confirmer tel quel ({count})',
+    confirm: 'Confirmer',
+    confidence: '{percent}% de confiance',
+    notFound: 'Non trouvé — saisissez-le manuellement si vous l’avez',
+    notFoundPlaceholder: 'Non trouvé dans le document',
+    verifiedOn: 'Vérifié le {date}',
+    viewSource: 'Voir dans le document',
+    backToVerification: 'Retour à la vérification',
+    previousPage: 'Page précédente',
+    nextPage: 'Page suivante',
+    pageOf: 'Page {page} sur {total}',
+    noFieldDefs: "Aucun champ n'est encore défini pour cette catégorie — ajoutez-en depuis les paramètres fiscaux."
   }
 }

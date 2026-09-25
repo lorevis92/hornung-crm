@@ -168,13 +168,25 @@ function seed() {
     { id: 'case-5', client_id: 'client-3', tax_year: year, status: 'opened', status_updated_at: daysAgo(2), client_message: '', specialist_notes: '', due_date: `${year + 1}-03-31`, delivery_by_post: false, express: false, created_at: daysAgo(2), updated_at: daysAgo(2) }
   ]
 
+  const salaryDoc = { id: uid('doc'), case_id: 'case-1', document_type_id: 'salary_statement', direction: 'client_upload', storage_path: 'demo/salary.pdf', file_name: 'Lohnausweis_2025.pdf', file_size: 184320, mime_type: 'application/pdf', uploaded_by: clientProfile.id, created_at: daysAgo(20), category_code: 'salary_statement' }
+
   const documents = [
-    { id: uid('doc'), case_id: 'case-1', document_type_id: 'salary_statement', direction: 'client_upload', storage_path: 'demo/salary.pdf', file_name: 'Lohnausweis_2025.pdf', file_size: 184320, mime_type: 'application/pdf', uploaded_by: clientProfile.id, created_at: daysAgo(20) },
+    salaryDoc,
     { id: uid('doc'), case_id: 'case-1', document_type_id: 'pillar_3a', direction: 'client_upload', storage_path: 'demo/3a.pdf', file_name: 'Pilastro_3a_UBS.pdf', file_size: 96000, mime_type: 'application/pdf', uploaded_by: clientProfile.id, created_at: daysAgo(19) },
     { id: uid('doc'), case_id: 'case-1', document_type_id: 'bank_statements', direction: 'client_upload', storage_path: 'demo/bank.pdf', file_name: 'Estratti_conti_31122025.pdf', file_size: 512000, mime_type: 'application/pdf', uploaded_by: clientProfile.id, created_at: daysAgo(14) },
     { id: uid('doc'), case_id: 'case-2', document_type_id: null, direction: 'specialist_upload', storage_path: 'demo/decl.pdf', file_name: `Dichiarazione_${prev}_Bianchi.pdf`, file_size: 742000, mime_type: 'application/pdf', uploaded_by: specialist.id, created_at: daysAgo(300), note: 'Final declaration, submitted to the tax office.' },
     { id: uid('doc'), case_id: 'case-2', document_type_id: null, direction: 'specialist_upload', storage_path: 'demo/receipt.pdf', file_name: `Ricevuta_invio_${prev}.pdf`, file_size: 68000, mime_type: 'application/pdf', uploaded_by: specialist.id, created_at: daysAgo(300) },
     { id: uid('doc'), case_id: 'case-3', document_type_id: null, direction: 'specialist_upload', storage_path: 'demo/decl2.pdf', file_name: `Dichiarazione_${prev2}_Bianchi.pdf`, file_size: 690000, mime_type: 'application/pdf', uploaded_by: specialist.id, created_at: daysAgo(660) }
+  ]
+
+  // Sample AI-extracted values for salaryDoc, so the verification panel has
+  // something to show in demo mode (the salary_statement field dictionary
+  // has 9 fields — only some come pre-filled, mirroring a real partial
+  // extraction; the rest stay empty for the specialist to fill in by hand).
+  const extractedDocumentFields = [
+    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'employer_name', field_value: 'Acme Logistics SA', confidence: 0.95, source_quote: 'Arbeitgeber: Acme Logistics SA', source_page: 1, verified_by_specialist: false, verified_at: null, verified_by: null },
+    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'gross_salary', field_value: "112'400", confidence: 0.98, source_quote: "Bruttolohn total 112'400", source_page: 1, verified_by_specialist: false, verified_at: null, verified_by: null },
+    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'withholding_tax', field_value: "1'204", confidence: 0.87, source_quote: 'Quellensteuer 1’204.00', source_page: 1, verified_by_specialist: false, verified_at: null, verified_by: null }
   ]
 
   const requested = [
@@ -207,7 +219,8 @@ function seed() {
     requested,
     events,
     extracted,
-    fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS))
+    fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS)),
+    extractedDocumentFields
   }
 }
 
@@ -219,6 +232,10 @@ function load() {
       // Sessions started before the "Tax settings" field-definitions screen
       // won't have this key in their saved state yet.
       parsed.fieldDefinitions ||= JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS))
+      // Same for sessions started before the document-verification panel —
+      // no sample values to backfill here, an empty list just means the
+      // specialist starts from a blank sheet for already-existing documents.
+      parsed.extractedDocumentFields ||= []
       return parsed
     }
   } catch {
@@ -552,6 +569,30 @@ export const demoApi = {
     if (doc) doc.category_code = categoryCode
     commit()
     return wait(doc || null)
+  },
+
+  // Demo has no separate client_documents table — documents.id doubles as
+  // the "document_id" extracted_document_fields would otherwise reference.
+  async listExtractedFields(caseDocumentId) {
+    const s = store()
+    return wait(s.extractedDocumentFields.filter((f) => f.document_id === caseDocumentId))
+  },
+
+  async saveExtractedField(caseDocumentId, payload) {
+    const s = store()
+    const existing = s.extractedDocumentFields.find(
+      (f) => f.document_id === caseDocumentId && f.field_key === payload.field_key
+    )
+    let row
+    if (existing) {
+      Object.assign(existing, payload)
+      row = existing
+    } else {
+      row = { id: uid('exf'), document_id: caseDocumentId, ...payload }
+      s.extractedDocumentFields.push(row)
+    }
+    commit()
+    return wait(row)
   },
 
   async listFieldDefinitions() {

@@ -401,5 +401,23 @@ export default {
     fieldExists: 'A field with this name already exists for this category.',
     moveUp: 'Move up',
     moveDown: 'Move down'
+  },
+
+  extraction: {
+    action: 'Verify data',
+    title: 'Verify extracted data',
+    subtitle: '{category} — {name}',
+    confirmAll: 'Confirm all as-is ({count})',
+    confirm: 'Confirm',
+    confidence: '{percent}% confidence',
+    notFound: 'Not found — enter it manually if you have it',
+    notFoundPlaceholder: 'Not found in the document',
+    verifiedOn: 'Verified on {date}',
+    viewSource: 'View in document',
+    backToVerification: 'Back to verification',
+    previousPage: 'Previous page',
+    nextPage: 'Next page',
+    pageOf: 'Page {page} of {total}',
+    noFieldDefs: 'No fields are defined yet for this category — add some from Tax settings.'
   }
 }
