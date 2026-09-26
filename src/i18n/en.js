@@ -451,6 +451,8 @@ export default {
     confirm: 'Confirm',
     confidence: '{percent}% confidence',
     needsReview: 'Needs review',
+    excludeFromCalculation: 'Exclude from calculation',
+    excludedBadge: 'Excluded from calculation',
     notFound: 'Not found — enter it manually if you have it',
     notFoundPlaceholder: 'Not found in the document',
     verifiedOn: 'Verified on {date}',
@@ -471,6 +473,16 @@ export default {
     sectionDeductions: 'Deductions',
     sectionWealth: 'Wealth',
     sectionOther: 'Other',
-    noData: 'No categorized documents yet for this tax year.'
+    noData: 'No categorized documents yet for this tax year.',
+
+    calculate: 'Calculate',
+    recalculate: 'Recalculate',
+    resultsTitle: 'Calculation results',
+    computedOn: 'Computed on {date}',
+    cantonMissing: 'No canton is set for this client — only federal caps were applied.',
+    taxableIncomeCantonal: 'Taxable income (cantonal)',
+    taxableWealthCantonal: 'Taxable wealth (cantonal)',
+    taxableIncomeFederal: 'Taxable income (federal)',
+    componentsTitle: 'How this was calculated'
   }
 }

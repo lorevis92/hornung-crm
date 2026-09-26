@@ -449,6 +449,8 @@ export default {
     confirm: 'Conferma',
     confidence: 'Affidabilità {percent}%',
     needsReview: 'Da verificare',
+    excludeFromCalculation: 'Escludi dal calcolo',
+    excludedBadge: 'Escluso dal calcolo',
     notFound: 'Non trovato — inseriscilo manualmente se disponibile',
     notFoundPlaceholder: 'Non trovato nel documento',
     verifiedOn: 'Verificato il {date}',
@@ -469,6 +471,16 @@ export default {
     sectionDeductions: 'Deduzioni',
     sectionWealth: 'Patrimonio',
     sectionOther: 'Altro',
-    noData: 'Nessun documento categorizzato ancora per questo anno fiscale.'
+    noData: 'Nessun documento categorizzato ancora per questo anno fiscale.',
+
+    calculate: 'Calcola',
+    recalculate: 'Ricalcola',
+    resultsTitle: 'Risultato del calcolo',
+    computedOn: 'Calcolato il {date}',
+    cantonMissing: 'Nessun cantone impostato per questo cliente — sono stati applicati solo i tetti federali.',
+    taxableIncomeCantonal: 'Reddito imponibile (cantonale)',
+    taxableWealthCantonal: 'Patrimonio imponibile (cantonale)',
+    taxableIncomeFederal: 'Reddito imponibile (federale)',
+    componentsTitle: 'Come si è arrivati a questo risultato'
   }
 }

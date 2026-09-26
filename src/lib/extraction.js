@@ -17,6 +17,8 @@ export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
         source_page: e?.source_page || null,
         verified_by_specialist: e?.verified_by_specialist || false,
         verified_at: e?.verified_at || null,
+        verified_by: e?.verified_by || null,
+        included_in_calculation: e?.included_in_calculation !== false,
         document_id: doc?.id ?? null,
         file_name: doc?.file_name ?? null,
         isPdf: doc?.mime_type === 'application/pdf'

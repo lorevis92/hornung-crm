@@ -469,6 +469,30 @@ export const supabaseApi = {
     )
   },
 
+  // Tax calculation — the actual math runs server-side (api/calculate-
+  // aggregates.js), never in the browser; this just calls it and returns
+  // whatever it persisted.
+  async calculateAggregates(clientId, taxYear, lang) {
+    return callApi('/api/calculate-aggregates', { clientId, taxYear: Number(taxYear), lang })
+  },
+
+  async getTaxAggregate(clientId, taxYear) {
+    const { data: aggregate, error } = await supabase
+      .from('tax_aggregates')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('tax_year', Number(taxYear))
+      .maybeSingle()
+    if (error) throw error
+    if (!aggregate) return null
+    const { data: components, error: compError } = await supabase
+      .from('tax_aggregate_components')
+      .select('*')
+      .eq('aggregate_id', aggregate.id)
+    if (compError) throw compError
+    return { aggregate, components: components || [] }
+  },
+
   async uploadDocument(caseId, file, meta = {}) {
     const { clientId, taxYear, direction = 'client_upload', profileId } = meta
     const path = [

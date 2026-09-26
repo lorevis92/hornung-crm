@@ -1,5 +1,6 @@
 import { CircleCheck, Eye } from 'lucide-react'
-import { Spinner, Textarea } from './ui'
+import clsx from 'clsx'
+import { Checkbox, Spinner, Textarea } from './ui'
 import { useI18n } from '../i18n'
 import { formatDateTime } from '../lib/format'
 
@@ -11,13 +12,16 @@ export default function ExtractedFieldRow({
   showDocument = false,
   saving = false,
   viewingSource = false,
+  togglingInclude = false,
   onChange,
   onConfirm,
   onViewSource,
+  onToggleInclude,
   innerRef
 }) {
   const { t, lang } = useI18n()
   const canViewSource = field.source_quote || field.isPdf
+  const excluded = field.included_in_calculation === false
 
   return (
     <li ref={innerRef} className="rounded-xl border border-line bg-white p-3.5">
@@ -28,10 +32,29 @@ export default function ExtractedFieldRow({
             <p className="text-[12px] text-ink-400">{field.file_name}</p>
           ) : null}
           {field.verified_by_specialist ? (
-            <p className="mt-0.5 flex items-center gap-1 text-[12.5px] text-emerald-700">
-              <CircleCheck size={13} aria-hidden="true" />
-              {t('extraction.verifiedOn', { date: formatDateTime(field.verified_at, lang) })}
-            </p>
+            <>
+              <p
+                className={clsx(
+                  'mt-0.5 flex items-center gap-1 text-[12.5px]',
+                  excluded ? 'text-amber-700' : 'text-emerald-700'
+                )}
+              >
+                <CircleCheck size={13} aria-hidden="true" />
+                {t('extraction.verifiedOn', { date: formatDateTime(field.verified_at, lang) })}
+                {excluded ? ` · ${t('extraction.excludedBadge')}` : ''}
+              </p>
+              {onToggleInclude ? (
+                <div className="mt-1">
+                  <Checkbox
+                    id={`include-${field.document_id}-${field.field_key}`}
+                    checked={excluded}
+                    disabled={togglingInclude}
+                    onChange={onToggleInclude}
+                    label={t('extraction.excludeFromCalculation')}
+                  />
+                </div>
+              ) : null}
+            </>
           ) : field.field_value ? (
             <p className="mt-0.5 text-[12.5px] font-medium text-amber-700">
               {t('extraction.needsReview')}

@@ -451,6 +451,8 @@ export default {
     confirm: 'Confirmer',
     confidence: '{percent}% de confiance',
     needsReview: 'À vérifier',
+    excludeFromCalculation: 'Exclure du calcul',
+    excludedBadge: 'Exclu du calcul',
     notFound: 'Non trouvé — saisissez-le manuellement si vous l’avez',
     notFoundPlaceholder: 'Non trouvé dans le document',
     verifiedOn: 'Vérifié le {date}',
@@ -471,6 +473,16 @@ export default {
     sectionDeductions: 'Déductions',
     sectionWealth: 'Fortune',
     sectionOther: 'Autre',
-    noData: "Aucun document catégorisé pour cette année fiscale pour l'instant."
+    noData: "Aucun document catégorisé pour cette année fiscale pour l'instant.",
+
+    calculate: 'Calculer',
+    recalculate: 'Recalculer',
+    resultsTitle: 'Résultats du calcul',
+    computedOn: 'Calculé le {date}',
+    cantonMissing: "Aucun canton n'est défini pour ce client — seuls les plafonds fédéraux ont été appliqués.",
+    taxableIncomeCantonal: 'Revenu imposable (cantonal)',
+    taxableWealthCantonal: 'Fortune imposable (cantonale)',
+    taxableIncomeFederal: 'Revenu imposable (fédéral)',
+    componentsTitle: 'Comment ce résultat a été obtenu'
   }
 }

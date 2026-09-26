@@ -8,6 +8,7 @@ import {
   CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES, FIELD_CALCULATION_RULES,
   PRICING_ITEMS, TAX_PARAMETERS
 } from '../demoSeed'
+import { computeTaxAggregate } from '../taxCalculation'
 
 const KEY = 'hornung.demo.v2'
 const blobs = new Map() // document id -> object URL (this session only)
@@ -225,7 +226,9 @@ function seed() {
     fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS)),
     extractedDocumentFields,
     taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS)),
-    calculationRules: JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES))
+    calculationRules: JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES)),
+    taxAggregates: [],
+    taxAggregateComponents: []
   }
 }
 
@@ -245,6 +248,9 @@ function load() {
       parsed.taxParameters ||= JSON.parse(JSON.stringify(TAX_PARAMETERS))
       // Same for sessions started before "Calculation rules" existed.
       parsed.calculationRules ||= JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES))
+      // Same for sessions started before the tax calculation engine existed.
+      parsed.taxAggregates ||= []
+      parsed.taxAggregateComponents ||= []
       return parsed
     }
   } catch {
@@ -681,6 +687,90 @@ export const demoApi = {
     }
     commit()
     return wait(row)
+  },
+
+  async calculateAggregates(clientId, taxYear, lang = 'en') {
+    const s = store()
+    const year = Number(taxYear)
+    const client = s.clients.find((c) => c.id === clientId)
+    const caseIds = new Set(
+      s.cases.filter((c) => c.client_id === clientId && c.tax_year === year).map((c) => c.id)
+    )
+    const documents = s.documents.filter((d) => caseIds.has(d.case_id) && d.category_code)
+    const documentIds = new Set(documents.map((d) => d.id))
+    const extractedFields = s.extractedDocumentFields.filter((f) => documentIds.has(f.document_id))
+    const parameters = s.taxParameters.filter((p) => p.tax_year === year)
+
+    let canton = (client?.canton || '').trim() || null
+    if (!canton) {
+      const sheetDoc = documents.find((d) => d.category_code === 'current_tax_sheet')
+      if (sheetDoc) {
+        const cantonField = extractedFields.find(
+          (f) =>
+            f.document_id === sheetDoc.id &&
+            f.field_key === 'canton' &&
+            f.verified_by_specialist &&
+            f.included_in_calculation !== false
+        )
+        if (cantonField?.field_value) canton = cantonField.field_value.trim() || null
+      }
+    }
+
+    const result = computeTaxAggregate({
+      canton,
+      documents,
+      extractedFields,
+      rules: s.calculationRules,
+      fieldDefs: s.fieldDefinitions,
+      categories: DOCUMENT_CATEGORIES,
+      parameters,
+      lang
+    })
+
+    let aggregate = s.taxAggregates.find((a) => a.client_id === clientId && a.tax_year === year)
+    const now = iso(Date.now())
+    if (aggregate) {
+      Object.assign(aggregate, {
+        taxable_income_cantonal: result.taxableIncomeCantonal,
+        taxable_wealth_cantonal: result.taxableWealthCantonal,
+        taxable_income_federal: result.taxableIncomeFederal,
+        status: 'ready_for_simulation',
+        computed_at: now
+      })
+    } else {
+      aggregate = {
+        id: uid('agg'),
+        client_id: clientId,
+        tax_year: year,
+        taxable_income_cantonal: result.taxableIncomeCantonal,
+        taxable_wealth_cantonal: result.taxableWealthCantonal,
+        taxable_income_federal: result.taxableIncomeFederal,
+        status: 'ready_for_simulation',
+        computed_at: now
+      }
+      s.taxAggregates.push(aggregate)
+    }
+    s.taxAggregateComponents = s.taxAggregateComponents.filter((c) => c.aggregate_id !== aggregate.id)
+    const components = result.components.map((c) => ({
+      id: uid('aggcomp'),
+      aggregate_id: aggregate.id,
+      document_id: c.documentId,
+      component_type: c.componentType,
+      amount: c.amount,
+      label: c.label
+    }))
+    s.taxAggregateComponents.push(...components)
+    commit()
+    return wait({ aggregate, components, warnings: result.warnings, cantonUsed: canton, cantonMissing: !canton })
+  },
+
+  async getTaxAggregate(clientId, taxYear) {
+    const s = store()
+    const year = Number(taxYear)
+    const aggregate = s.taxAggregates.find((a) => a.client_id === clientId && a.tax_year === year)
+    if (!aggregate) return wait(null)
+    const components = s.taxAggregateComponents.filter((c) => c.aggregate_id === aggregate.id)
+    return wait({ aggregate, components })
   },
 
   async listFieldDefinitions() {

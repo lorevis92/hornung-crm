@@ -26,6 +26,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
   const [sourceField, setSourceField] = useState(null)
   const [savingKey, setSavingKey] = useState(null)
   const [bulkSaving, setBulkSaving] = useState(false)
+  const [togglingKey, setTogglingKey] = useState(null)
   const fieldRefs = useRef({})
 
   const category = categories.find((c) => c.code === doc?.category_code) || null
@@ -117,6 +118,35 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
     }
   }
 
+  const toggleInclude = async (field) => {
+    setTogglingKey(field.field_key)
+    try {
+      const saved = await api.saveExtractedField(doc.id, {
+        field_key: field.field_key,
+        field_value: field.field_value,
+        confidence: field.confidence,
+        source_quote: field.source_quote,
+        source_page: field.source_page,
+        verified_by_specialist: true,
+        verified_at: field.verified_at,
+        verified_by: field.verified_by,
+        included_in_calculation: field.included_in_calculation === false
+      })
+      setFields((list) =>
+        list.map((f) =>
+          f.field_key === field.field_key
+            ? { ...f, included_in_calculation: saved.included_in_calculation }
+            : f
+        )
+      )
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setTogglingKey(null)
+    }
+  }
+
   const viewSource = (field) => {
     setSourceField(field)
     setView('source')
@@ -196,9 +226,11 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
               }}
               field={field}
               saving={savingKey === field.field_key}
+              togglingInclude={togglingKey === field.field_key}
               onChange={(value) => updateValue(field.field_key, value)}
               onConfirm={() => confirmField(field)}
               onViewSource={() => viewSource(field)}
+              onToggleInclude={() => toggleInclude(field)}
             />
           ))}
         </ul>

@@ -450,6 +450,8 @@ export default {
     confirm: 'Bestätigen',
     confidence: '{percent}% Konfidenz',
     needsReview: 'Zu prüfen',
+    excludeFromCalculation: 'Von der Berechnung ausschliessen',
+    excludedBadge: 'Von der Berechnung ausgeschlossen',
     notFound: 'Nicht gefunden — bei Bedarf manuell eingeben',
     notFoundPlaceholder: 'Im Dokument nicht gefunden',
     verifiedOn: 'Geprüft am {date}',
@@ -470,6 +472,16 @@ export default {
     sectionDeductions: 'Abzüge',
     sectionWealth: 'Vermögen',
     sectionOther: 'Sonstiges',
-    noData: 'Für dieses Steuerjahr sind noch keine kategorisierten Dokumente vorhanden.'
+    noData: 'Für dieses Steuerjahr sind noch keine kategorisierten Dokumente vorhanden.',
+
+    calculate: 'Berechnen',
+    recalculate: 'Neu berechnen',
+    resultsTitle: 'Berechnungsergebnis',
+    computedOn: 'Berechnet am {date}',
+    cantonMissing: 'Für diesen Kunden ist kein Kanton hinterlegt — es wurden nur eidgenössische Höchstbeträge angewendet.',
+    taxableIncomeCantonal: 'Steuerbares Einkommen (kantonal)',
+    taxableWealthCantonal: 'Steuerbares Vermögen (kantonal)',
+    taxableIncomeFederal: 'Steuerbares Einkommen (Bund)',
+    componentsTitle: 'So wurde gerechnet'
   }
 }
