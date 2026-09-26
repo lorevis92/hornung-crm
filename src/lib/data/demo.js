@@ -757,7 +757,9 @@ export const demoApi = {
       document_id: c.documentId,
       component_type: c.componentType,
       amount: c.amount,
-      label: c.label
+      label: c.label,
+      field_label: c.fieldLabel,
+      source_label: c.sourceLabel
     }))
     s.taxAggregateComponents.push(...components)
     commit()

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Calculator, FolderOpen } from 'lucide-react'
+import { ArrowLeft, Calculator, FileDown, FolderOpen, Info, Landmark, PiggyBank, Receipt } from 'lucide-react'
 import ExtractedFieldRow from '../components/ExtractedFieldRow'
 import { EmptyState, PageLoader, Spinner, Stat } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
@@ -55,6 +55,7 @@ export default function TaxSummary() {
 
   const [result, setResult] = useState(null)
   const [calculating, setCalculating] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -218,6 +219,22 @@ export default function TaxSummary() {
     }
   }
 
+  const downloadPdf = async () => {
+    setExportingPdf(true)
+    try {
+      // jsPDF + autotable are only fetched when a specialist actually
+      // generates a PDF, not on every page load — same reasoning as the
+      // lazy-loaded PdfSourceViewer above.
+      const { exportTaxSummaryPdf } = await import('../lib/pdfExport')
+      await exportTaxSummaryPdf({ caseRow, sections, result, lang, t })
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   const viewSource = async (field) => {
     const key = fieldKey(field)
     let url = fileUrls[field.document_id]
@@ -336,12 +353,18 @@ export default function TaxSummary() {
       )}
 
       {view === 'list' && result ? (
-        <section className="card card-pad space-y-4">
+        <section className="card card-pad space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="section-title text-xl">{t('summary.resultsTitle')}</h2>
-            <p className="text-[13px] text-ink-400">
-              {t('summary.computedOn', { date: formatDateTime(result.aggregate.computed_at, lang) })}
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-[13px] text-ink-400">
+                {t('summary.computedOn', { date: formatDateTime(result.aggregate.computed_at, lang) })}
+              </p>
+              <button type="button" className="btn-secondary btn-sm" onClick={downloadPdf} disabled={exportingPdf}>
+                {exportingPdf ? <Spinner size={15} /> : <FileDown size={15} aria-hidden="true" />}
+                {t('summary.generatePdf')}
+              </button>
+            </div>
           </div>
 
           {result.cantonMissing ? (
@@ -350,35 +373,72 @@ export default function TaxSummary() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Stat label={t('summary.taxableIncomeCantonal')} value={formatChf(result.aggregate.taxable_income_cantonal, lang)} tone="gold" />
-            <Stat label={t('summary.taxableWealthCantonal')} value={formatChf(result.aggregate.taxable_wealth_cantonal, lang)} tone="gold" />
-            <Stat label={t('summary.taxableIncomeFederal')} value={formatChf(result.aggregate.taxable_income_federal, lang)} tone="gold" />
+          <div className="rounded-2xl border border-gold-200/70 bg-gold-50/30 p-4 sm:p-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Stat
+                icon={Landmark}
+                label={t('summary.taxableIncomeCantonal')}
+                value={formatChf(result.aggregate.taxable_income_cantonal, lang)}
+                tone="gold"
+              />
+              <Stat
+                icon={PiggyBank}
+                label={t('summary.taxableWealthCantonal')}
+                value={formatChf(result.aggregate.taxable_wealth_cantonal, lang)}
+                tone="gold"
+              />
+              <Stat
+                icon={Receipt}
+                label={t('summary.taxableIncomeFederal')}
+                value={formatChf(result.aggregate.taxable_income_federal, lang)}
+                tone="gold"
+              />
+            </div>
           </div>
 
           {result.components.length ? (
             <div className="space-y-2">
               <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.componentsTitle')}</h3>
-              <ul className="divide-y divide-line rounded-xl border border-line bg-white">
-                {result.components.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[14px]">
-                    <span className="text-ink-700">{c.label}</span>
-                    <span
-                      className={clsx(
-                        'shrink-0 font-medium tabular-nums',
-                        c.component_type === 'income' || c.component_type === 'wealth'
-                          ? 'text-emerald-700'
-                          : 'text-red-700'
-                      )}
-                    >
-                      {c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}
-                      {formatChf(Math.abs(c.amount), lang)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto rounded-xl border border-line">
+                <table className="w-full text-[13.5px]">
+                  <thead className="bg-sand/60 text-left text-[11.5px] font-medium uppercase tracking-wide text-ink-400">
+                    <tr>
+                      <th className="px-4 py-2.5">{t('summary.colItem')}</th>
+                      <th className="px-4 py-2.5">{t('summary.colSource')}</th>
+                      <th className="px-4 py-2.5 text-right">{t('summary.colAmount')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line bg-white">
+                    {result.components.map((c) => (
+                      <tr key={c.id}>
+                        <td className="px-4 py-2.5 text-ink-800">{c.field_label || c.label}</td>
+                        <td className="px-4 py-2.5 text-ink-500">{c.source_label || ''}</td>
+                        <td
+                          className={clsx(
+                            'px-4 py-2.5 text-right font-medium tabular-nums',
+                            c.component_type === 'income' || c.component_type === 'wealth'
+                              ? 'text-emerald-700'
+                              : 'text-red-700'
+                          )}
+                        >
+                          {c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}
+                          {formatChf(Math.abs(c.amount), lang)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
+
+          <div className="space-y-2">
+            <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.taxEstimateTitle')}</h3>
+            <div className="flex items-start gap-2.5 rounded-xl border border-dashed border-line bg-sand/40 px-4 py-3 text-[13.5px] text-ink-500">
+              <Info size={16} className="mt-0.5 shrink-0 text-ink-400" aria-hidden="true" />
+              <p>{t('summary.taxEstimatePlaceholder')}</p>
+            </div>
+          </div>
         </section>
       ) : null}
     </div>

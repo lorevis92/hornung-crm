@@ -126,7 +126,9 @@ export default async function handler(req, res) {
             document_id: c.documentId,
             component_type: c.componentType,
             amount: c.amount,
-            label: c.label
+            label: c.label,
+            field_label: c.fieldLabel,
+            source_label: c.sourceLabel
           }))
         )
         .select()

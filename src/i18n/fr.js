@@ -514,6 +514,17 @@ export default {
     taxableIncomeCantonal: 'Revenu imposable (cantonal)',
     taxableWealthCantonal: 'Fortune imposable (cantonale)',
     taxableIncomeFederal: 'Revenu imposable (fédéral)',
-    componentsTitle: 'Comment ce résultat a été obtenu'
+    componentsTitle: 'Comment ce résultat a été obtenu',
+    colItem: 'Poste',
+    colSource: 'Catégorie / document source',
+    colAmount: 'Montant',
+
+    taxEstimateTitle: "Estimation des impôts",
+    taxEstimatePlaceholder: "L'intégration avec le service d'estimation des impôts arrive prochainement — cette section n'est pas encore disponible.",
+
+    generatePdf: 'Générer le PDF',
+    pdfTitle: 'Récapitulatif du calcul fiscal',
+    pdfPreparedFor: 'Préparé pour {name} — année fiscale {year}',
+    pdfGeneratedOn: 'Généré le {date}'
   }
 }

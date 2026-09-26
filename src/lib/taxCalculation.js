@@ -195,7 +195,11 @@ export function computeTaxAggregate({
       documentId: entry.documentId,
       componentType: CONTRIBUTION_TO_COMPONENT[entry.contributionType],
       amount: entry.effective,
-      label
+      label,
+      // Same information as `label`, split into the two columns the tax
+      // summary/PDF table renders: the item itself, and where it came from.
+      fieldLabel: entry.note ? `${entry.fieldLabel} (${entry.note})` : entry.fieldLabel,
+      sourceLabel: `${entry.categoryLabel} — ${suffix}`
     }
   })
 

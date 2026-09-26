@@ -512,6 +512,17 @@ export default {
     taxableIncomeCantonal: 'Reddito imponibile (cantonale)',
     taxableWealthCantonal: 'Patrimonio imponibile (cantonale)',
     taxableIncomeFederal: 'Reddito imponibile (federale)',
-    componentsTitle: 'Come si è arrivati a questo risultato'
+    componentsTitle: 'Come si è arrivati a questo risultato',
+    colItem: 'Voce',
+    colSource: 'Categoria / documento di origine',
+    colAmount: 'Importo',
+
+    taxEstimateTitle: 'Stima imposte',
+    taxEstimatePlaceholder: 'Integrazione con il servizio di stima imposte in arrivo — questa sezione non è ancora disponibile.',
+
+    generatePdf: 'Genera PDF',
+    pdfTitle: 'Riepilogo del calcolo fiscale',
+    pdfPreparedFor: 'Preparato per {name} — anno fiscale {year}',
+    pdfGeneratedOn: 'Generato il {date}'
   }
 }

@@ -72,3 +72,10 @@ export const CANTONS = [
   'AG','AI','AR','BE','BL','BS','FR','GE','GL','GR','JU','LU','NE','NW','OW',
   'SG','SH','SO','SZ','TG','TI','UR','VD','VS','ZG','ZH'
 ]
+
+// The firm's logo (src/assets/logo.png) already bakes in the name and
+// tagline, so the only extra bit of letterhead needed on client-facing
+// documents (e.g. the tax summary PDF) is the contact line — mirrors the
+// footer in api/_lib.js's emailLayout(), kept separate since that file is
+// server-only and can't be imported from the browser bundle.
+export const FIRM_CONTACT = 'Hornung Consulting · hornungconsulting@gmail.com · +41 79 864 29 65'

@@ -513,6 +513,17 @@ export default {
     taxableIncomeCantonal: 'Steuerbares Einkommen (kantonal)',
     taxableWealthCantonal: 'Steuerbares Vermögen (kantonal)',
     taxableIncomeFederal: 'Steuerbares Einkommen (Bund)',
-    componentsTitle: 'So wurde gerechnet'
+    componentsTitle: 'So wurde gerechnet',
+    colItem: 'Position',
+    colSource: 'Kategorie / Quelldokument',
+    colAmount: 'Betrag',
+
+    taxEstimateTitle: 'Steuerschätzung',
+    taxEstimatePlaceholder: 'Die Integration mit dem Steuerschätzungsdienst folgt in Kürze — dieser Bereich ist noch nicht verfügbar.',
+
+    generatePdf: 'PDF erstellen',
+    pdfTitle: 'Steuerberechnung — Zusammenfassung',
+    pdfPreparedFor: 'Erstellt für {name} — Steuerjahr {year}',
+    pdfGeneratedOn: 'Erstellt am {date}'
   }
 }

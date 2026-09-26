@@ -514,6 +514,17 @@ export default {
     taxableIncomeCantonal: 'Taxable income (cantonal)',
     taxableWealthCantonal: 'Taxable wealth (cantonal)',
     taxableIncomeFederal: 'Taxable income (federal)',
-    componentsTitle: 'How this was calculated'
+    componentsTitle: 'How this was calculated',
+    colItem: 'Item',
+    colSource: 'Category / source document',
+    colAmount: 'Amount',
+
+    taxEstimateTitle: 'Tax estimate',
+    taxEstimatePlaceholder: 'Integration with the tax estimate service is coming soon — this section is not yet available.',
+
+    generatePdf: 'Generate PDF',
+    pdfTitle: 'Tax calculation summary',
+    pdfPreparedFor: 'Prepared for {name} — tax year {year}',
+    pdfGeneratedOn: 'Generated on {date}'
   }
 }
