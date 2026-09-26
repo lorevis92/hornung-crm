@@ -430,7 +430,16 @@ export default {
     parameterExists: 'Für diese Ebene/diesen Kanton/dieses Jahr existiert bereits ein Parameter mit diesem Namen.',
     deleteParameterConfirm: 'Diesen Parameter entfernen?',
     deleteParameterConfirmBody: '„{label}" wird aus den Steuerparametern entfernt.',
-    noParameters: 'Noch keine Steuerparameter — fügen Sie den ersten hinzu.'
+    noParameters: 'Noch keine Steuerparameter — fügen Sie den ersten hinzu.',
+
+    contribution: 'Auswirkung',
+    contributionNone: 'Nicht Teil der Berechnung',
+    contributionIncomePlus: 'Erhöht das Einkommen',
+    contributionIncomeMinus: 'Reduziert das Einkommen (Abzug)',
+    contributionWealthPlus: 'Erhöht das Vermögen',
+    contributionWealthMinus: 'Reduziert das Vermögen (Schuld)',
+    capThreshold: 'Angewendeter Höchstbetrag/Schwelle',
+    capNone: 'Keine'
   },
 
   extraction: {

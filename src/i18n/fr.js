@@ -431,7 +431,16 @@ export default {
     parameterExists: 'Un paramètre portant ce nom existe déjà pour ce niveau/canton/cette année.',
     deleteParameterConfirm: 'Supprimer ce paramètre ?',
     deleteParameterConfirmBody: 'Ceci supprimera « {label} » des paramètres fiscaux.',
-    noParameters: "Aucun paramètre fiscal pour l'instant — ajoutez le premier."
+    noParameters: "Aucun paramètre fiscal pour l'instant — ajoutez le premier.",
+
+    contribution: 'Effet',
+    contributionNone: 'Non inclus dans le calcul',
+    contributionIncomePlus: 'Augmente le revenu',
+    contributionIncomeMinus: 'Réduit le revenu (déduction)',
+    contributionWealthPlus: 'Augmente la fortune',
+    contributionWealthMinus: 'Réduit la fortune (dette)',
+    capThreshold: 'Plafond/seuil appliqué',
+    capNone: 'Aucun'
   },
 
   extraction: {

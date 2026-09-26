@@ -5,7 +5,8 @@
 // ---------------------------------------------------------------------------
 import { currentTaxYear } from '../config'
 import {
-  CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES, PRICING_ITEMS, TAX_PARAMETERS
+  CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES, FIELD_CALCULATION_RULES,
+  PRICING_ITEMS, TAX_PARAMETERS
 } from '../demoSeed'
 
 const KEY = 'hornung.demo.v2'
@@ -223,7 +224,8 @@ function seed() {
     extracted,
     fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS)),
     extractedDocumentFields,
-    taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS))
+    taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS)),
+    calculationRules: JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES))
   }
 }
 
@@ -241,6 +243,8 @@ function load() {
       parsed.extractedDocumentFields ||= []
       // Same for sessions started before "Tax parameters" existed.
       parsed.taxParameters ||= JSON.parse(JSON.stringify(TAX_PARAMETERS))
+      // Same for sessions started before "Calculation rules" existed.
+      parsed.calculationRules ||= JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES))
       return parsed
     }
   } catch {
@@ -655,6 +659,28 @@ export const demoApi = {
     s.taxParameters = s.taxParameters.filter((p) => p.id !== id)
     commit()
     return wait(true)
+  },
+
+  async listCalculationRules() {
+    const s = store()
+    return wait(s.calculationRules)
+  },
+
+  async saveCalculationRule(categoryCode, fieldKey, patch) {
+    const s = store()
+    const existing = s.calculationRules.find(
+      (r) => r.category_code === categoryCode && r.field_key === fieldKey
+    )
+    let row
+    if (existing) {
+      Object.assign(existing, patch)
+      row = existing
+    } else {
+      row = { id: uid('calcrule'), category_code: categoryCode, field_key: fieldKey, ...patch }
+      s.calculationRules.push(row)
+    }
+    commit()
+    return wait(row)
   },
 
   async listFieldDefinitions() {

@@ -431,7 +431,16 @@ export default {
     parameterExists: 'A parameter with this name already exists for this scope/canton/year.',
     deleteParameterConfirm: 'Remove this parameter?',
     deleteParameterConfirmBody: 'This will remove "{label}" from the tax parameters.',
-    noParameters: 'No tax parameters yet — add the first one.'
+    noParameters: 'No tax parameters yet — add the first one.',
+
+    contribution: 'Contribution',
+    contributionNone: 'Not included in the calculation',
+    contributionIncomePlus: 'Increases income',
+    contributionIncomeMinus: 'Reduces income (deduction)',
+    contributionWealthPlus: 'Increases wealth',
+    contributionWealthMinus: 'Reduces wealth (debt)',
+    capThreshold: 'Cap/threshold applied',
+    capNone: 'None'
   },
 
   extraction: {

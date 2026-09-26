@@ -450,6 +450,25 @@ export const supabaseApi = {
     return true
   },
 
+  // Tax settings — how each extracted field feeds the (future) taxable
+  // income/wealth calculation. RLS: "calc rules: staff only".
+  async listCalculationRules() {
+    return unwrap(await supabase.from('field_calculation_rules').select('*'))
+  },
+
+  async saveCalculationRule(categoryCode, fieldKey, patch) {
+    return unwrap(
+      await supabase
+        .from('field_calculation_rules')
+        .upsert(
+          { category_code: categoryCode, field_key: fieldKey, ...patch },
+          { onConflict: 'category_code,field_key' }
+        )
+        .select()
+        .single()
+    )
+  },
+
   async uploadDocument(caseId, file, meta = {}) {
     const { clientId, taxYear, direction = 'client_upload', profileId } = meta
     const path = [

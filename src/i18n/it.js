@@ -429,7 +429,16 @@ export default {
     parameterExists: 'Esiste già un parametro con questo nome per questo ambito/cantone/anno.',
     deleteParameterConfirm: 'Eliminare questo parametro?',
     deleteParameterConfirmBody: 'Questo rimuoverà «{label}» dai parametri fiscali.',
-    noParameters: 'Nessun parametro fiscale ancora — aggiungi il primo.'
+    noParameters: 'Nessun parametro fiscale ancora — aggiungi il primo.',
+
+    contribution: 'Effetto',
+    contributionNone: 'Non incluso nel calcolo',
+    contributionIncomePlus: 'Aumenta il reddito',
+    contributionIncomeMinus: 'Riduce il reddito (deduzione)',
+    contributionWealthPlus: 'Aumenta il patrimonio',
+    contributionWealthMinus: 'Riduce il patrimonio (debito)',
+    capThreshold: 'Soglia/tetto applicato',
+    capNone: 'Nessuno'
   },
 
   extraction: {

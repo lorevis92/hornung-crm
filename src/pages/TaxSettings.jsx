@@ -76,18 +76,23 @@ export default function TaxSettings() {
   const [paramDeleteTarget, setParamDeleteTarget] = useState(null)
   const [paramDeleting, setParamDeleting] = useState(false)
 
+  const [calculationRules, setCalculationRules] = useState([])
+  const [ruleBusyKey, setRuleBusyKey] = useState(null)
+
   useEffect(() => {
     let active = true
     const run = async () => {
-      const [cats, defs, params] = await Promise.all([
+      const [cats, defs, params, rules] = await Promise.all([
         api.listDocumentCategories(),
         api.listFieldDefinitions(),
-        api.listTaxParameters()
+        api.listTaxParameters(),
+        api.listCalculationRules()
       ])
       if (!active) return
       setCategories(cats)
       setFields(defs)
       setParameters(params)
+      setCalculationRules(rules)
       setSelectedCategory((prev) => prev || cats[0]?.code || null)
       setLoading(false)
     }
@@ -225,6 +230,29 @@ export default function TaxSettings() {
     [parameters]
   )
 
+  // Suggests existing parameter names as the specialist types, so re-using
+  // the exact same name (and therefore the same parameter_family) for
+  // another canton/year is a natural default rather than something they
+  // have to know to do.
+  const paramNameSuggestions = useMemo(
+    () => [...new Set(parameters.map((p) => p.parameter_label).filter(Boolean))].sort(),
+    [parameters]
+  )
+
+  // One representative label per parameter_family, for the calculation
+  // rules' "cap/threshold" picker — never shows the family code itself.
+  const familyOptions = useMemo(() => {
+    const byFamily = {}
+    parameters.forEach((p) => {
+      if (p.parameter_family && !byFamily[p.parameter_family]) {
+        byFamily[p.parameter_family] = p.parameter_label || p.parameter_family
+      }
+    })
+    return Object.entries(byFamily)
+      .map(([family, label]) => ({ family, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [parameters])
+
   const formatParamValue = (p) => {
     if (p.value_type === 'no_cap') return t('taxSettings.noCap')
     if (p.value_numeric == null) return '—'
@@ -297,11 +325,23 @@ export default function TaxSettings() {
             .map((p) => p.parameter_key)
         )
         const parameter_key = uniqueSlug(slugify(name), existingKeys)
+        // A family is meant to be shared across many rows (one per
+        // canton/year), so — unlike parameter_key — it's not deduplicated,
+        // it's *matched*: typing the same name as an existing parameter (the
+        // datalist below suggests exactly those) reuses that row's family,
+        // whatever it is (including a hand-picked one from a migration
+        // seed, not just a previously auto-derived slug). Only a genuinely
+        // new name gets a freshly derived family.
+        const existingFamilyMatch = parameters.find(
+          (p) => p.parameter_label && p.parameter_label.trim().toLowerCase() === name.toLowerCase()
+        )
+        const parameter_family = existingFamilyMatch?.parameter_family || slugify(name)
         const created = await api.createTaxParameter({
           scope: paramDraft.scope,
           canton_code: cantonCode,
           tax_year: taxYear,
           parameter_key,
+          parameter_family,
           parameter_label: name,
           value_type: paramDraft.valueType,
           value_numeric: paramDraft.value === '' ? null : Number(paramDraft.value),
@@ -318,6 +358,50 @@ export default function TaxSettings() {
       toast.error(error.code === '23505' ? t('taxSettings.parameterExists') : error.message || t('common.error'))
     } finally {
       setParamSaving(false)
+    }
+  }
+
+  // ---------------------------------------------------- calculation rules --
+  const rulesByField = useMemo(() => {
+    const map = {}
+    calculationRules.forEach((r) => {
+      map[`${r.category_code}:${r.field_key}`] = r
+    })
+    return map
+  }, [calculationRules])
+
+  const ruleFor = (categoryCode, fieldKey) =>
+    rulesByField[`${categoryCode}:${fieldKey}`] || {
+      contribution_type: 'none',
+      cap_parameter_family: null,
+      notes: null
+    }
+
+  const updateRule = async (field, patch) => {
+    const key = `${selectedCategory}:${field.field_key}`
+    const current = ruleFor(selectedCategory, field.field_key)
+    setRuleBusyKey(key)
+    try {
+      const saved = await api.saveCalculationRule(selectedCategory, field.field_key, {
+        contribution_type: current.contribution_type,
+        cap_parameter_family: current.cap_parameter_family,
+        notes: current.notes,
+        ...patch
+      })
+      setCalculationRules((list) => {
+        const idx = list.findIndex(
+          (r) => r.category_code === selectedCategory && r.field_key === field.field_key
+        )
+        if (idx === -1) return [...list, saved]
+        const copy = [...list]
+        copy[idx] = saved
+        return copy
+      })
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setRuleBusyKey(null)
     }
   }
 
@@ -413,13 +497,55 @@ export default function TaxSettings() {
                   <thead className="bg-sand">
                     <tr>
                       <th className="table-head">{t('taxSettings.fieldName')}</th>
+                      <th className="table-head">{t('taxSettings.contribution')}</th>
+                      <th className="table-head">{t('taxSettings.capThreshold')}</th>
                       <th className="table-head text-right">{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line bg-white">
-                    {fieldsForSelected.map((field, idx) => (
+                    {fieldsForSelected.map((field, idx) => {
+                      const rule = ruleFor(selectedCategory, field.field_key)
+                      const ruleKey = `${selectedCategory}:${field.field_key}`
+                      const ruleBusy = ruleBusyKey === ruleKey
+                      return (
                       <tr key={field.id}>
                         <td className="table-cell text-ink-700">{field.field_label || field.field_key}</td>
+                        <td className="table-cell">
+                          <Select
+                            className="w-[220px]"
+                            value={rule.contribution_type}
+                            disabled={ruleBusy}
+                            onChange={(e) =>
+                              updateRule(field, {
+                                contribution_type: e.target.value,
+                                cap_parameter_family: e.target.value === 'none' ? null : rule.cap_parameter_family
+                              })
+                            }
+                            aria-label={t('taxSettings.contribution')}
+                          >
+                            <option value="none">{t('taxSettings.contributionNone')}</option>
+                            <option value="income_plus">{t('taxSettings.contributionIncomePlus')}</option>
+                            <option value="income_minus">{t('taxSettings.contributionIncomeMinus')}</option>
+                            <option value="wealth_plus">{t('taxSettings.contributionWealthPlus')}</option>
+                            <option value="wealth_minus">{t('taxSettings.contributionWealthMinus')}</option>
+                          </Select>
+                        </td>
+                        <td className="table-cell">
+                          <Select
+                            className="w-[220px]"
+                            value={rule.cap_parameter_family || ''}
+                            disabled={ruleBusy || rule.contribution_type === 'none'}
+                            onChange={(e) => updateRule(field, { cap_parameter_family: e.target.value || null })}
+                            aria-label={t('taxSettings.capThreshold')}
+                          >
+                            <option value="">{t('taxSettings.capNone')}</option>
+                            {familyOptions.map((f) => (
+                              <option key={f.family} value={f.family}>
+                                {f.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </td>
                         <td className="table-cell">
                           <div className="flex items-center justify-end gap-1">
                             <button
@@ -463,7 +589,8 @@ export default function TaxSettings() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -667,10 +794,16 @@ export default function TaxSettings() {
           <Field label={t('taxSettings.parameterName')} htmlFor="param-name" required>
             <TextInput
               id="param-name"
+              list="param-name-suggestions"
               value={paramDraft.name}
               onChange={(e) => setParamDraft((d) => ({ ...d, name: e.target.value }))}
               autoFocus
             />
+            <datalist id="param-name-suggestions">
+              {paramNameSuggestions.map((label) => (
+                <option key={label} value={label} />
+              ))}
+            </datalist>
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
