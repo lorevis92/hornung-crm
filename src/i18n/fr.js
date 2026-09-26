@@ -134,6 +134,7 @@ export default {
 
   case: {
     title: 'Déclaration fiscale {year}',
+    taxSummary: 'Résumé fiscal',
     yourDocuments: 'Vos documents',
     yourDocumentsHelp: 'Téléversez les documents convenus lors de notre entretien.',
     checklist: 'Liste de documents convenue',
@@ -410,6 +411,7 @@ export default {
     confirmAll: 'Tout confirmer tel quel ({count})',
     confirm: 'Confirmer',
     confidence: '{percent}% de confiance',
+    needsReview: 'À vérifier',
     notFound: 'Non trouvé — saisissez-le manuellement si vous l’avez',
     notFoundPlaceholder: 'Non trouvé dans le document',
     verifiedOn: 'Vérifié le {date}',
@@ -419,5 +421,17 @@ export default {
     nextPage: 'Page suivante',
     pageOf: 'Page {page} sur {total}',
     noFieldDefs: "Aucun champ n'est encore défini pour cette catégorie — ajoutez-en depuis les paramètres fiscaux."
+  },
+
+  summary: {
+    title: 'Résumé fiscal',
+    subtitle: '{name} — année fiscale {year}',
+    backToCase: 'Retour au dossier',
+    sectionBase: 'Données personnelles',
+    sectionIncome: 'Revenus',
+    sectionDeductions: 'Déductions',
+    sectionWealth: 'Fortune',
+    sectionOther: 'Autre',
+    noData: "Aucun document catégorisé pour cette année fiscale pour l'instant."
   }
 }

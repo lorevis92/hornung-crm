@@ -133,6 +133,7 @@ export default {
 
   case: {
     title: 'Tax declaration {year}',
+    taxSummary: 'Tax summary',
     yourDocuments: 'Your documents',
     yourDocumentsHelp: 'Upload the documents agreed during our call.',
     checklist: 'Agreed document list',
@@ -410,6 +411,7 @@ export default {
     confirmAll: 'Confirm all as-is ({count})',
     confirm: 'Confirm',
     confidence: '{percent}% confidence',
+    needsReview: 'Needs review',
     notFound: 'Not found — enter it manually if you have it',
     notFoundPlaceholder: 'Not found in the document',
     verifiedOn: 'Verified on {date}',
@@ -419,5 +421,17 @@ export default {
     nextPage: 'Next page',
     pageOf: 'Page {page} of {total}',
     noFieldDefs: 'No fields are defined yet for this category — add some from Tax settings.'
+  },
+
+  summary: {
+    title: 'Tax summary',
+    subtitle: '{name} — tax year {year}',
+    backToCase: 'Back to the case',
+    sectionBase: 'Personal details',
+    sectionIncome: 'Income',
+    sectionDeductions: 'Deductions',
+    sectionWealth: 'Wealth',
+    sectionOther: 'Other',
+    noData: 'No categorized documents yet for this tax year.'
   }
 }

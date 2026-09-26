@@ -134,6 +134,7 @@ export default {
 
   case: {
     title: 'Steuererklärung {year}',
+    taxSummary: 'Steuerübersicht',
     yourDocuments: 'Ihre Dokumente',
     yourDocumentsHelp: 'Laden Sie die im Gespräch vereinbarten Dokumente hoch.',
     checklist: 'Vereinbarte Dokumentenliste',
@@ -409,6 +410,7 @@ export default {
     confirmAll: 'Alle so bestätigen ({count})',
     confirm: 'Bestätigen',
     confidence: '{percent}% Konfidenz',
+    needsReview: 'Zu prüfen',
     notFound: 'Nicht gefunden — bei Bedarf manuell eingeben',
     notFoundPlaceholder: 'Im Dokument nicht gefunden',
     verifiedOn: 'Geprüft am {date}',
@@ -418,5 +420,17 @@ export default {
     nextPage: 'Nächste Seite',
     pageOf: 'Seite {page} von {total}',
     noFieldDefs: 'Für diese Kategorie sind noch keine Felder definiert — fügen Sie welche in den Steuereinstellungen hinzu.'
+  },
+
+  summary: {
+    title: 'Steuerübersicht',
+    subtitle: '{name} — Steuerjahr {year}',
+    backToCase: 'Zurück zur Akte',
+    sectionBase: 'Persönliche Angaben',
+    sectionIncome: 'Einkommen',
+    sectionDeductions: 'Abzüge',
+    sectionWealth: 'Vermögen',
+    sectionOther: 'Sonstiges',
+    noData: 'Für dieses Steuerjahr sind noch keine kategorisierten Dokumente vorhanden.'
   }
 }

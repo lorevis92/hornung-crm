@@ -367,6 +367,27 @@ export const supabaseApi = {
   // Specialist verification of AI-extracted values (extracted_document_fields
   // is keyed by client_documents.id, so we resolve it from the case_documents
   // id every caller actually has — same indirection as setDocumentCategory).
+  // "Direct" primitives — the caller already has the real client_documents.id
+  // (e.g. the tax summary, which queries client_documents itself).
+  async listExtractedFieldsForDocument(documentId) {
+    return unwrap(
+      await supabase.from('extracted_document_fields').select('*').eq('document_id', documentId)
+    )
+  },
+
+  async saveExtractedFieldForDocument(documentId, payload) {
+    return unwrap(
+      await supabase
+        .from('extracted_document_fields')
+        .upsert({ document_id: documentId, ...payload }, { onConflict: 'document_id,field_key' })
+        .select()
+        .single()
+    )
+  },
+
+  // Case-document-indirected variants — DocumentList only ever has the
+  // case_documents.id (see setDocumentCategory), so resolve the mirrored
+  // client_documents row first and delegate to the direct primitives above.
   async listExtractedFields(caseDocumentId) {
     const { data: clientDoc, error: clientDocError } = await supabase
       .from('client_documents')
@@ -375,9 +396,7 @@ export const supabaseApi = {
       .maybeSingle()
     if (clientDocError) throw clientDocError
     if (!clientDoc) return []
-    return unwrap(
-      await supabase.from('extracted_document_fields').select('*').eq('document_id', clientDoc.id)
-    )
+    return this.listExtractedFieldsForDocument(clientDoc.id)
   },
 
   async saveExtractedField(caseDocumentId, payload) {
@@ -388,12 +407,18 @@ export const supabaseApi = {
       .maybeSingle()
     if (clientDocError) throw clientDocError
     if (!clientDoc) throw new Error('CLIENT_DOCUMENT_NOT_FOUND')
+    return this.saveExtractedFieldForDocument(clientDoc.id, payload)
+  },
+
+  // All of a client's documents for one tax year, across every case in that
+  // year — the tax summary's raw material.
+  async listClientDocuments(clientId, taxYear) {
     return unwrap(
       await supabase
-        .from('extracted_document_fields')
-        .upsert({ document_id: clientDoc.id, ...payload }, { onConflict: 'document_id,field_key' })
-        .select()
-        .single()
+        .from('client_documents')
+        .select('*')
+        .eq('client_id', clientId)
+        .eq('tax_year', Number(taxYear))
     )
   },
 

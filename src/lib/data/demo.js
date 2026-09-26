@@ -573,26 +573,47 @@ export const demoApi = {
 
   // Demo has no separate client_documents table — documents.id doubles as
   // the "document_id" extracted_document_fields would otherwise reference.
-  async listExtractedFields(caseDocumentId) {
+  // Demo has no separate client_documents table — documents.id doubles as
+  // "document_id", so these are already the direct primitives; the
+  // case-document-indirected names are plain aliases.
+  async listExtractedFieldsForDocument(documentId) {
     const s = store()
-    return wait(s.extractedDocumentFields.filter((f) => f.document_id === caseDocumentId))
+    return wait(s.extractedDocumentFields.filter((f) => f.document_id === documentId))
   },
 
-  async saveExtractedField(caseDocumentId, payload) {
+  async saveExtractedFieldForDocument(documentId, payload) {
     const s = store()
     const existing = s.extractedDocumentFields.find(
-      (f) => f.document_id === caseDocumentId && f.field_key === payload.field_key
+      (f) => f.document_id === documentId && f.field_key === payload.field_key
     )
     let row
     if (existing) {
       Object.assign(existing, payload)
       row = existing
     } else {
-      row = { id: uid('exf'), document_id: caseDocumentId, ...payload }
+      row = { id: uid('exf'), document_id: documentId, ...payload }
       s.extractedDocumentFields.push(row)
     }
     commit()
     return wait(row)
+  },
+
+  async listExtractedFields(caseDocumentId) {
+    return this.listExtractedFieldsForDocument(caseDocumentId)
+  },
+
+  async saveExtractedField(caseDocumentId, payload) {
+    return this.saveExtractedFieldForDocument(caseDocumentId, payload)
+  },
+
+  // All of a client's documents for one tax year, across every case in that
+  // year — the tax summary's raw material.
+  async listClientDocuments(clientId, taxYear) {
+    const s = store()
+    const caseIds = new Set(
+      s.cases.filter((c) => c.client_id === clientId && c.tax_year === Number(taxYear)).map((c) => c.id)
+    )
+    return wait(s.documents.filter((d) => caseIds.has(d.case_id)))
   },
 
   async listFieldDefinitions() {

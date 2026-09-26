@@ -133,6 +133,7 @@ export default {
 
   case: {
     title: 'Dichiarazione fiscale {year}',
+    taxSummary: 'Riepilogo fiscale',
     yourDocuments: 'I tuoi documenti',
     yourDocumentsHelp: 'Carica i documenti concordati durante la chiamata.',
     checklist: 'Elenco documenti concordato',
@@ -408,6 +409,7 @@ export default {
     confirmAll: 'Conferma tutti così come sono ({count})',
     confirm: 'Conferma',
     confidence: 'Affidabilità {percent}%',
+    needsReview: 'Da verificare',
     notFound: 'Non trovato — inseriscilo manualmente se disponibile',
     notFoundPlaceholder: 'Non trovato nel documento',
     verifiedOn: 'Verificato il {date}',
@@ -417,5 +419,17 @@ export default {
     nextPage: 'Pagina successiva',
     pageOf: 'Pagina {page} di {total}',
     noFieldDefs: 'Nessun campo ancora definito per questa categoria — aggiungine da Impostazioni fiscali.'
+  },
+
+  summary: {
+    title: 'Riepilogo fiscale',
+    subtitle: '{name} — anno fiscale {year}',
+    backToCase: 'Torna alla pratica',
+    sectionBase: 'Dati anagrafici',
+    sectionIncome: 'Redditi',
+    sectionDeductions: 'Deduzioni',
+    sectionWealth: 'Patrimonio',
+    sectionOther: 'Altro',
+    noData: 'Nessun documento categorizzato ancora per questo anno fiscale.'
   }
 }

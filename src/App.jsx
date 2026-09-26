@@ -15,6 +15,7 @@ import Pricing from './pages/Pricing'
 import SpecialistHome from './pages/SpecialistHome'
 import SpecialistClient from './pages/SpecialistClient'
 import TaxSettings from './pages/TaxSettings'
+import TaxSummary from './pages/TaxSummary'
 import Account from './pages/Account'
 import NotFound from './pages/NotFound'
 
@@ -71,6 +72,14 @@ export default function App() {
         element={
           <Protected>
             <CasePage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/year/:caseId/summary"
+        element={
+          <Protected staffOnly>
+            <TaxSummary />
           </Protected>
         }
       />

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, ChevronDown, ChevronUp, FileCheck2, FolderOpen, Info, Mail, MessageSquare, Save,
-  ShieldCheck, Upload
+  ArrowLeft, ChevronDown, ChevronUp, ClipboardList, FileCheck2, FolderOpen, Info, Mail, MessageSquare,
+  Save, ShieldCheck, Upload
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import StatusStepper from '../components/StatusStepper'
@@ -240,7 +240,15 @@ export default function CasePage() {
               {t('case.title', { year: caseRow.tax_year })}
             </h1>
           </div>
-          <StatusBadge status={caseRow.status} />
+          <div className="flex items-center gap-2">
+            {isStaff ? (
+              <Link to={`/year/${caseId}/summary`} className="btn-secondary btn-sm">
+                <ClipboardList size={15} aria-hidden="true" />
+                {t('case.taxSummary')}
+              </Link>
+            ) : null}
+            <StatusBadge status={caseRow.status} />
+          </div>
         </div>
 
         <div className="mt-6 max-w-3xl">
