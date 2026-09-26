@@ -4,7 +4,9 @@
 // The method signatures are identical to those of the Supabase layer.
 // ---------------------------------------------------------------------------
 import { currentTaxYear } from '../config'
-import { CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES, PRICING_ITEMS } from '../demoSeed'
+import {
+  CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES, PRICING_ITEMS, TAX_PARAMETERS
+} from '../demoSeed'
 
 const KEY = 'hornung.demo.v2'
 const blobs = new Map() // document id -> object URL (this session only)
@@ -220,7 +222,8 @@ function seed() {
     events,
     extracted,
     fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS)),
-    extractedDocumentFields
+    extractedDocumentFields,
+    taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS))
   }
 }
 
@@ -236,6 +239,8 @@ function load() {
       // no sample values to backfill here, an empty list just means the
       // specialist starts from a blank sheet for already-existing documents.
       parsed.extractedDocumentFields ||= []
+      // Same for sessions started before "Tax parameters" existed.
+      parsed.taxParameters ||= JSON.parse(JSON.stringify(TAX_PARAMETERS))
       return parsed
     }
   } catch {
@@ -614,6 +619,42 @@ export const demoApi = {
       s.cases.filter((c) => c.client_id === clientId && c.tax_year === Number(taxYear)).map((c) => c.id)
     )
     return wait(s.documents.filter((d) => caseIds.has(d.case_id)))
+  },
+
+  async listTaxParameters() {
+    const s = store()
+    return wait(
+      [...s.taxParameters].sort(
+        (a, b) =>
+          a.scope.localeCompare(b.scope) ||
+          (a.canton_code || '').localeCompare(b.canton_code || '') ||
+          b.tax_year - a.tax_year
+      )
+    )
+  },
+
+  async createTaxParameter(payload) {
+    const s = store()
+    const row = { id: uid('param'), ...payload }
+    s.taxParameters.push(row)
+    commit()
+    return wait(row)
+  },
+
+  async updateTaxParameter(id, patch) {
+    const s = store()
+    const row = s.taxParameters.find((p) => p.id === id)
+    if (!row) throw new Error('NOT_FOUND')
+    Object.assign(row, patch)
+    commit()
+    return wait(row)
+  },
+
+  async deleteTaxParameter(id) {
+    const s = store()
+    s.taxParameters = s.taxParameters.filter((p) => p.id !== id)
+    commit()
+    return wait(true)
   },
 
   async listFieldDefinitions() {

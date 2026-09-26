@@ -161,3 +161,13 @@ export const PRICING_ITEMS = [
   { code: 'svc_investments', kind: 'service', sort_order: 260, price: 0, label_en: 'Investments', label_fr: 'Investissements', label_de: 'Anlagen', label_it: 'Investimenti' },
   { code: 'svc_brokerage', kind: 'service', sort_order: 270, price: 0, label_en: 'Real estate brokerage', label_fr: 'Courtage immobilier', label_de: 'Immobilienvermittlung', label_it: 'Intermediazione immobiliare' }
 ].map((item, index) => ({ id: `price-${index}`, app_id: 'hornung_crm', active: true, ...item }))
+
+// A small representative sample (not the full real dataset, seeded in
+// supabase/migrations/20260101000013_tax_parameters_data.sql) — just enough
+// to preview the "Tax parameters" screen in demo mode.
+export const TAX_PARAMETERS = [
+  { scope: 'federal', canton_code: null, tax_year: 2026, parameter_key: 'pillar_3a_with_lpp', parameter_label: '3° pilastro a, con LPP', value_numeric: 7258, value_type: 'fixed_amount', source_url: 'https://www.admin.ch', notes: null, last_verified_at: new Date().toISOString() },
+  { scope: 'federal', canton_code: null, tax_year: 2026, parameter_key: 'pillar_3a_without_lpp', parameter_label: '3° pilastro a, senza LPP', value_numeric: 36288, value_type: 'formula', source_url: 'https://www.admin.ch', notes: "20% del reddito netto da attività lucrativa, fino a un massimo di CHF 36'288.", last_verified_at: new Date().toISOString() },
+  { scope: 'cantonal', canton_code: 'ZH', tax_year: 2026, parameter_key: 'childcare_costs', parameter_label: 'Custodia di terzi per i figli', value_numeric: 25000, value_type: 'fixed_amount', source_url: null, notes: null, last_verified_at: new Date().toISOString() },
+  { scope: 'cantonal', canton_code: 'ZH', tax_year: 2026, parameter_key: 'health_insurance_premium_single', parameter_label: 'Premio cassa malati (persona singola)', value_numeric: 2900, value_type: 'fixed_amount', source_url: null, notes: 'Persona singola — verificare per coniugati/con figli.', last_verified_at: null }
+].map((item, index) => ({ id: `param-${index}`, ...item }))

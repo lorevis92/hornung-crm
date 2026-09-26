@@ -422,6 +422,34 @@ export const supabaseApi = {
     )
   },
 
+  // Tax settings — federal/cantonal tax parameters (staff only, RLS: "tax
+  // parameters: staff only").
+  async listTaxParameters() {
+    return unwrap(
+      await supabase
+        .from('tax_parameters')
+        .select('*')
+        .order('scope', { ascending: true })
+        .order('canton_code', { ascending: true })
+        .order('tax_year', { ascending: false })
+    )
+  },
+
+  async createTaxParameter(payload) {
+    return unwrap(await supabase.from('tax_parameters').insert(payload).select().single())
+  },
+
+  async updateTaxParameter(id, patch) {
+    return unwrap(
+      await supabase.from('tax_parameters').update(patch).eq('id', id).select().single()
+    )
+  },
+
+  async deleteTaxParameter(id) {
+    unwrap(await supabase.from('tax_parameters').delete().eq('id', id))
+    return true
+  },
+
   async uploadDocument(caseId, file, meta = {}) {
     const { clientId, taxYear, direction = 'client_upload', profileId } = meta
     const path = [
