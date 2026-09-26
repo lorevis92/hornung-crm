@@ -329,6 +329,8 @@ export default {
     archive: 'Archiver',
     unarchive: 'Restaurer',
     archived: 'Archivé',
+    editClient: 'Modifier les infos',
+    editClientTitle: 'Modifier les informations du client',
     deleteClient: 'Supprimer le client',
     deleteClientConfirm: 'Supprimer ce client ?',
     deleteClientConfirmBody:
@@ -362,6 +364,35 @@ export default {
     separated: 'Séparé(e)',
     divorced: 'Divorcé(e)',
     widowed: 'Veuf / veuve'
+  },
+
+  canton: {
+    AG: 'Argovie',
+    AI: 'Appenzell Rhodes-Intérieures',
+    AR: 'Appenzell Rhodes-Extérieures',
+    BE: 'Berne',
+    BL: 'Bâle-Campagne',
+    BS: 'Bâle-Ville',
+    FR: 'Fribourg',
+    GE: 'Genève',
+    GL: 'Glaris',
+    GR: 'Grisons',
+    JU: 'Jura',
+    LU: 'Lucerne',
+    NE: 'Neuchâtel',
+    NW: 'Nidwald',
+    OW: 'Obwald',
+    SG: 'Saint-Gall',
+    SH: 'Schaffhouse',
+    SO: 'Soleure',
+    SZ: 'Schwytz',
+    TG: 'Thurgovie',
+    TI: 'Tessin',
+    UR: 'Uri',
+    VD: 'Vaud',
+    VS: 'Valais',
+    ZG: 'Zoug',
+    ZH: 'Zurich'
   },
 
   account: {

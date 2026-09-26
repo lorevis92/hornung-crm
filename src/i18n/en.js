@@ -329,6 +329,8 @@ export default {
     archive: 'Archive',
     unarchive: 'Restore',
     archived: 'Archived',
+    editClient: 'Edit info',
+    editClientTitle: 'Edit client information',
     deleteClient: 'Delete client',
     deleteClientConfirm: 'Delete this client?',
     deleteClientConfirmBody:
@@ -362,6 +364,35 @@ export default {
     separated: 'Separated',
     divorced: 'Divorced',
     widowed: 'Widowed'
+  },
+
+  canton: {
+    AG: 'Aargau',
+    AI: 'Appenzell Innerrhoden',
+    AR: 'Appenzell Ausserrhoden',
+    BE: 'Bern',
+    BL: 'Basel-Landschaft',
+    BS: 'Basel-Stadt',
+    FR: 'Fribourg',
+    GE: 'Geneva',
+    GL: 'Glarus',
+    GR: 'Graubünden',
+    JU: 'Jura',
+    LU: 'Lucerne',
+    NE: 'Neuchâtel',
+    NW: 'Nidwalden',
+    OW: 'Obwalden',
+    SG: 'St. Gallen',
+    SH: 'Schaffhausen',
+    SO: 'Solothurn',
+    SZ: 'Schwyz',
+    TG: 'Thurgau',
+    TI: 'Ticino',
+    UR: 'Uri',
+    VD: 'Vaud',
+    VS: 'Valais',
+    ZG: 'Zug',
+    ZH: 'Zurich'
   },
 
   account: {

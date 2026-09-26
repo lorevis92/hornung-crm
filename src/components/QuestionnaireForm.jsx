@@ -4,7 +4,7 @@ import { Checkbox, Field, PageLoader, Select, Spinner, TextInput, Textarea } fro
 import { useI18n } from '../i18n'
 import { useToast } from '../context/ToastContext'
 import { api } from '../lib/data'
-import { CANTONS, MARITAL_STATUSES, PERMIT_TYPES } from '../lib/constants'
+import { MARITAL_STATUSES, PERMIT_TYPES } from '../lib/constants'
 
 const emptyPerson = (type) => ({
   person_type: type,
@@ -246,16 +246,6 @@ export default function QuestionnaireForm({ clientId, readOnly = false, onSaved 
               {PERMIT_TYPES.map((p) => (
                 <option key={p} value={p}>
                   {p}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('data.f.canton')} htmlFor="canton">
-            <Select id="canton" value={details.canton || ''} onChange={setDetail('canton')} disabled={disabled}>
-              <option value="">{t('common.none')}</option>
-              {CANTONS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
                 </option>
               ))}
             </Select>

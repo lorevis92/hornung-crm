@@ -626,7 +626,7 @@ export default function TaxSettings() {
                 <option value="all">{t('taxSettings.allCantons')}</option>
                 {cantonsInUse.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {t(`canton.${c}`)} ({c})
                   </option>
                 ))}
               </Select>
@@ -829,7 +829,7 @@ export default function TaxSettings() {
                 <option value="">{t('common.none')}</option>
                 {CANTONS.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {t(`canton.${c}`)} ({c})
                   </option>
                 ))}
               </Select>

@@ -327,6 +327,8 @@ export default {
     archive: 'Archivia',
     unarchive: 'Ripristina',
     archived: 'Archiviato',
+    editClient: 'Modifica dati',
+    editClientTitle: 'Modifica dati cliente',
     deleteClient: 'Elimina cliente',
     deleteClientConfirm: 'Eliminare questo cliente?',
     deleteClientConfirmBody:
@@ -360,6 +362,35 @@ export default {
     separated: 'Separato/a',
     divorced: 'Divorziato/a',
     widowed: 'Vedovo/a'
+  },
+
+  canton: {
+    AG: 'Argovia',
+    AI: 'Appenzello Interno',
+    AR: 'Appenzello Esterno',
+    BE: 'Berna',
+    BL: 'Basilea Campagna',
+    BS: 'Basilea Città',
+    FR: 'Friburgo',
+    GE: 'Ginevra',
+    GL: 'Glarona',
+    GR: 'Grigioni',
+    JU: 'Giura',
+    LU: 'Lucerna',
+    NE: 'Neuchâtel',
+    NW: 'Nidvaldo',
+    OW: 'Obvaldo',
+    SG: 'San Gallo',
+    SH: 'Sciaffusa',
+    SO: 'Soletta',
+    SZ: 'Svitto',
+    TG: 'Turgovia',
+    TI: 'Ticino',
+    UR: 'Uri',
+    VD: 'Vaud',
+    VS: 'Vallese',
+    ZG: 'Zugo',
+    ZH: 'Zurigo'
   },
 
   account: {

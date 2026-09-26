@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, ArrowRight, Archive, CalendarPlus, Mail, Phone, RefreshCw, Save, FolderOpen, Trash2
+  ArrowLeft, ArrowRight, Archive, CalendarPlus, Mail, Pencil, Phone, RefreshCw, Save, FolderOpen, Trash2
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
 import QuestionnaireForm from '../components/QuestionnaireForm'
-import { EmptyState, Field, PageLoader, Select, Spinner, Textarea } from '../components/ui'
+import { EmptyState, Field, PageLoader, Select, Spinner, TextInput, Textarea } from '../components/ui'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { currentTaxYear, IS_DEMO } from '../lib/config'
+import { CANTONS, LANGUAGES } from '../lib/constants'
 import { formatDate, fullName } from '../lib/format'
 
 export default function SpecialistClient() {
@@ -30,6 +31,9 @@ export default function SpecialistClient() {
   const [resending, setResending] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deletingClient, setDeletingClient] = useState(false)
+  const [editingClient, setEditingClient] = useState(false)
+  const [editForm, setEditForm] = useState(null)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const load = useCallback(async () => {
     const [row, rows] = await Promise.all([api.getClient(clientId), api.listCases(clientId)])
@@ -98,6 +102,32 @@ export default function SpecialistClient() {
     setConfirmingDelete(false)
   }
 
+  const openEdit = () => {
+    setEditForm({
+      first_name: client.first_name || '',
+      last_name: client.last_name || '',
+      phone: client.phone || '',
+      canton: client.canton || '',
+      preferred_language: client.preferred_language || 'en'
+    })
+    setEditingClient(true)
+  }
+
+  const saveEdit = async (e) => {
+    e.preventDefault()
+    setSavingEdit(true)
+    try {
+      const row = await api.updateClient(clientId, editForm)
+      setClient((c) => ({ ...c, ...row }))
+      toast.success(t('common.saved'))
+      setEditingClient(false)
+    } catch (error) {
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   const confirmDelete = async () => {
     setDeletingClient(true)
     try {
@@ -144,12 +174,16 @@ export default function SpecialistClient() {
                   {client.phone}
                 </a>
               ) : null}
-              {client.canton ? <span>· {client.canton}</span> : null}
+              {client.canton ? <span>· {t(`canton.${client.canton}`)}</span> : null}
               <span>· {t('specialist.createdOn', { date: formatDate(client.created_at, lang) })}</span>
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className="btn-secondary btn-sm" onClick={openEdit}>
+              <Pencil size={15} aria-hidden="true" />
+              {t('specialist.editClient')}
+            </button>
             {client.status === 'invited' ? (
               <button type="button" className="btn-secondary btn-sm" onClick={resendInvite} disabled={resending}>
                 {resending ? <Spinner size={15} /> : <RefreshCw size={15} aria-hidden="true" />}
@@ -297,6 +331,84 @@ export default function SpecialistClient() {
           </>
         }
       />
+
+      <Modal
+        open={editingClient}
+        onClose={() => (savingEdit ? null : setEditingClient(false))}
+        title={t('specialist.editClientTitle')}
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => setEditingClient(false)}
+              disabled={savingEdit}
+            >
+              {t('common.cancel')}
+            </button>
+            <button type="submit" form="edit-client" className="btn-primary btn-sm" disabled={savingEdit}>
+              {savingEdit ? <Spinner size={16} /> : <Save size={16} aria-hidden="true" />}
+              {savingEdit ? t('common.saving') : t('common.save')}
+            </button>
+          </>
+        }
+      >
+        {editForm ? (
+          <form id="edit-client" onSubmit={saveEdit} className="grid gap-4 sm:grid-cols-2">
+            <Field label={t('specialist.firstName')} htmlFor="e-first" required>
+              <TextInput
+                id="e-first"
+                required
+                value={editForm.first_name}
+                onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+              />
+            </Field>
+            <Field label={t('specialist.lastName')} htmlFor="e-last" required>
+              <TextInput
+                id="e-last"
+                required
+                value={editForm.last_name}
+                onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+              />
+            </Field>
+            <Field label={t('specialist.phone')} htmlFor="e-phone" className="sm:col-span-2">
+              <TextInput
+                id="e-phone"
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+              />
+            </Field>
+            <Field label={t('specialist.canton')} htmlFor="e-canton">
+              <Select
+                id="e-canton"
+                value={editForm.canton}
+                onChange={(e) => setEditForm({ ...editForm, canton: e.target.value })}
+              >
+                <option value="">{t('common.none')}</option>
+                {CANTONS.map((c) => (
+                  <option key={c} value={c}>
+                    {t(`canton.${c}`)} ({c})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t('specialist.language')} htmlFor="e-lang">
+              <Select
+                id="e-lang"
+                value={editForm.preferred_language}
+                onChange={(e) => setEditForm({ ...editForm, preferred_language: e.target.value })}
+              >
+                {LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   )
 }
