@@ -94,6 +94,7 @@ export default {
     pricing: 'Tarifs',
     clients: 'Clients',
     taxSettings: 'Paramètres fiscaux',
+    diagnostics: 'Diagnostic',
     menu: 'Menu'
   },
 
@@ -422,6 +423,44 @@ export default {
     sendInvite: "Envoyer l'invitation",
     inviteSent: 'Invitation envoyée à {email}',
     inviteFailed: "Profil créé, mais l'e-mail d'invitation n'a pas pu être envoyé."
+  },
+
+  diagnostics: {
+    eyebrow: 'Diagnostic interne',
+    title: 'Diagnostic de calcul client',
+    subtitle: "Exactement quelles données brutes ont produit le calcul actuel d'un client — données personnelles, champs extraits de chaque document (modifications manuelles signalées) et chaque composante enregistrée.",
+    emailLabel: 'E-mail du client',
+    yearLabel: 'Année fiscale',
+    run: 'Rechercher',
+    copyAsText: 'Copier en texte',
+    copied: 'Copié dans le presse-papiers',
+    generatedAt: 'Généré le {date}',
+    sectionClient: 'Client',
+    canton: 'Canton',
+    status: 'Statut',
+    maritalStatus: 'État civil',
+    workPercentage: '% de travail',
+    dateOfBirth: 'Date de naissance',
+    sectionDocuments: 'Documents ({count})',
+    uncategorized: 'Non catégorisé',
+    handEdited: 'Modifié manuellement',
+    originalExtraction: "Extraction d'origine",
+    excluded: 'Exclu',
+    included: 'Inclus',
+    noDocuments: 'Aucun document pour ce client/cette année.',
+    sectionAggregate: 'Dernier calcul',
+    computedAt: 'Calculé le {date}',
+    noAggregate: "Aucun calcul n'a encore été effectué pour ce client/cette année.",
+    sectionComponents: 'Composantes du calcul ({count})',
+    colType: 'Type',
+    colAmount: 'Montant',
+    colStatus: 'Statut',
+    colItem: 'Élément',
+    colSource: 'Document source',
+    noComponents: 'Aucune composante enregistrée.',
+    sectionHandEdited: 'Champs modifiés manuellement ({count})',
+    verifiedOn: 'vérifié le {date}',
+    noHandEdits: "Aucun champ de ce client/cette année n'a été modifié manuellement par un spécialiste."
   },
 
   taxSettings: {

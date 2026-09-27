@@ -92,6 +92,7 @@ export default {
     pricing: 'Pricing',
     clients: 'Clients',
     taxSettings: 'Tax settings',
+    diagnostics: 'Diagnostics',
     menu: 'Menu'
   },
 
@@ -422,6 +423,44 @@ export default {
     sendInvite: 'Send invitation',
     inviteSent: 'Invitation sent to {email}',
     inviteFailed: 'Profile created, but the invitation e-mail could not be sent.'
+  },
+
+  diagnostics: {
+    eyebrow: 'Staff diagnostics',
+    title: 'Client calculation diagnostics',
+    subtitle: 'Exactly what raw data produced a client’s current calculation — client demographics, every document’s extracted fields (flagging hand edits), and every persisted component.',
+    emailLabel: 'Client e-mail',
+    yearLabel: 'Tax year',
+    run: 'Run',
+    copyAsText: 'Copy as text',
+    copied: 'Copied to clipboard',
+    generatedAt: 'Generated {date}',
+    sectionClient: 'Client',
+    canton: 'Canton',
+    status: 'Status',
+    maritalStatus: 'Marital status',
+    workPercentage: 'Work %',
+    dateOfBirth: 'Date of birth',
+    sectionDocuments: 'Documents ({count})',
+    uncategorized: 'Uncategorized',
+    handEdited: 'Hand-edited',
+    originalExtraction: 'Original extraction',
+    excluded: 'Excluded',
+    included: 'Included',
+    noDocuments: 'No documents for this client/year.',
+    sectionAggregate: 'Last calculation',
+    computedAt: 'Computed {date}',
+    noAggregate: 'No calculation has been run yet for this client/year.',
+    sectionComponents: 'Aggregate components ({count})',
+    colType: 'Type',
+    colAmount: 'Amount',
+    colStatus: 'Status',
+    colItem: 'Item',
+    colSource: 'Source document',
+    noComponents: 'No components recorded.',
+    sectionHandEdited: 'Hand-edited fields ({count})',
+    verifiedOn: 'verified {date}',
+    noHandEdits: 'No field on this client/year has been hand-edited by a specialist.'
   },
 
   taxSettings: {

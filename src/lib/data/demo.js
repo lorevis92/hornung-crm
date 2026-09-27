@@ -919,6 +919,109 @@ export const demoApi = {
     return wait({ aggregate, components })
   },
 
+  // Demo-mode mirror of api/diagnose-client.js — same output shape, so the
+  // admin diagnostics page renders identically against demo data.
+  async diagnoseClient({ email, clientId, taxYear }) {
+    const s = store()
+    const year = Number(taxYear)
+    const client = clientId
+      ? s.clients.find((c) => c.id === clientId)
+      : s.clients.find((c) => (c.email || '').toLowerCase() === (email || '').trim().toLowerCase())
+    if (!client) {
+      const err = new Error('No client matches that email/id.')
+      err.code = 'CLIENT_NOT_FOUND'
+      throw err
+    }
+
+    const persons = s.persons.filter((p) => p.client_id === client.id)
+    const children = s.children.filter((c) => c.client_id === client.id)
+    const documents = s.documents.filter((d) => d.case_id && s.cases.some((cs) => cs.id === d.case_id && cs.client_id === client.id && cs.tax_year === year))
+    const documentIds = new Set(documents.map((d) => d.id))
+    const fields = s.extractedDocumentFields.filter((f) => documentIds.has(f.document_id))
+    const fieldsByDoc = {}
+    for (const f of fields) (fieldsByDoc[f.document_id] ||= []).push(f)
+    const categoryLabel = Object.fromEntries(DOCUMENT_CATEGORIES.map((c) => [c.code, c.label_en]))
+    const fieldLabelMap = Object.fromEntries(
+      s.fieldDefinitions.map((f) => [`${f.category_code}:${f.field_key}`, f.field_label])
+    )
+
+    const documentsOut = documents.map((doc) => ({
+      documentId: doc.id,
+      fileName: doc.file_name,
+      categoryCode: doc.category_code,
+      categoryLabel: doc.category_code ? categoryLabel[doc.category_code] || doc.category_code : null,
+      status: doc.status || 'uploaded',
+      uploadedAt: doc.created_at,
+      processedAt: doc.processed_at || null,
+      fields: (fieldsByDoc[doc.id] || []).map((f) => ({
+        fieldKey: f.field_key,
+        fieldLabel: doc.category_code ? fieldLabelMap[`${doc.category_code}:${f.field_key}`] || f.field_key : f.field_key,
+        value: f.field_value,
+        confidence: f.confidence,
+        includedInCalculation: f.included_in_calculation !== false,
+        handEditedBySpecialist: f.verified_by_specialist === true,
+        verifiedAt: f.verified_at,
+        verifiedBy: f.verified_by
+      }))
+    }))
+
+    const aggregate = s.taxAggregates.find((a) => a.client_id === client.id && a.tax_year === year)
+    const components = aggregate ? s.taxAggregateComponents.filter((c) => c.aggregate_id === aggregate.id) : []
+
+    const componentsOut = components.map((c) => ({
+      documentId: c.document_id,
+      sourceDocument: documentsOut.find((d) => d.documentId === c.document_id)?.fileName || null,
+      componentType: c.component_type,
+      sectionKey: c.section_key,
+      amount: c.amount,
+      includedInTotal: !c.needs_verification,
+      needsVerification: c.needs_verification,
+      currencyCode: c.currency_code,
+      fieldLabel: c.field_label,
+      sourceLabel: c.source_label,
+      label: c.label
+    }))
+
+    return wait({
+      generatedAt: new Date().toISOString(),
+      client: {
+        id: client.id,
+        email: client.email,
+        firstName: client.first_name,
+        lastName: client.last_name,
+        canton: client.canton,
+        status: client.status
+      },
+      persons: persons.map((p) => ({
+        personType: p.person_type,
+        firstName: p.first_name,
+        lastName: p.last_name,
+        maritalStatus: p.marital_status,
+        dateOfBirth: p.date_of_birth,
+        workPercentage: p.work_percentage
+      })),
+      children: children.map((c) => ({ fullName: c.full_name, dateOfBirth: c.date_of_birth, untilWhen: c.until_when })),
+      taxYear: year,
+      documents: documentsOut,
+      aggregate: aggregate
+        ? {
+            computedAt: aggregate.computed_at,
+            status: aggregate.status,
+            taxableIncomeCantonal: aggregate.taxable_income_cantonal,
+            taxableWealthCantonal: aggregate.taxable_wealth_cantonal,
+            taxableIncomeFederal: aggregate.taxable_income_federal,
+            uncertainParameters: aggregate.uncertain_parameters || []
+          }
+        : null,
+      components: componentsOut,
+      handEditedFields: documentsOut.flatMap((doc) =>
+        doc.fields
+          .filter((f) => f.handEditedBySpecialist)
+          .map((f) => ({ document: doc.fileName, category: doc.categoryLabel, field: f.fieldLabel, value: f.value, verifiedAt: f.verifiedAt }))
+      )
+    })
+  },
+
   async listFieldDefinitions() {
     const s = store()
     return wait(

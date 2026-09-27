@@ -93,6 +93,7 @@ export default {
     pricing: 'Tariffe',
     clients: 'Clienti',
     taxSettings: 'Impostazioni fiscali',
+    diagnostics: 'Diagnostica',
     menu: 'Menu'
   },
 
@@ -420,6 +421,44 @@ export default {
     sendInvite: 'Invia invito',
     inviteSent: 'Invito inviato a {email}',
     inviteFailed: 'Profilo creato, ma non è stato possibile inviare l\'e-mail di invito.'
+  },
+
+  diagnostics: {
+    eyebrow: 'Diagnostica staff',
+    title: 'Diagnostica calcolo cliente',
+    subtitle: 'Esattamente quali dati grezzi hanno prodotto il calcolo attuale di un cliente — dati anagrafici, campi estratti di ogni documento (con le modifiche manuali evidenziate) e ogni riga persistita del calcolo.',
+    emailLabel: 'E-mail cliente',
+    yearLabel: 'Anno fiscale',
+    run: 'Cerca',
+    copyAsText: 'Copia come testo',
+    copied: 'Copiato negli appunti',
+    generatedAt: 'Generato il {date}',
+    sectionClient: 'Cliente',
+    canton: 'Cantone',
+    status: 'Stato',
+    maritalStatus: 'Stato civile',
+    workPercentage: '% lavoro',
+    dateOfBirth: 'Data di nascita',
+    sectionDocuments: 'Documenti ({count})',
+    uncategorized: 'Non categorizzato',
+    handEdited: 'Modificato a mano',
+    originalExtraction: 'Estrazione originale',
+    excluded: 'Escluso',
+    included: 'Incluso',
+    noDocuments: 'Nessun documento per questo cliente/anno.',
+    sectionAggregate: 'Ultimo calcolo',
+    computedAt: 'Calcolato il {date}',
+    noAggregate: 'Nessun calcolo ancora eseguito per questo cliente/anno.',
+    sectionComponents: 'Componenti del calcolo ({count})',
+    colType: 'Tipo',
+    colAmount: 'Importo',
+    colStatus: 'Stato',
+    colItem: 'Voce',
+    colSource: 'Documento di origine',
+    noComponents: 'Nessuna componente registrata.',
+    sectionHandEdited: 'Campi modificati a mano ({count})',
+    verifiedOn: 'verificato il {date}',
+    noHandEdits: 'Nessun campo di questo cliente/anno è stato modificato a mano da uno specialista.'
   },
 
   taxSettings: {

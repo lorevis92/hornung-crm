@@ -476,6 +476,10 @@ export const supabaseApi = {
     return callApi('/api/calculate-aggregates', { clientId, taxYear: Number(taxYear), lang })
   },
 
+  async diagnoseClient({ email, clientId, taxYear }) {
+    return callApi('/api/diagnose-client', { email, clientId, taxYear: Number(taxYear) })
+  },
+
   async getTaxAggregate(clientId, taxYear) {
     const { data: aggregate, error } = await supabase
       .from('tax_aggregates')

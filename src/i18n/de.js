@@ -94,6 +94,7 @@ export default {
     pricing: 'Tarife',
     clients: 'Kunden',
     taxSettings: 'Steuereinstellungen',
+    diagnostics: 'Diagnose',
     menu: 'Menü'
   },
 
@@ -421,6 +422,44 @@ export default {
     sendInvite: 'Einladung senden',
     inviteSent: 'Einladung an {email} gesendet',
     inviteFailed: 'Profil erstellt, aber die Einladungs-E-Mail konnte nicht gesendet werden.'
+  },
+
+  diagnostics: {
+    eyebrow: 'Interne Diagnose',
+    title: 'Berechnungsdiagnose Kunde',
+    subtitle: 'Genau welche Rohdaten die aktuelle Berechnung eines Kunden ergeben haben — Personendaten, extrahierte Felder jedes Dokuments (manuelle Änderungen markiert) und jede gespeicherte Berechnungskomponente.',
+    emailLabel: 'Kunden-E-Mail',
+    yearLabel: 'Steuerjahr',
+    run: 'Suchen',
+    copyAsText: 'Als Text kopieren',
+    copied: 'In die Zwischenablage kopiert',
+    generatedAt: 'Erstellt am {date}',
+    sectionClient: 'Kunde',
+    canton: 'Kanton',
+    status: 'Status',
+    maritalStatus: 'Zivilstand',
+    workPercentage: 'Arbeitspensum %',
+    dateOfBirth: 'Geburtsdatum',
+    sectionDocuments: 'Dokumente ({count})',
+    uncategorized: 'Nicht kategorisiert',
+    handEdited: 'Manuell bearbeitet',
+    originalExtraction: 'Ursprüngliche Extraktion',
+    excluded: 'Ausgeschlossen',
+    included: 'Eingeschlossen',
+    noDocuments: 'Keine Dokumente für diesen Kunden/dieses Jahr.',
+    sectionAggregate: 'Letzte Berechnung',
+    computedAt: 'Berechnet am {date}',
+    noAggregate: 'Für diesen Kunden/dieses Jahr wurde noch keine Berechnung durchgeführt.',
+    sectionComponents: 'Berechnungskomponenten ({count})',
+    colType: 'Typ',
+    colAmount: 'Betrag',
+    colStatus: 'Status',
+    colItem: 'Position',
+    colSource: 'Quelldokument',
+    noComponents: 'Keine Komponenten erfasst.',
+    sectionHandEdited: 'Manuell bearbeitete Felder ({count})',
+    verifiedOn: 'geprüft am {date}',
+    noHandEdits: 'Kein Feld dieses Kunden/dieses Jahres wurde von einem Spezialisten manuell bearbeitet.'
   },
 
   taxSettings: {
