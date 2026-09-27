@@ -92,6 +92,7 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
         taxable_income_cantonal: result.taxableIncomeCantonal,
         taxable_wealth_cantonal: result.taxableWealthCantonal,
         taxable_income_federal: result.taxableIncomeFederal,
+        uncertain_parameters: result.uncertainParameterNotes || [],
         status: 'ready_for_simulation',
         computed_at: new Date().toISOString()
       },

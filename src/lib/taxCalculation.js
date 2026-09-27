@@ -188,10 +188,15 @@ const CHILD_BRACKET_FAMILY = {
   '16_plus': 'child_deduction_16_plus'
 }
 
-function resolveInsurancePremiumCap(parameters, canton, isMarried, qualifyingChildCount) {
-  const baseParam = findParam(parameters, isMarried ? 'insurance_premium_cap_married' : 'insurance_premium_cap_single', canton)
+// A parameter row flagged uncertain by an earlier round's "da confermare"
+// convention — free text on tax_parameters.notes, not a dedicated column.
+// Reused here rather than adding a second, parallel uncertainty flag.
+const UNCERTAIN_PARAM_PATTERN = /da confermare/i
+
+function resolveInsurancePremiumCap(isMarried, qualifyingChildCount, useParam) {
+  const baseParam = useParam(isMarried ? 'insurance_premium_cap_married' : 'insurance_premium_cap_single')
   if (!baseParam) return null
-  const incrementParam = findParam(parameters, 'insurance_premium_child_increment', canton)
+  const incrementParam = qualifyingChildCount > 0 ? useParam('insurance_premium_child_increment') : null
   const cap = (baseParam.value_numeric || 0) + qualifyingChildCount * (incrementParam?.value_numeric || 0)
   return { cap, baseParam }
 }
@@ -277,6 +282,20 @@ export function computeTaxAggregate({
   const warnings = []
   const entries = []
 
+  // Every tax_parameters row actually used to resolve this calculation,
+  // deduped by id — read at the end to surface the ones flagged "da
+  // confermare", for the proactive "things to verify" popup. canton is
+  // always the resolved outer value here, never a different one, so the
+  // wrapper only needs the family name.
+  const uncertainParamsById = new Map()
+  const useParam = (family) => {
+    const param = findParam(parameters, family, canton)
+    if (param && UNCERTAIN_PARAM_PATTERN.test(param.notes || '')) {
+      uncertainParamsById.set(param.id, param)
+    }
+    return param
+  }
+
   // Extracted values feed the calculation as soon as they exist — there is
   // no "confirmed by the specialist" gate. The specialist can still
   // exclude a field (included_in_calculation) or correct/add a value at
@@ -348,7 +367,7 @@ export function computeTaxAggregate({
 
     // 6. Donations below the statutory minimum aren't deductible at all.
     if (!needsVerification && rule.cap_parameter_family === DONATION_CAP_FAMILY) {
-      const minParam = findParam(parameters, DONATION_MIN_FAMILY, canton)
+      const minParam = useParam(DONATION_MIN_FAMILY)
       if (minParam && rawAmount < (minParam.value_numeric || 0)) {
         needsVerification = true
         note = `below the CHF ${minParam.value_numeric} minimum for a deductible donation`
@@ -419,7 +438,7 @@ export function computeTaxAggregate({
   // independently use the full allowance instead of sharing one.
   const insuranceEntries = entries.filter((e) => !e.needsVerification && e.capFamily === INSURANCE_POOL_FAMILY)
   if (insuranceEntries.length) {
-    const resolved = resolveInsurancePremiumCap(parameters, canton, isMarried, qualifyingChildren.length)
+    const resolved = resolveInsurancePremiumCap(isMarried, qualifyingChildren.length, useParam)
     if (!resolved) {
       for (const entry of insuranceEntries) {
         if (entry.verifiedBySpecialist) {
@@ -451,7 +470,7 @@ export function computeTaxAggregate({
     // below would only overwrite that reason with an unrelated one.
     if (entry.needsVerification) continue
     if (!entry.capFamily) continue
-    const param = findParam(parameters, entry.capFamily, canton)
+    const param = useParam(entry.capFamily)
     if (!param) {
       // No tax parameter to check this amount against — an unverified
       // figure can't count in the total as if it had been. Excluded by
@@ -495,11 +514,11 @@ export function computeTaxAggregate({
     (e) => e.categoryCode === 'salary_statement' && e.fieldKey === 'net_salary' && !e.needsVerification
   )
   if (netSalaryEntries.length) {
-    const pctParam = findParam(parameters, 'professional_expenses_pct', canton)
+    const pctParam = useParam('professional_expenses_pct')
     if (pctParam) {
       const totalNetSalary = netSalaryEntries.reduce((sum, e) => sum + e.rawAmount, 0)
-      const minParam = findParam(parameters, 'professional_expenses_min', canton)
-      const maxParam = findParam(parameters, 'professional_expenses_max', canton)
+      const minParam = useParam('professional_expenses_min')
+      const maxParam = useParam('professional_expenses_max')
       let amount = (totalNetSalary * (pctParam.value_numeric || 0)) / 100
       if (minParam) amount = Math.max(amount, minParam.value_numeric || 0)
       if (maxParam) amount = Math.min(amount, maxParam.value_numeric || 0)
@@ -561,8 +580,8 @@ export function computeTaxAggregate({
   } else {
     for (const { child, resolved } of qualifyingChildren) {
       const family = CHILD_BRACKET_FAMILY[resolved.bracket]
-      let param = findParam(parameters, family, canton)
-      if (!param) param = findParam(parameters, 'child_deduction_flat', canton)
+      let param = useParam(family)
+      if (!param) param = useParam('child_deduction_flat')
       if (!param) continue
       entries.push(
         makeSyntheticEntry({
@@ -586,7 +605,7 @@ export function computeTaxAggregate({
         'Vallese: la deduzione per coniugati è uno sconto d\'imposta del 35% (max CHF 4\'900) applicato sull\'imposta finale, non una deduzione sulla base imponibile — non calcolato da questa app.'
       )
     } else {
-      const marriedParam = findParam(parameters, 'married_deduction_flat', canton)
+      const marriedParam = useParam('married_deduction_flat')
       if (marriedParam) {
         entries.push(
           makeSyntheticEntry({
@@ -628,8 +647,8 @@ export function computeTaxAggregate({
   // base amount by marital status, plus a per-child increment for the
   // cantons that have one, using the same qualifying-children list as the
   // income-side child deduction above.
-  const wealthExemptParam = findParam(parameters, isMarried ? 'wealth_exempt_married' : 'wealth_exempt_single', canton)
-  const wealthExemptChildParam = findParam(parameters, 'wealth_exempt_child', canton)
+  const wealthExemptParam = useParam(isMarried ? 'wealth_exempt_married' : 'wealth_exempt_single')
+  const wealthExemptChildParam = qualifyingChildren.length ? useParam('wealth_exempt_child') : null
   const wealthExemptChildTotal = (wealthExemptChildParam?.value_numeric || 0) * qualifyingChildren.length
   const wealthExemptTotal = (wealthExemptParam?.value_numeric || 0) + wealthExemptChildTotal
   if (wealthExemptTotal) {
@@ -708,12 +727,21 @@ export function computeTaxAggregate({
     }
   })
 
+  // Ready-to-display lines for the proactive "things to verify" popup —
+  // every tax_parameters row this calculation actually relied on that's
+  // still flagged "da confermare" on its own notes.
+  const uncertainParameterNotes = Array.from(uncertainParamsById.values()).map((param) => {
+    const jurisdiction = param.scope === 'cantonal' ? param.canton_code : 'federale'
+    return `${param.parameter_label || param.parameter_key} (${jurisdiction}): valore non confermato su fonte primaria`
+  })
+
   return {
     taxableIncomeCantonal,
     taxableWealthCantonal,
     taxableIncomeFederal,
     components,
     warnings,
+    uncertainParameterNotes,
     cantonMissing: !canton
   }
 }

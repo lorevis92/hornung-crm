@@ -5,6 +5,7 @@ import {
   AlertTriangle, ArrowLeft, Calculator, FileDown, FolderOpen, Info, Landmark, PiggyBank, Receipt
 } from 'lucide-react'
 import ExtractedFieldRow from '../components/ExtractedFieldRow'
+import Modal from '../components/Modal'
 import { EmptyState, PageLoader, Spinner, Stat } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -156,6 +157,61 @@ export default function TaxSummary() {
     () => (result?.components || []).filter((c) => c.needs_verification),
     [result]
   )
+
+  // Proactive "things to verify" index — three sources, all already
+  // computed elsewhere, never re-derived here:
+  //  - tax_parameters rows flagged "da confermare" that this calculation
+  //    actually used (src/lib/taxCalculation.js, persisted on the
+  //    aggregate as uncertain_parameters);
+  //  - fields excluded because no matching tax parameter was found
+  //    (needs_verification + the existing "missing tax parameter" note);
+  //  - items excluded as separately taxed or as unconverted foreign
+  //    currency (needs_verification + the existing note text).
+  const uncertainItems = useMemo(() => {
+    if (!result) return []
+    const paramItems = result.aggregate?.uncertain_parameters || []
+    const flagged = (result.components || []).filter((c) => c.needs_verification)
+    const missingParamItems = flagged
+      .filter((c) => (c.field_label || '').includes('missing tax parameter'))
+      .map((c) => c.field_label)
+    const separateOrForeignItems = flagged
+      .filter((c) => /separately taxed|foreign currency/.test(c.field_label || ''))
+      .map((c) => c.field_label)
+    return [...paramItems, ...missingParamItems, ...separateOrForeignItems]
+  }, [result])
+
+  // Stable signature for "has the set of uncertain items changed since the
+  // specialist last dismissed the popup for this exact calculation" — a
+  // sorted join is enough, no real hashing needed for an equality check.
+  const uncertaintySignature = useMemo(() => uncertainItems.slice().sort().join('|'), [uncertainItems])
+
+  const [uncertaintyModalOpen, setUncertaintyModalOpen] = useState(false)
+  const uncertaintySeenKey = caseRow ? `hornung.uncertaintySeen.${caseRow.client_id}.${caseRow.tax_year}` : null
+
+  useEffect(() => {
+    if (!uncertaintySeenKey || !uncertainItems.length) {
+      setUncertaintyModalOpen(false)
+      return
+    }
+    let seen = null
+    try {
+      seen = localStorage.getItem(uncertaintySeenKey)
+    } catch {
+      /* private mode — always show */
+    }
+    setUncertaintyModalOpen(seen !== uncertaintySignature)
+  }, [uncertaintySeenKey, uncertaintySignature, uncertainItems.length])
+
+  const dismissUncertaintyModal = () => {
+    if (uncertaintySeenKey) {
+      try {
+        localStorage.setItem(uncertaintySeenKey, uncertaintySignature)
+      } catch {
+        /* private mode — nothing to persist, the popup will just show again next time */
+      }
+    }
+    setUncertaintyModalOpen(false)
+  }
 
   // "Document data" reference — every verified field, grouped by document,
   // regardless of whether it feeds the calculation above.
@@ -426,12 +482,47 @@ export default function TaxSummary() {
               <p className="text-[13px] text-ink-400">
                 {t('summary.computedOn', { date: formatDateTime(result.aggregate.computed_at, lang) })}
               </p>
+              {uncertainItems.length ? (
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                  onClick={() => setUncertaintyModalOpen(true)}
+                >
+                  <AlertTriangle size={15} aria-hidden="true" />
+                  {t('summary.uncertaintyBadge', { count: uncertainItems.length })}
+                </button>
+              ) : null}
               <button type="button" className="btn-secondary btn-sm" onClick={downloadPdf} disabled={exportingPdf}>
                 {exportingPdf ? <Spinner size={15} /> : <FileDown size={15} aria-hidden="true" />}
                 {t('summary.generatePdf')}
               </button>
             </div>
           </div>
+
+          <Modal
+            open={uncertaintyModalOpen}
+            onClose={dismissUncertaintyModal}
+            title={t('summary.uncertaintyModalTitle')}
+            description={t('summary.uncertaintyModalHelp')}
+            size="md"
+            footer={
+              <button type="button" className="btn-primary btn-sm" onClick={dismissUncertaintyModal}>
+                {t('summary.uncertaintyModalClose')}
+              </button>
+            }
+          >
+            <ul className="space-y-2">
+              {uncertainItems.map((item, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-[13.5px] text-amber-900"
+                >
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </Modal>
 
           {result.cantonMissing ? (
             <div className="rounded-xl bg-amber-50 px-4 py-3 text-[14px] text-amber-900">
