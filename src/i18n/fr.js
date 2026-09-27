@@ -527,6 +527,9 @@ export default {
     documentDataTitle: 'Données du document',
     documentDataHelp: "Toutes les valeurs vérifiées, à titre de référence — elles ne font pas toutes nécessairement partie du calcul ci-dessus.",
 
+    needsVerificationTitle: 'À vérifier',
+    needsVerificationHelp: "Non vérifié — paramètre fiscal manquant, exclu du calcul. Confirmez ou modifiez le champ pour l'inclure quand même.",
+
     taxEstimateTitle: "Estimation des impôts",
     taxEstimatePlaceholder: "L'intégration avec le service d'estimation des impôts arrive prochainement — cette section n'est pas encore disponible.",
 

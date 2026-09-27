@@ -28,7 +28,7 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
   if (documentIds.length) {
     const { data, error } = await admin
       .from('extracted_document_fields')
-      .select('document_id, field_key, field_value, included_in_calculation')
+      .select('document_id, field_key, field_value, included_in_calculation, verified_by_specialist')
       .in('document_id', documentIds)
     if (error) throw error
     extractedFields = data || []
@@ -106,6 +106,7 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
           component_type: c.componentType,
           section_key: c.sectionKey,
           amount: c.amount,
+          needs_verification: c.needsVerification || false,
           label: c.label,
           field_label: c.fieldLabel,
           source_label: c.sourceLabel

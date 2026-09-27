@@ -142,9 +142,20 @@ export default function TaxSummary() {
     return CALC_SECTION_KEYS.map((key) => ({
       key,
       titleKey: SECTIONS.find((s) => s.key === key)?.titleKey,
-      components: result.components.filter((c) => c.section_key === key)
+      components: result.components.filter((c) => c.section_key === key && !c.needs_verification)
     })).filter((s) => s.components.length)
   }, [result])
+
+  // Capped entries whose tax parameter couldn't be found for this client's
+  // canton/year — excluded from the totals above (not part of the
+  // reconciliation the section above guarantees), listed separately so the
+  // specialist can see what's missing and decide whether to include it
+  // anyway (editing/confirming the field, or its include toggle, is what
+  // makes it count — see src/lib/taxCalculation.js).
+  const needsVerificationComponents = useMemo(
+    () => (result?.components || []).filter((c) => c.needs_verification),
+    [result]
+  )
 
   // "Document data" reference — every verified field, grouped by document,
   // regardless of whether it feeds the calculation above.
@@ -207,21 +218,30 @@ export default function TaxSummary() {
     const key = fieldKey(field)
     setTogglingKey(key)
     try {
+      // Toggling include/exclude is itself an explicit, per-field
+      // specialist action — same as editing the value — so it also counts
+      // as "this field has been reviewed" for the tax-parameter-missing
+      // safeguard below.
       const saved = await api.saveExtractedFieldForDocument(field.document_id, {
         field_key: field.field_key,
         field_value: field.field_value,
         confidence: field.confidence,
         source_quote: field.source_quote,
         source_page: field.source_page,
-        verified_by_specialist: field.verified_by_specialist,
-        verified_at: field.verified_at,
-        verified_by: field.verified_by,
+        verified_by_specialist: true,
+        verified_at: new Date().toISOString(),
+        verified_by: profile?.id || field.verified_by,
         included_in_calculation: field.included_in_calculation === false
       })
       setFields((list) =>
         list.map((f) =>
           f.document_id === field.document_id && f.field_key === field.field_key
-            ? { ...f, included_in_calculation: saved.included_in_calculation }
+            ? {
+                ...f,
+                included_in_calculation: saved.included_in_calculation,
+                verified_by_specialist: true,
+                verified_at: saved.verified_at || new Date().toISOString()
+              }
             : f
         )
       )
@@ -478,6 +498,38 @@ export default function TaxSummary() {
                   </div>
                 </div>
               ))}
+            </div>
+          ) : null}
+
+          {needsVerificationComponents.length ? (
+            <div className="space-y-2">
+              <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.needsVerificationTitle')}</h3>
+              <p className="text-[13px] text-ink-400">{t('summary.needsVerificationHelp')}</p>
+              <div className="overflow-x-auto rounded-xl border border-amber-200">
+                <table className="w-full text-[13.5px]">
+                  <thead className="bg-amber-50 text-left text-[11.5px] font-medium uppercase tracking-wide text-amber-800">
+                    <tr>
+                      <th className="px-4 py-2.5">{t('summary.colItem')}</th>
+                      <th className="px-4 py-2.5 text-right">{t('summary.colAmount')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-100 bg-amber-50/40">
+                    {needsVerificationComponents.map((c) => (
+                      <tr key={c.id}>
+                        <td className="px-4 py-2.5 text-amber-900">
+                          <span className="flex items-center gap-1.5">
+                            <AlertTriangle size={13} className="shrink-0" aria-hidden="true" />
+                            {c.field_label || c.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-medium tabular-nums text-amber-900">
+                          {formatChfSwiss(Math.abs(c.amount))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 

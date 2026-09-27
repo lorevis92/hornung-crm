@@ -889,6 +889,7 @@ export const demoApi = {
       component_type: c.componentType,
       section_key: c.sectionKey,
       amount: c.amount,
+      needs_verification: c.needsVerification || false,
       label: c.label,
       field_label: c.fieldLabel,
       source_label: c.sourceLabel

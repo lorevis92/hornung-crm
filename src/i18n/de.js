@@ -526,6 +526,9 @@ export default {
     documentDataTitle: 'Dokumentdaten',
     documentDataHelp: 'Alle verifizierten Werte, zur Referenz — nicht alle davon fliessen zwingend in die obige Berechnung ein.',
 
+    needsVerificationTitle: 'Zu überprüfen',
+    needsVerificationHelp: 'Nicht überprüft — Steuerparameter fehlt, von der Berechnung ausgeschlossen. Feld bestätigen oder bearbeiten, um es trotzdem einzubeziehen.',
+
     taxEstimateTitle: 'Steuerschätzung',
     taxEstimatePlaceholder: 'Die Integration mit dem Steuerschätzungsdienst folgt in Kürze — dieser Bereich ist noch nicht verfügbar.',
 

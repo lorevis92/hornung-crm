@@ -10,6 +10,9 @@ const INK = [39, 37, 34]
 const MUTED = [140, 136, 128]
 const PANEL = [250, 248, 244]
 const LINE = [232, 226, 214]
+const AMBER_TEXT = [146, 96, 12]
+const AMBER_PANEL = [253, 246, 232]
+const AMBER_LINE = [246, 218, 168]
 
 // Sections included in the client-facing document, in order — "base"/"other"
 // stay screen-only (administrative fields, not part of the handed-over
@@ -105,7 +108,7 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
   const componentsBySection = CALC_SECTIONS.map(({ key, titleKey }) => ({
     key,
     titleKey,
-    components: (result.components || []).filter((c) => c.section_key === key)
+    components: (result.components || []).filter((c) => c.section_key === key && !c.needs_verification)
   })).filter((s) => s.components.length)
 
   if (componentsBySection.length) {
@@ -139,6 +142,34 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
       y = doc.lastAutoTable.finalY + 8
     }
     y += 4
+  }
+
+  // ------------------------------------------------------ needs verification --
+  const needsVerificationComponents = (result.components || []).filter((c) => c.needs_verification)
+
+  if (needsVerificationComponents.length) {
+    ensureSpace(20)
+    doc.setFontSize(14)
+    doc.setTextColor(...INK)
+    doc.text(t('summary.needsVerificationTitle'), marginX, y)
+    y += 6
+    doc.setFontSize(8.5)
+    doc.setTextColor(...MUTED)
+    doc.text(t('summary.needsVerificationHelp'), marginX, y, { maxWidth: pageWidth - marginX * 2 })
+    y += 8
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [[t('summary.colItem'), t('summary.colAmount')]],
+      body: needsVerificationComponents.map((c) => [c.field_label || c.label, formatChfSwiss(Math.abs(c.amount))]),
+      columnStyles: { 1: { halign: 'right' } },
+      styles: { fontSize: 9, cellPadding: 2.5, textColor: AMBER_TEXT, fillColor: AMBER_PANEL },
+      headStyles: { fillColor: AMBER_LINE, textColor: AMBER_TEXT, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: AMBER_PANEL },
+      theme: 'grid'
+    })
+    y = doc.lastAutoTable.finalY + 10
   }
 
   // ------------------------------------------------------- document data ---

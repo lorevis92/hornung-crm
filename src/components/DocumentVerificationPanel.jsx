@@ -97,21 +97,30 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
   const toggleInclude = async (field) => {
     setTogglingKey(field.field_key)
     try {
+      // Toggling include/exclude is itself an explicit, per-field
+      // specialist action — same as editing the value — so it also counts
+      // as "this field has been reviewed" for the tax-parameter-missing
+      // safeguard.
       const saved = await api.saveExtractedField(doc.id, {
         field_key: field.field_key,
         field_value: field.field_value,
         confidence: field.confidence,
         source_quote: field.source_quote,
         source_page: field.source_page,
-        verified_by_specialist: field.verified_by_specialist,
-        verified_at: field.verified_at,
-        verified_by: field.verified_by,
+        verified_by_specialist: true,
+        verified_at: new Date().toISOString(),
+        verified_by: profile?.id || field.verified_by,
         included_in_calculation: field.included_in_calculation === false
       })
       setFields((list) =>
         list.map((f) =>
           f.field_key === field.field_key
-            ? { ...f, included_in_calculation: saved.included_in_calculation }
+            ? {
+                ...f,
+                included_in_calculation: saved.included_in_calculation,
+                verified_by_specialist: true,
+                verified_at: saved.verified_at || new Date().toISOString()
+              }
             : f
         )
       )

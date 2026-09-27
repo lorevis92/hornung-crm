@@ -527,6 +527,9 @@ export default {
     documentDataTitle: 'Document data',
     documentDataHelp: 'All verified values, for reference — not all of them are necessarily part of the calculation above.',
 
+    needsVerificationTitle: 'Needs verification',
+    needsVerificationHelp: 'Not verified — missing tax parameter, excluded from calculation. Confirm or edit the field to include it anyway.',
+
     taxEstimateTitle: 'Tax estimate',
     taxEstimatePlaceholder: 'Integration with the tax estimate service is coming soon — this section is not yet available.',
 

@@ -133,9 +133,15 @@ export function computeTaxAggregate({
       fieldLabel: fieldLabelByKey[`${doc.category_code}:${field.field_key}`] || field.field_key,
       contributionType: rule.contribution_type,
       capFamily: rule.cap_parameter_family || null,
+      // Only read for the "cap parameter missing" case below — an explicit
+      // signal that a specialist has looked at this specific field (either
+      // edited/confirmed its value, or toggled its inclusion), as opposed
+      // to it sitting untouched at the AI-extraction default.
+      verifiedBySpecialist: field.verified_by_specialist === true,
       rawAmount,
       effective: rawAmount,
       note: null,
+      needsVerification: false,
       deferred: false
     })
   }
@@ -153,7 +159,18 @@ export function computeTaxAggregate({
     if (!entry.capFamily) continue
     const param = findParam(parameters, entry.capFamily, canton)
     if (!param) {
-      entry.note = 'no matching tax parameter found — applied uncapped'
+      // No tax parameter to check this amount against — an unverified
+      // figure can't count in the total as if it had been. Excluded by
+      // default (effective set to 0 further down); a specialist who has
+      // specifically looked at this field (edited/confirmed it, or
+      // toggled its inclusion) is trusted to have made that call
+      // deliberately, so it's included uncapped instead.
+      if (entry.verifiedBySpecialist) {
+        entry.note = 'tax parameter not found — included by the specialist despite the missing cap'
+      } else {
+        entry.needsVerification = true
+        entry.note = 'not verified — missing tax parameter, excluded from calculation'
+      }
       continue
     }
     if (param.value_type === 'percentage') {
@@ -198,7 +215,7 @@ export function computeTaxAggregate({
   // only the final total (which can drift by a franc or two once several
   // fractional components are involved).
   for (const entry of entries) {
-    entry.effective = Math.round(entry.effective)
+    entry.effective = entry.needsVerification ? 0 : Math.round(entry.effective)
   }
 
   const taxableIncomeCantonal =
@@ -226,7 +243,13 @@ export function computeTaxAggregate({
       documentId: entry.documentId,
       componentType: CONTRIBUTION_TO_COMPONENT[entry.contributionType],
       sectionKey: CONTRIBUTION_TO_SECTION[entry.contributionType] || null,
-      amount: entry.effective,
+      // A needs-verification row shows the amount it WOULD contribute —
+      // effective is 0 for total-summation purposes (see above), so this
+      // row is never part of the "totals = sum of rows" reconciliation in
+      // the normal breakdown; it's rendered as its own, clearly separate
+      // section instead.
+      amount: entry.needsVerification ? entry.rawAmount : entry.effective,
+      needsVerification: entry.needsVerification,
       label,
       // The "how this was calculated" table has just two columns (item,
       // signed amount) — when several documents contribute to the same

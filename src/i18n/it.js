@@ -525,6 +525,9 @@ export default {
     documentDataTitle: 'Dati del documento',
     documentDataHelp: 'Tutti i valori verificati, come riferimento — non tutti fanno necessariamente parte del calcolo qui sopra.',
 
+    needsVerificationTitle: 'Da verificare',
+    needsVerificationHelp: 'Non verificata — parametro fiscale mancante, esclusa dal calcolo. Conferma o modifica il campo per includerla comunque.',
+
     taxEstimateTitle: 'Stima imposte',
     taxEstimatePlaceholder: 'Integrazione con il servizio di stima imposte in arrivo — questa sezione non è ancora disponibile.',
 
