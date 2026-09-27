@@ -13,7 +13,26 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { currentTaxYear, IS_DEMO } from '../lib/config'
 import { CANTONS, LANGUAGES } from '../lib/constants'
-import { formatDate, fullName } from '../lib/format'
+import { formatChfSwiss, formatDate, fullName } from '../lib/format'
+
+// client_properties/client_children suggestions carry a small JSON payload
+// in suggested_value (several fields proposed together, e.g. address + tax
+// value) instead of the single scalar every other suggestion type uses —
+// rendered as its own readable summary rather than the raw JSON string.
+function describeSuggestion(s, t) {
+  if (s.target_table === 'client_properties') {
+    const payload = JSON.parse(s.suggested_value)
+    const parts = [payload.address]
+    if (payload.tax_value != null) parts.push(`${t('data.f.taxValue')}: ${formatChfSwiss(payload.tax_value)}`)
+    if (payload.rental_income != null) parts.push(`${t('data.f.rentalIncome')}: ${formatChfSwiss(payload.rental_income)}`)
+    return t('specialist.suggestionPropertyText', { details: parts.filter(Boolean).join(' — ') })
+  }
+  if (s.target_table === 'client_children') {
+    const payload = JSON.parse(s.suggested_value)
+    return t('specialist.suggestionChildText', { name: payload.full_name })
+  }
+  return t('specialist.suggestionText', { field: s.field_label || s.target_field, from: s.current_value, to: s.suggested_value })
+}
 
 export default function SpecialistClient() {
   const { clientId } = useParams()
@@ -255,13 +274,7 @@ export default function SpecialistClient() {
               key={s.id}
               className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
             >
-              <p>
-                {t('specialist.suggestionText', {
-                  field: s.field_label || s.target_field,
-                  from: s.current_value,
-                  to: s.suggested_value
-                })}
-              </p>
+              <p>{describeSuggestion(s, t)}</p>
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"

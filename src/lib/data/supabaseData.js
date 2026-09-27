@@ -509,6 +509,14 @@ export const supabaseApi = {
     return callApi('/api/sync-personal-details', { documentId })
   },
 
+  async syncPropertySuggestion(documentId) {
+    return callApi('/api/sync-property-suggestion', { documentId })
+  },
+
+  async syncChildSuggestions(clientId, taxYear) {
+    return callApi('/api/sync-child-suggestions', { clientId, taxYear: Number(taxYear) })
+  },
+
   async listFieldSuggestions(clientId) {
     return unwrap(
       await supabase
@@ -528,7 +536,7 @@ export const supabaseApi = {
             .update({ [suggestion.target_field]: suggestion.suggested_value })
             .eq('id', suggestion.client_id)
         )
-      } else {
+      } else if (suggestion.target_table === 'client_persons') {
         const existing = unwrap(
           await supabase
             .from('client_persons')
@@ -553,6 +561,35 @@ export const supabaseApi = {
             })
           )
         }
+      } else if (suggestion.target_table === 'client_properties') {
+        // Deduplicated per source document — a property already linked to
+        // this exact document (from an earlier accepted suggestion) is
+        // updated in place instead of duplicated.
+        const payload = JSON.parse(suggestion.suggested_value)
+        const existing = suggestion.document_id
+          ? unwrap(
+              await supabase
+                .from('client_properties')
+                .select('id')
+                .eq('source_document_id', suggestion.document_id)
+                .maybeSingle()
+            )
+          : null
+        if (existing) {
+          unwrap(await supabase.from('client_properties').update(payload).eq('id', existing.id))
+        } else {
+          unwrap(
+            await supabase
+              .from('client_properties')
+              .insert({ client_id: suggestion.client_id, source_document_id: suggestion.document_id, ...payload })
+          )
+        }
+      } else if (suggestion.target_table === 'client_children') {
+        // No document-link dedup column here — buildChildSuggestionCandidates
+        // only ever proposes a name that doesn't already match an existing
+        // child, so a plain insert is safe.
+        const payload = JSON.parse(suggestion.suggested_value)
+        unwrap(await supabase.from('client_children').insert({ client_id: suggestion.client_id, ...payload }))
       }
     }
     unwrap(await supabase.from('client_field_suggestions').delete().eq('id', suggestion.id))

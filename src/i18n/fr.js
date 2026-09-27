@@ -273,6 +273,7 @@ export default {
       country: 'Pays',
       yearOfBuilding: 'Année de construction',
       rentalIncome: 'Revenu locatif (CHF)',
+      taxValue: 'Valeur fiscale',
       rooms: 'Nombre de pièces'
     }
   },
@@ -337,6 +338,8 @@ export default {
     editClientTitle: 'Modifier les informations du client',
     suggestionsTitle: "Modifications suggérées par un document",
     suggestionText: '{field} : « {from} » → « {to} »',
+    suggestionPropertyText: 'Nouvelle propriété trouvée — {details}',
+    suggestionChildText: 'Enfant trouvé : {name}',
     acceptSuggestion: 'Mettre à jour',
     ignoreSuggestion: 'Ignorer',
     deleteClient: 'Supprimer le client',
@@ -565,6 +568,7 @@ export default {
     incompleteChildrenMismatch: 'Le document de données personnelles indique {extracted} enfant(s), mais seuls {registered} sont enregistrés sur la fiche du client.',
     retryExtraction: "Réessayer l'extraction",
     fixChildren: 'Corriger sur la fiche client',
+    incompleteOrphanedDoc: '« {name} » a été extrait mais aucune de ses données n’apparaît dans le calcul ci-dessous — vérifiez manuellement.',
     uncertaintyBadge: '{count} à vérifier',
     uncertaintyModalTitle: 'Avant de vous fier à ce calcul, vérifiez ces points',
     uncertaintyModalHelp: 'Ce calcul comprend des éléments nécessitant une vérification par le spécialiste :',

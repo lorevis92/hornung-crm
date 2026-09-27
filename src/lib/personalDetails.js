@@ -89,7 +89,7 @@ function normalizeMaritalStatus(raw) {
 // extraction carried no confidence at all, the normal suggest-on-conflict
 // path still applies.
 const FORCE_APPLY_THRESHOLD = 0.75
-const FORCE_APPLY_FIELDS = new Set(['marital_status'])
+const FORCE_APPLY_FIELDS = new Set(['marital_status', 'first_name', 'last_name', 'date_of_birth', 'current_address'])
 
 export function computePersonalDetailsSync({ extractedFields, canton, primary, spouse }) {
   const byKey = Object.fromEntries((extractedFields || []).map((f) => [f.field_key, f.field_value]))
@@ -104,8 +104,14 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
     const value = String(rawValue).trim()
     const current = currentValue == null ? '' : String(currentValue).trim()
     const confidence = sourceFieldKey ? confidenceByKey[sourceFieldKey] : null
+    // Only the primary person's own fields ever force-apply — spouse fields
+    // share the same field names (first_name, date_of_birth, ...) but stay
+    // suggestion-only regardless, since accepting one there creates/renames
+    // a person's identity rather than correcting the client's own record.
     const forceApply =
-      FORCE_APPLY_FIELDS.has(field) && (confidence == null || confidence >= FORCE_APPLY_THRESHOLD)
+      person === 'primary' &&
+      FORCE_APPLY_FIELDS.has(field) &&
+      (confidence == null || confidence >= FORCE_APPLY_THRESHOLD)
     if (!current || (forceApply && current !== value)) {
       autoFill.push({ table, person, field, value })
     } else if (current !== value) {
@@ -119,10 +125,24 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
 
   if (byKey.full_name) {
     const { first, last } = splitFullName(byKey.full_name)
-    consider('client_persons', 'primary', 'first_name', 'First name', first, primary?.first_name)
-    consider('client_persons', 'primary', 'last_name', 'Last name', last, primary?.last_name)
+    consider('client_persons', 'primary', 'first_name', 'First name', first, primary?.first_name, 'full_name')
+    consider('client_persons', 'primary', 'last_name', 'Last name', last, primary?.last_name, 'full_name')
   }
-  consider('client_persons', 'primary', 'date_of_birth', 'Date of birth', byKey.date_of_birth, primary?.date_of_birth)
+  consider(
+    'client_persons', 'primary', 'date_of_birth', 'Date of birth',
+    byKey.date_of_birth, primary?.date_of_birth, 'date_of_birth'
+  )
+  // Combined into the single free-text address client_persons already
+  // stores (e.g. "Bahnhofstrasse 12, 6300 Zug") — municipality/zip alone
+  // don't have their own target column, they only exist to build this.
+  const addressLine = [byKey.zip, byKey.municipality].filter(Boolean).join(' ')
+  const combinedAddress = [byKey.street_address, addressLine].filter(Boolean).join(', ')
+  if (combinedAddress) {
+    consider(
+      'client_persons', 'primary', 'current_address', 'Current address',
+      combinedAddress, primary?.current_address, 'street_address'
+    )
+  }
   const normalizedMarital = normalizeMaritalStatus(byKey.marital_status)
   if (normalizedMarital) {
     consider(
@@ -150,4 +170,74 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
   )
 
   return { autoFill, suggestions, resolved }
+}
+
+// A "property_tax_value" document's own address/value fields, proposed as a
+// client_properties row — always a suggestion to confirm (never
+// auto-applied, since accepting it creates or overwrites a whole record,
+// same reasoning as the spouse fields above), and always the SAME
+// suggestion slot for the same source document, so a specialist re-running
+// extraction gets an updated proposal instead of a second, duplicate one.
+//
+// extractedFields: extracted_document_fields rows for ONE property_tax_value
+//   document.
+// existingProperty: the client_properties row already linked to this exact
+//   documentId (via source_document_id), or null/undefined if none yet.
+//
+// Returns null when there's nothing worth proposing (no address at all, or
+// the proposal is identical to what's already linked), otherwise
+// { address, payload } — payload is what to insert/update on accept.
+export function buildPropertySuggestionPayload({ extractedFields, existingProperty }) {
+  const byKey = Object.fromEntries((extractedFields || []).map((f) => [f.field_key, f.field_value]))
+  const address = byKey.property_address?.trim()
+  if (!address) return null
+
+  const payload = { address }
+  const taxValue = parseFloat(byKey.tax_value)
+  if (Number.isFinite(taxValue)) payload.tax_value = taxValue
+  const rentalIncome = parseFloat(byKey.annual_rental_income)
+  if (Number.isFinite(rentalIncome)) payload.rental_income = rentalIncome
+
+  if (existingProperty) {
+    const unchanged = Object.entries(payload).every(
+      ([key, value]) => String(existingProperty[key] ?? '') === String(value)
+    )
+    if (unchanged) return null
+  }
+
+  return { address, payload }
+}
+
+// Cross-references the child count from a "current_tax_sheet" document with
+// any child name found elsewhere (e.g. "child_name" on a childcare_costs
+// document) so the pending suggestion arrives pre-filled with a name
+// instead of an empty row — still a suggestion, never auto-applied (a date
+// of birth still has to come from the specialist).
+//
+// childrenCount: parsed current_tax_sheet children_count, or null/undefined
+//   if not extracted.
+// candidateNames: child names found on OTHER documents (e.g. childcare
+//   invoices) for this same client/year.
+// existingChildren: the client's current client_children rows.
+//
+// Returns an array of { full_name } proposals for names not already on
+// file — capped at childrenCount when it's known, so re-processing the same
+// invoice twice (or two invoices naming the same child) doesn't propose
+// more children than the personal-details document actually states.
+export function buildChildSuggestionCandidates({ childrenCount, candidateNames, existingChildren }) {
+  const existingNames = new Set(
+    (existingChildren || []).map((c) => (c.full_name || '').trim().toLowerCase()).filter(Boolean)
+  )
+  const seen = new Set()
+  const unique = []
+  for (const raw of candidateNames || []) {
+    const name = (raw || '').trim()
+    if (!name) continue
+    const key = name.toLowerCase()
+    if (existingNames.has(key) || seen.has(key)) continue
+    seen.add(key)
+    unique.push(name)
+  }
+  const capped = Number.isFinite(childrenCount) ? unique.slice(0, Math.max(0, childrenCount)) : unique
+  return capped.map((full_name) => ({ full_name }))
 }

@@ -19,6 +19,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, serviceClient } from './_lib.js'
 import { recalculateAndPersist } from './_recalc.js'
 import { syncPersonalDetails } from './_personalDetails.js'
+import { syncPropertySuggestion } from './_propertySuggestion.js'
+import { syncChildSuggestions } from './_childSuggestion.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
 // import.meta.env) — keep this in sync with that file.
@@ -233,6 +235,29 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
       await syncPersonalDetails(admin, documentId)
     } catch (syncError) {
       console.error(`[extract-document] personal-details sync failed for document ${documentId}:`, syncError)
+    }
+  }
+
+  // "Property tax value" documents propose a client_properties row —
+  // address + tax value + rental income, deduplicated per source document
+  // so re-extracting the same one updates the proposal instead of
+  // duplicating it.
+  if (categoryCode === 'property_tax_value') {
+    try {
+      await syncPropertySuggestion(admin, documentId)
+    } catch (syncError) {
+      console.error(`[extract-document] property suggestion failed for document ${documentId}:`, syncError)
+    }
+  }
+
+  // A child's name can come from either document — re-run whenever either
+  // one lands, so whichever arrives second is the one that actually
+  // produces a useful (name-filled) suggestion.
+  if (categoryCode === 'current_tax_sheet' || categoryCode === 'childcare_costs') {
+    try {
+      await syncChildSuggestions(admin, claimed.client_id, claimed.tax_year)
+    } catch (syncError) {
+      console.error(`[extract-document] child suggestion sync failed for document ${documentId}:`, syncError)
     }
   }
 }

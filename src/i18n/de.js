@@ -272,6 +272,7 @@ export default {
       country: 'Land',
       yearOfBuilding: 'Baujahr',
       rentalIncome: 'Mietertrag (CHF)',
+      taxValue: 'Steuerwert',
       rooms: 'Anzahl Zimmer'
     }
   },
@@ -336,6 +337,8 @@ export default {
     editClientTitle: 'Kundendaten bearbeiten',
     suggestionsTitle: 'Vorschläge aus einem Dokument',
     suggestionText: '{field}: „{from}“ → „{to}“',
+    suggestionPropertyText: 'Neue Liegenschaft gefunden — {details}',
+    suggestionChildText: 'Kind gefunden: {name}',
     acceptSuggestion: 'Übernehmen',
     ignoreSuggestion: 'Ignorieren',
     deleteClient: 'Kunde löschen',
@@ -564,6 +567,7 @@ export default {
     incompleteChildrenMismatch: 'Das Dokument mit den persönlichen Daten nennt {extracted} Kind(er), aber nur {registered} sind beim Kunden erfasst.',
     retryExtraction: 'Extraktion erneut versuchen',
     fixChildren: 'Auf der Kundenkarte korrigieren',
+    incompleteOrphanedDoc: '„{name}“ wurde extrahiert, aber keine seiner Daten erscheint in der Berechnung unten — bitte manuell prüfen.',
     uncertaintyBadge: '{count} zu prüfen',
     uncertaintyModalTitle: 'Vor Verwendung dieser Berechnung diese Punkte prüfen',
     uncertaintyModalHelp: 'Diese Berechnung enthält Punkte, die eine Prüfung durch den Fachspezialisten benötigen:',

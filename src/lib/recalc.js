@@ -35,3 +35,28 @@ export async function syncPersonalDetailsInBackground(documentId) {
     return null
   }
 }
+
+// Same reasoning, for the "property_tax_value" -> client_properties
+// suggestion (src/lib/personalDetails.js's buildPropertySuggestionPayload).
+export async function syncPropertySuggestionInBackground(documentId) {
+  if (!documentId) return null
+  try {
+    return await api.syncPropertySuggestion(documentId)
+  } catch (error) {
+    console.error('[syncPropertySuggestionInBackground]', error)
+    return null
+  }
+}
+
+// Same reasoning, for the child-name/child-count cross-reference
+// (src/lib/personalDetails.js's buildChildSuggestionCandidates) — re-run
+// after either a current_tax_sheet or a childcare_costs field is saved.
+export async function syncChildSuggestionsInBackground(clientId, taxYear) {
+  if (!clientId || !taxYear) return null
+  try {
+    return await api.syncChildSuggestions(clientId, taxYear)
+  } catch (error) {
+    console.error('[syncChildSuggestionsInBackground]', error)
+    return null
+  }
+}

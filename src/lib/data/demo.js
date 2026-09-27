@@ -9,7 +9,9 @@ import {
   PRICING_ITEMS, TAX_PARAMETERS
 } from '../demoSeed'
 import { computeTaxAggregate } from '../taxCalculation'
-import { computePersonalDetailsSync } from '../personalDetails'
+import {
+  computePersonalDetailsSync, buildPropertySuggestionPayload, buildChildSuggestionCandidates
+} from '../personalDetails'
 
 const KEY = 'hornung.demo.v2'
 const blobs = new Map() // document id -> object URL (this session only)
@@ -719,6 +721,95 @@ export const demoApi = {
     return wait({ autoFilled: autoFill, suggestions })
   },
 
+  // "property_tax_value" -> client_properties suggestion, mirrors
+  // api/_propertySuggestion.js. Deduplicated per source document via the
+  // upsert below — re-running this on the same document updates the
+  // pending proposal instead of adding a second one.
+  async syncPropertySuggestion(documentId) {
+    const s = store()
+    const doc = s.documents.find((d) => d.id === documentId)
+    if (!doc || doc.category_code !== 'property_tax_value') return wait({ suggested: false })
+    const caseRow = s.cases.find((c) => c.id === doc.case_id)
+    const clientId = caseRow?.client_id
+    if (!clientId) return wait({ suggested: false })
+
+    const fields = s.extractedDocumentFields.filter((f) => f.document_id === documentId)
+    const existingProperty = s.properties.find((p) => p.source_document_id === documentId)
+    const proposal = buildPropertySuggestionPayload({ extractedFields: fields, existingProperty })
+    if (!proposal) return wait({ suggested: false })
+
+    const targetField = `property:${documentId}`
+    const existingSuggestion = s.fieldSuggestions.find(
+      (row) => row.client_id === clientId && row.target_table === 'client_properties' && row.target_field === targetField
+    )
+    const row = {
+      client_id: clientId,
+      document_id: documentId,
+      target_table: 'client_properties',
+      target_person: 'none',
+      target_field: targetField,
+      field_label: 'Property',
+      current_value: existingProperty ? existingProperty.address : null,
+      suggested_value: JSON.stringify(proposal.payload),
+      created_at: iso(Date.now())
+    }
+    if (existingSuggestion) Object.assign(existingSuggestion, row)
+    else s.fieldSuggestions.push({ id: uid('sug'), ...row })
+    commit()
+    return wait({ suggested: true })
+  },
+
+  // Child-name/child-count cross-reference, mirrors api/_childSuggestion.js.
+  async syncChildSuggestions(clientId, taxYear) {
+    const s = store()
+    const year = Number(taxYear)
+    const caseIds = new Set(
+      s.cases.filter((c) => c.client_id === clientId && c.tax_year === year).map((c) => c.id)
+    )
+    const docs = s.documents.filter(
+      (d) => caseIds.has(d.case_id) && ['current_tax_sheet', 'childcare_costs'].includes(d.category_code)
+    )
+    if (!docs.length) return wait({ suggested: 0 })
+
+    const sheetDocIds = new Set(docs.filter((d) => d.category_code === 'current_tax_sheet').map((d) => d.id))
+    const careDocIds = new Set(docs.filter((d) => d.category_code === 'childcare_costs').map((d) => d.id))
+    const childrenCount = s.extractedDocumentFields
+      .filter((f) => sheetDocIds.has(f.document_id) && f.field_key === 'children_count')
+      .map((f) => parseInt(f.field_value, 10))
+      .find((n) => Number.isFinite(n))
+    const candidateNames = s.extractedDocumentFields
+      .filter((f) => careDocIds.has(f.document_id) && f.field_key === 'child_name')
+      .map((f) => f.field_value)
+      .filter(Boolean)
+    const existingChildren = s.children.filter((c) => c.client_id === clientId)
+
+    const candidates = buildChildSuggestionCandidates({ childrenCount, candidateNames, existingChildren })
+    if (!candidates.length) return wait({ suggested: 0 })
+
+    for (const c of candidates) {
+      const slug = c.full_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      const targetField = `child:${slug}`
+      const existing = s.fieldSuggestions.find(
+        (row) => row.client_id === clientId && row.target_table === 'client_children' && row.target_field === targetField
+      )
+      const row = {
+        client_id: clientId,
+        document_id: null,
+        target_table: 'client_children',
+        target_person: 'none',
+        target_field: targetField,
+        field_label: 'Child',
+        current_value: null,
+        suggested_value: JSON.stringify(c),
+        created_at: iso(Date.now())
+      }
+      if (existing) Object.assign(existing, row)
+      else s.fieldSuggestions.push({ id: uid('sug'), ...row })
+    }
+    commit()
+    return wait({ suggested: candidates.length })
+  },
+
   async listFieldSuggestions(clientId) {
     const s = store()
     return wait(s.fieldSuggestions.filter((row) => row.client_id === clientId))
@@ -732,7 +823,7 @@ export const demoApi = {
         if (client) {
           Object.assign(client, { [suggestion.target_field]: suggestion.suggested_value, updated_at: iso(Date.now()) })
         }
-      } else {
+      } else if (suggestion.target_table === 'client_persons') {
         const existing = s.persons.find(
           (p) => p.client_id === suggestion.client_id && p.person_type === suggestion.target_person
         )
@@ -746,6 +837,24 @@ export const demoApi = {
             [suggestion.target_field]: suggestion.suggested_value
           })
         }
+      } else if (suggestion.target_table === 'client_properties') {
+        const payload = JSON.parse(suggestion.suggested_value)
+        const existing = suggestion.document_id
+          ? s.properties.find((p) => p.source_document_id === suggestion.document_id)
+          : null
+        if (existing) {
+          Object.assign(existing, payload)
+        } else {
+          s.properties.push({
+            id: uid('property'),
+            client_id: suggestion.client_id,
+            source_document_id: suggestion.document_id,
+            ...payload
+          })
+        }
+      } else if (suggestion.target_table === 'client_children') {
+        const payload = JSON.parse(suggestion.suggested_value)
+        s.children.push({ id: uid('child'), client_id: suggestion.client_id, sort_order: s.children.length, ...payload })
       }
     }
     s.fieldSuggestions = s.fieldSuggestions.filter((row) => row.id !== suggestion.id)
