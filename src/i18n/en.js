@@ -516,8 +516,10 @@ export default {
     taxableIncomeFederal: 'Taxable income (federal)',
     componentsTitle: 'How this was calculated',
     colItem: 'Item',
-    colSource: 'Category / source document',
     colAmount: 'Amount',
+
+    documentDataTitle: 'Document data',
+    documentDataHelp: 'All verified values, for reference — not all of them are necessarily part of the calculation above.',
 
     taxEstimateTitle: 'Tax estimate',
     taxEstimatePlaceholder: 'Integration with the tax estimate service is coming soon — this section is not yet available.',

@@ -33,6 +33,18 @@ export function formatChf(amount, lang = 'en') {
   }).format(n)
 }
 
+// Fixed Swiss style (thousands grouped with a straight apostrophe, whole
+// francs, no locale-dependent separator) — used for the tax summary/PDF
+// specifically, where every figure must look the same regardless of the
+// specialist's chosen UI language, and match the apostrophe grouping the
+// verified field values themselves already use.
+export function formatChfSwiss(amount) {
+  const n = Math.round(Number(amount || 0))
+  const sign = n < 0 ? '-' : ''
+  const grouped = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'")
+  return `CHF ${sign}${grouped}`
+}
+
 export function formatBytes(bytes) {
   if (!bytes && bytes !== 0) return ''
   if (bytes < 1024) return `${bytes} B`

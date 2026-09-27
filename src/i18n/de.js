@@ -515,8 +515,10 @@ export default {
     taxableIncomeFederal: 'Steuerbares Einkommen (Bund)',
     componentsTitle: 'So wurde gerechnet',
     colItem: 'Position',
-    colSource: 'Kategorie / Quelldokument',
     colAmount: 'Betrag',
+
+    documentDataTitle: 'Dokumentdaten',
+    documentDataHelp: 'Alle verifizierten Werte, zur Referenz — nicht alle davon fliessen zwingend in die obige Berechnung ein.',
 
     taxEstimateTitle: 'Steuerschätzung',
     taxEstimatePlaceholder: 'Die Integration mit dem Steuerschätzungsdienst folgt in Kürze — dieser Bereich ist noch nicht verfügbar.',

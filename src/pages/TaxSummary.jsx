@@ -9,8 +9,8 @@ import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
-import { mergeFieldsWithDefinitions } from '../lib/extraction'
-import { formatChf, formatDateTime, fullName } from '../lib/format'
+import { mergeFieldsWithDefinitions, verifiedFieldsByDocument } from '../lib/extraction'
+import { formatChfSwiss, formatDateTime, fullName } from '../lib/format'
 
 // pdfjs-dist is a large dependency — only fetched when a specialist actually
 // opens the source view, not on every page load.
@@ -25,6 +25,11 @@ const SECTIONS = [
   { key: 'wealth', groups: ['assets', 'property'], titleKey: 'summary.sectionWealth' },
   { key: 'other', groups: ['other'], titleKey: 'summary.sectionOther' }
 ]
+
+// The three sections that make up the exportable tax calculation document —
+// "base"/"other" (personal details, misc.) stay screen-only, same scope
+// pdfExport.js uses.
+const CALC_SECTION_KEYS = ['income', 'deductions', 'wealth']
 
 function groupBy(list, key) {
   return list.reduce((acc, item) => {
@@ -124,6 +129,29 @@ export default function TaxSummary() {
       return { ...section, categories: sectionCategories }
     }).filter((s) => s.categories.length)
   }, [categories, fields])
+
+  // "How this was calculated" grouped by section — only the fields that
+  // actually feed the total (already exactly what tax_aggregate_components
+  // holds), two columns only: the item (document identifier baked into its
+  // text) and the signed amount.
+  const componentsBySection = useMemo(() => {
+    if (!result?.components?.length) return []
+    return CALC_SECTION_KEYS.map((key) => ({
+      key,
+      titleKey: SECTIONS.find((s) => s.key === key)?.titleKey,
+      components: result.components.filter((c) => c.section_key === key)
+    })).filter((s) => s.components.length)
+  }, [result])
+
+  // "Document data" reference — every verified field, grouped by document,
+  // regardless of whether it feeds the calculation above.
+  const documentDataGroups = useMemo(
+    () =>
+      sections
+        .filter((s) => CALC_SECTION_KEYS.includes(s.key))
+        .flatMap((s) => verifiedFieldsByDocument(s, lang)),
+    [sections, lang]
+  )
 
   const fieldKey = (field) => `${field.document_id}:${field.field_key}`
 
@@ -378,56 +406,81 @@ export default function TaxSummary() {
               <Stat
                 icon={Landmark}
                 label={t('summary.taxableIncomeCantonal')}
-                value={formatChf(result.aggregate.taxable_income_cantonal, lang)}
+                value={formatChfSwiss(result.aggregate.taxable_income_cantonal)}
                 tone="gold"
               />
               <Stat
                 icon={PiggyBank}
                 label={t('summary.taxableWealthCantonal')}
-                value={formatChf(result.aggregate.taxable_wealth_cantonal, lang)}
+                value={formatChfSwiss(result.aggregate.taxable_wealth_cantonal)}
                 tone="gold"
               />
               <Stat
                 icon={Receipt}
                 label={t('summary.taxableIncomeFederal')}
-                value={formatChf(result.aggregate.taxable_income_federal, lang)}
+                value={formatChfSwiss(result.aggregate.taxable_income_federal)}
                 tone="gold"
               />
             </div>
           </div>
 
-          {result.components.length ? (
-            <div className="space-y-2">
+          {componentsBySection.length ? (
+            <div className="space-y-4">
               <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.componentsTitle')}</h3>
-              <div className="overflow-x-auto rounded-xl border border-line">
-                <table className="w-full text-[13.5px]">
-                  <thead className="bg-sand/60 text-left text-[11.5px] font-medium uppercase tracking-wide text-ink-400">
-                    <tr>
-                      <th className="px-4 py-2.5">{t('summary.colItem')}</th>
-                      <th className="px-4 py-2.5">{t('summary.colSource')}</th>
-                      <th className="px-4 py-2.5 text-right">{t('summary.colAmount')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line bg-white">
-                    {result.components.map((c) => (
-                      <tr key={c.id}>
-                        <td className="px-4 py-2.5 text-ink-800">{c.field_label || c.label}</td>
-                        <td className="px-4 py-2.5 text-ink-500">{c.source_label || ''}</td>
-                        <td
-                          className={clsx(
-                            'px-4 py-2.5 text-right font-medium tabular-nums',
-                            c.component_type === 'income' || c.component_type === 'wealth'
-                              ? 'text-emerald-700'
-                              : 'text-red-700'
-                          )}
-                        >
-                          {c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}
-                          {formatChf(Math.abs(c.amount), lang)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {componentsBySection.map((section) => (
+                <div key={section.key} className="space-y-1.5">
+                  <p className="text-[13px] font-medium text-ink-500">{t(section.titleKey)}</p>
+                  <div className="overflow-x-auto rounded-xl border border-line">
+                    <table className="w-full text-[13.5px]">
+                      <thead className="bg-sand/60 text-left text-[11.5px] font-medium uppercase tracking-wide text-ink-400">
+                        <tr>
+                          <th className="px-4 py-2.5">{t('summary.colItem')}</th>
+                          <th className="px-4 py-2.5 text-right">{t('summary.colAmount')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line bg-white">
+                        {section.components.map((c) => (
+                          <tr key={c.id}>
+                            <td className="px-4 py-2.5 text-ink-800">{c.field_label || c.label}</td>
+                            <td
+                              className={clsx(
+                                'px-4 py-2.5 text-right font-medium tabular-nums',
+                                c.component_type === 'income' || c.component_type === 'wealth'
+                                  ? 'text-emerald-700'
+                                  : 'text-red-700'
+                              )}
+                            >
+                              {c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}
+                              {formatChfSwiss(Math.abs(c.amount))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {documentDataGroups.length ? (
+            <div className="space-y-2">
+              <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.documentDataTitle')}</h3>
+              <p className="text-[13px] text-ink-400">{t('summary.documentDataHelp')}</p>
+              <div className="space-y-3">
+                {documentDataGroups.map((group) => (
+                  <div key={group.documentId} className="rounded-xl border border-line bg-sand/30 p-3.5">
+                    <p className="mb-2 text-[13px] font-medium text-ink-600">{group.heading}</p>
+                    <dl className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                      {group.fields.map((f) => (
+                        <div key={f.label} className="flex justify-between gap-3 text-[13px]">
+                          <dt className="text-ink-400">{f.label}</dt>
+                          <dd className="text-right text-ink-700">{f.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}

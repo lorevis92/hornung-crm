@@ -32,6 +32,14 @@ function categoryLabel(category, lang) {
   return category[`label_${lang}`] || category.label_en || category.code
 }
 
+// Maps a document_categories.group_key to the tax-summary section it
+// belongs to — assets/property are merged into one "wealth" section, same
+// grouping the tax summary view (SECTIONS in TaxSummary.jsx) already uses.
+function sectionKeyForGroup(groupKey) {
+  if (groupKey === 'assets' || groupKey === 'property') return 'wealth'
+  return groupKey || null
+}
+
 function findParam(parameters, family, cantonCode) {
   if (!family) return null
   if (cantonCode) {
@@ -189,16 +197,20 @@ export function computeTaxAggregate({
 
   const components = entries.map((entry) => {
     const identifier = identifierByDocId[entry.documentId]
-    const suffix = identifier ? identifier : `(${entry.fileName})`
-    const label = `${entry.fieldLabel} — ${entry.categoryLabel} ${suffix}${entry.note ? ` — ${entry.note}` : ''}`
+    const suffix = identifier ? identifier : entry.fileName
+    const label = `${entry.fieldLabel} — ${entry.categoryLabel} ${identifier ? identifier : `(${entry.fileName})`}${entry.note ? ` — ${entry.note}` : ''}`
     return {
       documentId: entry.documentId,
       componentType: CONTRIBUTION_TO_COMPONENT[entry.contributionType],
+      sectionKey: sectionKeyForGroup(entry.groupKey),
       amount: entry.effective,
       label,
-      // Same information as `label`, split into the two columns the tax
-      // summary/PDF table renders: the item itself, and where it came from.
-      fieldLabel: entry.note ? `${entry.fieldLabel} (${entry.note})` : entry.fieldLabel,
+      // The "how this was calculated" table has just two columns (item,
+      // signed amount) — when several documents contribute to the same
+      // section, the item text itself carries the document identifier
+      // (e.g. "Gross salary — LONZA AG") so rows stay distinguishable
+      // without a separate source column.
+      fieldLabel: `${entry.fieldLabel}${entry.note ? ` (${entry.note})` : ''} — ${suffix}`,
       sourceLabel: `${entry.categoryLabel} — ${suffix}`
     }
   })

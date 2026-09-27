@@ -514,8 +514,10 @@ export default {
     taxableIncomeFederal: 'Reddito imponibile (federale)',
     componentsTitle: 'Come si è arrivati a questo risultato',
     colItem: 'Voce',
-    colSource: 'Categoria / documento di origine',
     colAmount: 'Importo',
+
+    documentDataTitle: 'Dati del documento',
+    documentDataHelp: 'Tutti i valori verificati, come riferimento — non tutti fanno necessariamente parte del calcolo qui sopra.',
 
     taxEstimateTitle: 'Stima imposte',
     taxEstimatePlaceholder: 'Integrazione con il servizio di stima imposte in arrivo — questa sezione non è ancora disponibile.',

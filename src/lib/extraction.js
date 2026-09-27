@@ -1,3 +1,5 @@
+import { docTypeLabel } from './labels'
+
 // Shared between DocumentVerificationPanel (single document) and TaxSummary
 // (every document of a client/tax year): merges the field dictionary for a
 // category with whatever was actually extracted for one document, so every
@@ -24,4 +26,25 @@ export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
         isPdf: doc?.mime_type === 'application/pdf'
       }
     })
+}
+
+// Every verified field of a tax-summary section, grouped by document (one
+// heading per document instead of repeating it on every row) — the "raw
+// reference" reading used by the results card and the exported PDF's
+// "Document data" section, as opposed to the "how this was calculated"
+// breakdown which only lists fields that actually feed the total.
+export function verifiedFieldsByDocument(section, lang) {
+  const groups = []
+  section.categories.forEach(({ category, documents }) => {
+    documents.forEach((docGroup) => {
+      const verified = docGroup.fields.filter((f) => f.verified_by_specialist)
+      if (!verified.length) return
+      groups.push({
+        documentId: docGroup.documentId,
+        heading: `${docTypeLabel(category, lang) || ''} — ${docGroup.fileName}`,
+        fields: verified.map((f) => ({ label: f.field_label, value: f.field_value || '—' }))
+      })
+    })
+  })
+  return groups
 }

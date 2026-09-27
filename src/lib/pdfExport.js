@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import logoUrl from '../assets/logo.png'
-import { docTypeLabel } from './labels'
-import { formatChf, formatDateTime, fullName, safeFileName } from './format'
+import { verifiedFieldsByDocument } from './extraction'
+import { formatChfSwiss, formatDateTime, fullName, safeFileName } from './format'
 import { FIRM_CONTACT } from './constants'
 
 const GOLD = [169, 133, 69]
@@ -14,7 +14,7 @@ const LINE = [232, 226, 214]
 // Sections included in the client-facing document, in order — "base"/"other"
 // stay screen-only (administrative fields, not part of the handed-over
 // calculation document).
-const PDF_SECTIONS = [
+const CALC_SECTIONS = [
   { key: 'income', titleKey: 'summary.sectionIncome' },
   { key: 'deductions', titleKey: 'summary.sectionDeductions' },
   { key: 'wealth', titleKey: 'summary.sectionWealth' }
@@ -27,26 +27,6 @@ function loadImage(url) {
     img.onerror = () => reject(new Error('logo failed to load'))
     img.src = url
   })
-}
-
-// Builds the same "verified field values, grouped by document" rows the
-// on-screen collective view shows, for one section's categories.
-function sectionRows(section, lang) {
-  const rows = []
-  section.categories.forEach(({ category, documents }) => {
-    documents.forEach((docGroup) => {
-      docGroup.fields
-        .filter((f) => f.verified_by_specialist)
-        .forEach((f) => {
-          rows.push([
-            f.field_label,
-            `${docTypeLabel(category, lang) || ''} — ${docGroup.fileName}`,
-            f.field_value || '—'
-          ])
-        })
-    })
-  })
-  return rows
 }
 
 export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }) {
@@ -100,9 +80,9 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
 
   // ------------------------------------------------------------- totals ----
   const totals = [
-    { label: t('summary.taxableIncomeCantonal'), value: formatChf(result.aggregate.taxable_income_cantonal, lang) },
-    { label: t('summary.taxableWealthCantonal'), value: formatChf(result.aggregate.taxable_wealth_cantonal, lang) },
-    { label: t('summary.taxableIncomeFederal'), value: formatChf(result.aggregate.taxable_income_federal, lang) }
+    { label: t('summary.taxableIncomeCantonal'), value: formatChfSwiss(result.aggregate.taxable_income_cantonal) },
+    { label: t('summary.taxableWealthCantonal'), value: formatChfSwiss(result.aggregate.taxable_wealth_cantonal) },
+    { label: t('summary.taxableIncomeFederal'), value: formatChfSwiss(result.aggregate.taxable_income_federal) }
   ]
   const gap = 5
   const boxW = (pageWidth - marginX * 2 - gap * 2) / 3
@@ -121,34 +101,78 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
   })
   y += boxH + 12
 
-  // ------------------------------------------------------------ sections ---
-  for (const { key, titleKey } of PDF_SECTIONS) {
-    const section = sections.find((s) => s.key === key)
-    const rows = section ? sectionRows(section, lang) : []
+  // ----------------------------------------------- how this was calculated --
+  const componentsBySection = CALC_SECTIONS.map(({ key, titleKey }) => ({
+    key,
+    titleKey,
+    components: (result.components || []).filter((c) => c.section_key === key)
+  })).filter((s) => s.components.length)
 
-    ensureSpace(20)
-    doc.setFontSize(12.5)
+  if (componentsBySection.length) {
+    ensureSpace(14)
+    doc.setFontSize(14)
     doc.setTextColor(...INK)
-    doc.text(t(titleKey), marginX, y)
-    y += 5
+    doc.text(t('summary.componentsTitle'), marginX, y)
+    y += 8
 
-    if (rows.length) {
+    for (const section of componentsBySection) {
+      ensureSpace(18)
+      doc.setFontSize(11)
+      doc.setTextColor(60, 57, 52)
+      doc.text(t(section.titleKey), marginX, y)
+      y += 4
+
       autoTable(doc, {
         startY: y,
         margin: { left: marginX, right: marginX },
-        head: [[t('summary.colItem'), t('summary.colSource'), t('summary.colAmount')]],
-        body: rows,
+        head: [[t('summary.colItem'), t('summary.colAmount')]],
+        body: section.components.map((c) => [
+          c.field_label || c.label,
+          `${c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}${formatChfSwiss(Math.abs(c.amount))}`
+        ]),
+        columnStyles: { 1: { halign: 'right' } },
         styles: { fontSize: 9, cellPadding: 2.5, textColor: INK },
         headStyles: { fillColor: GOLD, textColor: 255, fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [252, 251, 248] },
         theme: 'grid'
       })
-      y = doc.lastAutoTable.finalY + 10
-    } else {
+      y = doc.lastAutoTable.finalY + 8
+    }
+    y += 4
+  }
+
+  // ------------------------------------------------------- document data ---
+  const documentDataGroups = sections
+    .filter((s) => CALC_SECTIONS.some((cs) => cs.key === s.key))
+    .flatMap((s) => verifiedFieldsByDocument(s, lang))
+
+  if (documentDataGroups.length) {
+    ensureSpace(16)
+    doc.setFontSize(14)
+    doc.setTextColor(...INK)
+    doc.text(t('summary.documentDataTitle'), marginX, y)
+    y += 6
+    doc.setFontSize(8.5)
+    doc.setTextColor(...MUTED)
+    doc.text(t('summary.documentDataHelp'), marginX, y, { maxWidth: pageWidth - marginX * 2 })
+    y += 8
+
+    for (const group of documentDataGroups) {
+      ensureSpace(14)
       doc.setFontSize(9.5)
-      doc.setTextColor(...MUTED)
-      doc.text(t('summary.noData'), marginX, y + 5)
-      y += 14
+      doc.setTextColor(80, 76, 70)
+      doc.text(group.heading, marginX, y)
+      y += 3
+
+      autoTable(doc, {
+        startY: y,
+        margin: { left: marginX, right: marginX },
+        body: group.fields.map((f) => [f.label, f.value]),
+        columnStyles: { 1: { halign: 'right', textColor: [90, 87, 82] } },
+        styles: { fontSize: 8.5, cellPadding: 2, textColor: [110, 106, 99] },
+        theme: 'plain'
+      })
+      y = doc.lastAutoTable.finalY + 6
     }
   }
 

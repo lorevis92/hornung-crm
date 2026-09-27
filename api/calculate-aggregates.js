@@ -125,6 +125,7 @@ export default async function handler(req, res) {
             aggregate_id: aggregate.id,
             document_id: c.documentId,
             component_type: c.componentType,
+            section_key: c.sectionKey,
             amount: c.amount,
             label: c.label,
             field_label: c.fieldLabel,

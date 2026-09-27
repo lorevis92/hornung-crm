@@ -516,8 +516,10 @@ export default {
     taxableIncomeFederal: 'Revenu imposable (fédéral)',
     componentsTitle: 'Comment ce résultat a été obtenu',
     colItem: 'Poste',
-    colSource: 'Catégorie / document source',
     colAmount: 'Montant',
+
+    documentDataTitle: 'Données du document',
+    documentDataHelp: "Toutes les valeurs vérifiées, à titre de référence — elles ne font pas toutes nécessairement partie du calcul ci-dessus.",
 
     taxEstimateTitle: "Estimation des impôts",
     taxEstimatePlaceholder: "L'intégration avec le service d'estimation des impôts arrive prochainement — cette section n'est pas encore disponible.",
