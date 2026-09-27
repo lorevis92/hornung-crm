@@ -158,6 +158,7 @@ export default {
     chooseType: 'Non specificato',
     taxCategory: 'Categoria fiscale',
     taxCategoryPlaceholder: 'Non categorizzato',
+    duplicateCategoryBadge: '{count} documenti di questo tipo — verifica che non sia un doppione',
     noDocuments: 'Nessun documento caricato.',
     fromSpecialist: 'Documenti da Hornung Consulting',
     fromSpecialistHelp: 'La dichiarazione completata e i documenti collegati.',
@@ -208,6 +209,8 @@ export default {
   data: {
     title: 'I miei dati',
     subtitle: 'Questi sono i dati usati per preparare la dichiarazione. Tienili aggiornati.',
+    cantonTitle: 'Cantone',
+    cantonHelp: 'Il cantone in cui sei tassato — usato per calcolare i tuoi importi fiscali.',
     general: 'Informazioni generali',
     taxpayer: 'Dati personali',
     spouse: 'Coniuge',

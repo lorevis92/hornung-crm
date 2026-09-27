@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  FileText, Download, Trash2, Eye, Image as ImageIcon, FileSpreadsheet, List, LayoutGrid, ClipboardCheck
+  AlertTriangle, FileText, Download, Trash2, Eye, Image as ImageIcon, FileSpreadsheet, List, LayoutGrid,
+  ClipboardCheck
 } from 'lucide-react'
 import clsx from 'clsx'
 import Modal from './Modal'
@@ -51,7 +52,9 @@ export default function DocumentList({
   canAssignCategory = false,
   onCategoryChange,
   onDelete,
-  canDelete = false
+  canDelete = false,
+  clientId,
+  taxYear
 }) {
   const { t, lang } = useI18n()
   const toast = useToast()
@@ -64,6 +67,19 @@ export default function DocumentList({
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [verifyDoc, setVerifyDoc] = useState(null)
+
+  // How many of these documents share each tax category — flagged inline
+  // (not hidden, since two documents of the same type can be legitimate,
+  // e.g. two employers) so a specialist notices an accidental duplicate
+  // upload immediately instead of it blending in.
+  const categoryCounts = useMemo(() => {
+    const counts = {}
+    documents.forEach((doc) => {
+      if (!doc.category_code) return
+      counts[doc.category_code] = (counts[doc.category_code] || 0) + 1
+    })
+    return counts
+  }, [documents])
 
   const changeView = (next) => {
     setView(next)
@@ -191,6 +207,12 @@ export default function DocumentList({
                     {doc.file_size ? ` · ${formatBytes(doc.file_size)}` : ''}
                   </p>
                   {doc.note ? <p className="mt-1 text-[13px] italic text-ink-500">{doc.note}</p> : null}
+                  {canAssignCategory && doc.category_code && categoryCounts[doc.category_code] > 1 ? (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                      <AlertTriangle size={11} aria-hidden="true" />
+                      {t('case.duplicateCategoryBadge', { count: categoryCounts[doc.category_code] })}
+                    </span>
+                  ) : null}
                 </button>
 
                 {canAssignCategory ? (
@@ -278,6 +300,12 @@ export default function DocumentList({
                 </p>
                 {type ? (
                   <p className="w-full truncate text-[11px] text-ink-400">{docTypeLabel(type, lang)}</p>
+                ) : null}
+                {canAssignCategory && doc.category_code && categoryCounts[doc.category_code] > 1 ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                    <AlertTriangle size={10} aria-hidden="true" />
+                    {t('case.duplicateCategoryBadge', { count: categoryCounts[doc.category_code] })}
+                  </span>
                 ) : null}
 
                 {canAssignCategory ? (
@@ -419,6 +447,8 @@ export default function DocumentList({
         onClose={() => setVerifyDoc(null)}
         doc={verifyDoc}
         categories={categories}
+        clientId={clientId}
+        taxYear={taxYear}
       />
     </div>
   )

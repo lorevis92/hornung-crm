@@ -159,6 +159,7 @@ export default {
     chooseType: 'Nicht angegeben',
     taxCategory: 'Steuerkategorie',
     taxCategoryPlaceholder: 'Nicht kategorisiert',
+    duplicateCategoryBadge: '{count} Dokumente dieses Typs — auf Duplikate prüfen',
     noDocuments: 'Noch keine Dokumente hochgeladen.',
     fromSpecialist: 'Dokumente von Hornung Consulting',
     fromSpecialistHelp: 'Ihre fertige Steuererklärung und zugehörige Dokumente.',
@@ -209,6 +210,8 @@ export default {
   data: {
     title: 'Meine Daten',
     subtitle: 'Diese Angaben dienen der Erstellung Ihrer Steuererklärung. Bitte aktuell halten.',
+    cantonTitle: 'Kanton',
+    cantonHelp: 'Der Kanton, in dem Sie besteuert werden — wird für die Berechnung Ihrer Steuerwerte verwendet.',
     general: 'Allgemeine Angaben',
     taxpayer: 'Personalien',
     spouse: 'Ehepartner/in',

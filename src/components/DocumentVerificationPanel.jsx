@@ -13,8 +13,9 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions } from '../lib/extraction'
+import { recalculateInBackground } from '../lib/recalc'
 
-export default function DocumentVerificationPanel({ open, onClose, doc, categories = [] }) {
+export default function DocumentVerificationPanel({ open, onClose, doc, categories = [], clientId, taxYear }) {
   const { t, lang } = useI18n()
   const { profile } = useAuth()
   const toast = useToast()
@@ -91,6 +92,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
     try {
       await persistField(field)
       toast.success(t('common.saved'))
+      recalculateInBackground(clientId, taxYear, lang)
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -110,6 +112,8 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
         await persistField(field)
       }
       toast.success(t('common.saved'))
+      // Once for the whole batch, not once per field.
+      recalculateInBackground(clientId, taxYear, lang)
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -139,6 +143,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
             : f
         )
       )
+      recalculateInBackground(clientId, taxYear, lang)
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))

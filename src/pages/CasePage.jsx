@@ -20,11 +20,12 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES } from '../lib/constants'
 import { fullName } from '../lib/format'
+import { recalculateInBackground } from '../lib/recalc'
 
 export default function CasePage() {
   const { caseId } = useParams()
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const toast = useToast()
   const { isStaff, profile, client: myClient } = useAuth()
 
@@ -144,6 +145,9 @@ export default function CasePage() {
     await api.deleteDocument(doc)
     setDocuments((list) => list.filter((d) => d.id !== doc.id))
     toast.success(t('common.saved'))
+    // A deleted document may have been feeding the tax calculation — keep
+    // it in sync even though this page doesn't show the total itself.
+    recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
   }
 
   const changeDocumentCategory = async (doc, categoryCode) => {
@@ -346,6 +350,8 @@ export default function CasePage() {
                   onCategoryChange={changeDocumentCategory}
                   canDelete={isStaff || !locked}
                   onDelete={removeDocument}
+                  clientId={caseRow.client_id}
+                  taxYear={caseRow.tax_year}
                 />
               ) : (
                 <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
@@ -416,6 +422,8 @@ export default function CasePage() {
                 onCategoryChange={changeDocumentCategory}
                 canDelete={isStaff}
                 onDelete={removeDocument}
+                clientId={caseRow.client_id}
+                taxYear={caseRow.tax_year}
               />
             ) : (
               <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">

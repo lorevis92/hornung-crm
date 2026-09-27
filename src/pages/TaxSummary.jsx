@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Calculator, FileDown, FolderOpen, Info, Landmark, PiggyBank, Receipt } from 'lucide-react'
+import {
+  AlertTriangle, ArrowLeft, Calculator, FileDown, FolderOpen, Info, Landmark, PiggyBank, Receipt
+} from 'lucide-react'
 import ExtractedFieldRow from '../components/ExtractedFieldRow'
 import { EmptyState, PageLoader, Spinner, Stat } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
@@ -11,6 +13,7 @@ import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions, verifiedFieldsByDocument } from '../lib/extraction'
 import { formatChfSwiss, formatDateTime, fullName } from '../lib/format'
+import { recalculateInBackground } from '../lib/recalc'
 
 // pdfjs-dist is a large dependency — only fetched when a specialist actually
 // opens the source view, not on every page load.
@@ -188,6 +191,9 @@ export default function TaxSummary() {
         )
       )
       toast.success(t('common.saved'))
+      recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang).then((computed) => {
+        if (computed) setResult(computed)
+      })
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -218,6 +224,9 @@ export default function TaxSummary() {
             : f
         )
       )
+      recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang).then((computed) => {
+        if (computed) setResult(computed)
+      })
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -345,7 +354,15 @@ export default function TaxSummary() {
               <div className="space-y-5">
                 {section.categories.map(({ category, documents: catDocuments }) => (
                   <div key={category.code} className="space-y-3">
-                    <h3 className="text-[15px] font-semibold text-ink-700">{docTypeLabel(category, lang)}</h3>
+                    <h3 className="flex flex-wrap items-center gap-2 text-[15px] font-semibold text-ink-700">
+                      {docTypeLabel(category, lang)}
+                      {catDocuments.length > 1 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                          <AlertTriangle size={11} aria-hidden="true" />
+                          {t('case.duplicateCategoryBadge', { count: catDocuments.length })}
+                        </span>
+                      ) : null}
+                    </h3>
                     {catDocuments.map((docGroup) => (
                       <div key={docGroup.documentId} className="space-y-2 rounded-xl bg-sand/40 p-3">
                         <p className="px-1 text-[12.5px] font-medium text-ink-500">{docGroup.fileName}</p>

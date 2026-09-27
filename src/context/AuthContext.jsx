@@ -285,6 +285,33 @@ export function AuthProvider({ children }) {
     setClient(await api.getMyClient(profile.id))
   }, [profile])
 
+  // Same update_my_contact() RPC as updateProfileName — a client has no
+  // direct UPDATE policy on `clients`, canton included, so this is the only
+  // way for them to set it themselves. Passing null for the name/phone/
+  // language params leaves those columns untouched (see the migration).
+  const updateMyCanton = useCallback(async (canton) => {
+    if (IS_DEMO) {
+      // Goes through api.updateClient (the same call the specialist's own
+      // "Edit info" modal uses) so it actually lands in the demo store —
+      // not just local React state — and the calculation engine (which
+      // reads client.canton straight from that store) sees it too.
+      if (client) {
+        const updated = await api.updateClient(client.id, { canton })
+        setClient((c) => (c ? { ...c, ...updated } : c))
+      }
+      return
+    }
+    const { error } = await supabase.rpc('update_my_contact', {
+      p_first_name: null,
+      p_last_name: null,
+      p_phone: null,
+      p_language: null,
+      p_canton: canton || null
+    })
+    if (error) throw error
+    setClient((c) => (c ? { ...c, canton } : c))
+  }, [client])
+
   const value = useMemo(
     () => ({
       loading,
@@ -301,11 +328,12 @@ export function AuthProvider({ children }) {
       sendResetEmail,
       updatePassword,
       updateProfileName,
+      updateMyCanton,
       refreshClient
     }),
     [
       loading, session, profile, client, access,
-      signIn, signInDemo, signOut, sendResetEmail, updatePassword, updateProfileName, refreshClient
+      signIn, signInDemo, signOut, sendResetEmail, updatePassword, updateProfileName, updateMyCanton, refreshClient
     ]
   )
 
