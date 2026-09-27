@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   AlertTriangle, FileText, Download, Trash2, Eye, Image as ImageIcon, FileSpreadsheet, List, LayoutGrid,
-  ClipboardCheck
+  ClipboardCheck, Tag
 } from 'lucide-react'
 import clsx from 'clsx'
 import Modal from './Modal'
@@ -80,6 +80,11 @@ export default function DocumentList({
     })
     return counts
   }, [documents])
+
+  const categoryByCode = useMemo(
+    () => Object.fromEntries(categories.map((c) => [c.code, c])),
+    [categories]
+  )
 
   const changeView = (next) => {
     setView(next)
@@ -187,6 +192,7 @@ export default function DocumentList({
           {documents.map((doc) => {
             const Icon = iconFor(doc.mime_type)
             const type = findDocType(documentTypes, doc.document_type_id)
+            const category = categoryByCode[doc.category_code]
             return (
               <li key={doc.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-sand/70">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gold-50 text-gold-700">
@@ -206,6 +212,16 @@ export default function DocumentList({
                     {formatDate(doc.created_at, lang)}
                     {doc.file_size ? ` · ${formatBytes(doc.file_size)}` : ''}
                   </p>
+                  {canAssignCategory ? (
+                    <p className="mt-1 flex items-center gap-1 truncate text-[12px]">
+                      <Tag size={11} className="shrink-0 text-gold-600" aria-hidden="true" />
+                      {category ? (
+                        <span className="text-gold-700">{docTypeLabel(category, lang)}</span>
+                      ) : (
+                        <span className="text-ink-300">{t('case.taxCategoryPlaceholder')}</span>
+                      )}
+                    </p>
+                  ) : null}
                   {doc.note ? <p className="mt-1 text-[13px] italic text-ink-500">{doc.note}</p> : null}
                   {canAssignCategory && doc.category_code && categoryCounts[doc.category_code] > 1 ? (
                     <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
@@ -277,6 +293,7 @@ export default function DocumentList({
           {documents.map((doc) => {
             const Icon = iconFor(doc.mime_type)
             const type = findDocType(documentTypes, doc.document_type_id)
+            const category = categoryByCode[doc.category_code]
             return (
               <div
                 key={doc.id}
@@ -300,6 +317,16 @@ export default function DocumentList({
                 </p>
                 {type ? (
                   <p className="w-full truncate text-[11px] text-ink-400">{docTypeLabel(type, lang)}</p>
+                ) : null}
+                {canAssignCategory ? (
+                  <p className="flex w-full items-center justify-center gap-1 truncate text-[11px]">
+                    <Tag size={10} className="shrink-0 text-gold-600" aria-hidden="true" />
+                    {category ? (
+                      <span className="text-gold-700">{docTypeLabel(category, lang)}</span>
+                    ) : (
+                      <span className="text-ink-300">{t('case.taxCategoryPlaceholder')}</span>
+                    )}
+                  </p>
                 ) : null}
                 {canAssignCategory && doc.category_code && categoryCounts[doc.category_code] > 1 ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">

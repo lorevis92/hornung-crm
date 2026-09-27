@@ -212,7 +212,7 @@ export default function TaxSummary() {
         confidence: field.confidence,
         source_quote: field.source_quote,
         source_page: field.source_page,
-        verified_by_specialist: true,
+        verified_by_specialist: field.verified_by_specialist,
         verified_at: field.verified_at,
         verified_by: field.verified_by,
         included_in_calculation: field.included_in_calculation === false

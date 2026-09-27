@@ -1,12 +1,20 @@
-import { CircleCheck, Eye } from 'lucide-react'
+import { AlertTriangle, Save, Eye } from 'lucide-react'
 import clsx from 'clsx'
 import { Checkbox, Spinner, Textarea } from './ui'
 import { useI18n } from '../i18n'
 import { formatDateTime } from '../lib/format'
 
-// One editable/verifiable extracted-field row — shared by
-// DocumentVerificationPanel (scoped to a single document) and TaxSummary
-// (every document of a client/tax year, hence the optional file name badge).
+// One editable field row — shared by DocumentVerificationPanel (scoped to a
+// single document) and TaxSummary (every document of a client/tax year,
+// hence the optional file name badge).
+//
+// Extracted values feed the calculation automatically as soon as they exist
+// — there is no "confirm to include" step. The specialist's job here is to
+// review (and edit/exclude/add where needed), not to explicitly approve
+// every single value one by one. The confidence/"needs review" signal stays
+// visible as a hint of what's worth double-checking; it no longer gates
+// inclusion. Saving an edit still exists (onConfirm) for when the
+// specialist actually corrects or adds a value.
 export default function ExtractedFieldRow({
   field,
   showDocument = false,
@@ -22,6 +30,8 @@ export default function ExtractedFieldRow({
   const { t, lang } = useI18n()
   const canViewSource = field.source_quote || field.isPdf
   const excluded = field.included_in_calculation === false
+  const hasValue = Boolean(field.field_value)
+  const edited = field.verified_by_specialist
 
   return (
     <li ref={innerRef} className="rounded-xl border border-line bg-white p-3.5">
@@ -31,40 +41,40 @@ export default function ExtractedFieldRow({
           {showDocument && field.file_name ? (
             <p className="text-[12px] text-ink-400">{field.file_name}</p>
           ) : null}
-          {field.verified_by_specialist ? (
-            <>
-              <p
-                className={clsx(
-                  'mt-0.5 flex items-center gap-1 text-[12.5px]',
-                  excluded ? 'text-amber-700' : 'text-emerald-700'
-                )}
-              >
-                <CircleCheck size={13} aria-hidden="true" />
-                {t('extraction.verifiedOn', { date: formatDateTime(field.verified_at, lang) })}
-                {excluded ? ` · ${t('extraction.excludedBadge')}` : ''}
-              </p>
-              {onToggleInclude ? (
-                <div className="mt-1">
-                  <Checkbox
-                    id={`include-${field.document_id}-${field.field_key}`}
-                    checked={excluded}
-                    disabled={togglingInclude}
-                    onChange={onToggleInclude}
-                    label={t('extraction.excludeFromCalculation')}
-                  />
-                </div>
-              ) : null}
-            </>
-          ) : field.field_value ? (
-            <p className="mt-0.5 text-[12.5px] font-medium text-amber-700">
-              {t('extraction.needsReview')}
-              {field.confidence != null
+
+          {hasValue ? (
+            <p
+              className={clsx(
+                'mt-0.5 flex items-center gap-1 text-[12.5px]',
+                excluded ? 'text-amber-700' : edited ? 'text-emerald-700' : field.confidence != null ? 'text-amber-700' : 'text-ink-400'
+              )}
+            >
+              {!edited && field.confidence != null ? <AlertTriangle size={13} aria-hidden="true" /> : null}
+              {edited
+                ? t('extraction.editedOn', { date: formatDateTime(field.verified_at, lang) })
+                : field.confidence != null
+                  ? t('extraction.needsReview')
+                  : t('extraction.addedManually')}
+              {!edited && field.confidence != null
                 ? ` · ${t('extraction.confidence', { percent: Math.round(field.confidence * 100) })}`
                 : ''}
+              {excluded ? ` · ${t('extraction.excludedBadge')}` : ''}
             </p>
           ) : (
             <p className="mt-0.5 text-[12.5px] text-ink-400">{t('extraction.notFound')}</p>
           )}
+
+          {hasValue && onToggleInclude ? (
+            <div className="mt-1">
+              <Checkbox
+                id={`include-${field.document_id}-${field.field_key}`}
+                checked={excluded}
+                disabled={togglingInclude}
+                onChange={onToggleInclude}
+                label={t('extraction.excludeFromCalculation')}
+              />
+            </div>
+          ) : null}
         </div>
         {canViewSource ? (
           <button
@@ -94,8 +104,8 @@ export default function ExtractedFieldRow({
           onClick={onConfirm}
           disabled={saving || !field.field_value.trim()}
         >
-          {saving ? <Spinner size={15} /> : <CircleCheck size={15} aria-hidden="true" />}
-          {t('extraction.confirm')}
+          {saving ? <Spinner size={15} /> : <Save size={15} aria-hidden="true" />}
+          {t('common.save')}
         </button>
       </div>
     </li>

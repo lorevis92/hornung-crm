@@ -156,6 +156,10 @@ export default function CasePage() {
       list.map((d) => (d.id === doc.id ? { ...d, category_code: categoryCode } : d))
     )
     toast.success(t('common.saved'))
+    // Fields only enter the calculation once their document has a category
+    // — correcting a wrong AI classification changes the total just as
+    // directly as editing a value would.
+    recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
   }
 
   const saveChecklist = async (ids) => {

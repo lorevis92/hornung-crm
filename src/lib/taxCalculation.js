@@ -32,12 +32,21 @@ function categoryLabel(category, lang) {
   return category[`label_${lang}`] || category.label_en || category.code
 }
 
-// Maps a document_categories.group_key to the tax-summary section it
-// belongs to — assets/property are merged into one "wealth" section, same
-// grouping the tax summary view (SECTIONS in TaxSummary.jsx) already uses.
-function sectionKeyForGroup(groupKey) {
-  if (groupKey === 'assets' || groupKey === 'property') return 'wealth'
-  return groupKey || null
+// Which "how this was calculated" section a component belongs to — driven
+// by what the field actually contributes to, NOT by the document category
+// it happens to come from. A debt certificate's balance (wealth_minus)
+// belongs in Wealth even though the debt_certificate category itself is
+// filed under the Deductions group on screen (its annual_interest_paid
+// field IS an income deduction); a property's imputed rental value/
+// maintenance costs (income_plus/income_minus) belong in Income/Deductions
+// even though property_tax_value is filed under the Wealth group. Mixing
+// these up is exactly what breaks traceability between the totals above
+// and the rows listed below.
+const CONTRIBUTION_TO_SECTION = {
+  income_plus: 'income',
+  income_minus: 'deductions',
+  wealth_plus: 'wealth',
+  wealth_minus: 'wealth'
 }
 
 function findParam(parameters, family, cantonCode) {
@@ -76,7 +85,7 @@ export function computeTaxAggregate({
     (fieldDefs || []).map((f) => [`${f.category_code}:${f.field_key}`, f.field_label])
   )
 
-  // A document's "identifier" for readable labels — the first verified
+  // A document's "identifier" for readable labels — the first
   // *_name/*_organization field found for it (e.g. an employer or
   // institution name), falling back to the file name. Generic on purpose:
   // no per-category hardcoding of which field is the "interesting" one.
@@ -85,7 +94,6 @@ export function computeTaxAggregate({
     const nameField = (extractedFields || []).find(
       (f) =>
         f.document_id === doc.id &&
-        f.verified_by_specialist &&
         f.included_in_calculation !== false &&
         /_(name|organization)$/.test(f.field_key) &&
         f.field_value
@@ -96,8 +104,13 @@ export function computeTaxAggregate({
   const warnings = []
   const entries = []
 
+  // Extracted values feed the calculation as soon as they exist — there is
+  // no "confirmed by the specialist" gate. The specialist can still
+  // exclude a field (included_in_calculation) or correct/add a value at
+  // any time; verified_by_specialist is no longer read here at all.
   for (const field of extractedFields || []) {
-    if (!field.verified_by_specialist || field.included_in_calculation === false) continue
+    if (field.included_in_calculation === false) continue
+    if (!field.field_value || !field.field_value.trim()) continue
     const doc = documentById[field.document_id]
     if (!doc || !doc.category_code) continue
     const rule = ruleByKey[`${doc.category_code}:${field.field_key}`]
@@ -176,11 +189,21 @@ export function computeTaxAggregate({
     }
   }
 
-  const finalDeferredIncomeMinus = entries
-    .filter((e) => e.deferred)
-    .reduce((sum, e) => sum + e.effective, 0)
+  // Round every contributing amount to whole CHF now, once — capping/
+  // threshold logic above needed the unrounded figures for precision, but
+  // from here on every total is built by summing THESE same rounded
+  // numbers, which are also exactly what the "how this was calculated"
+  // rows show. That guarantees the totals above are always exactly the sum
+  // of the rows below, rather than summing unrounded amounts and rounding
+  // only the final total (which can drift by a franc or two once several
+  // fractional components are involved).
+  for (const entry of entries) {
+    entry.effective = Math.round(entry.effective)
+  }
 
-  const taxableIncomeCantonal = Math.round(provisionalIncome - finalDeferredIncomeMinus)
+  const taxableIncomeCantonal =
+    entries.filter((e) => e.contributionType === 'income_plus').reduce((sum, e) => sum + e.effective, 0) -
+    entries.filter((e) => e.contributionType === 'income_minus').reduce((sum, e) => sum + e.effective, 0)
 
   const wealthPlus = entries
     .filter((e) => e.contributionType === 'wealth_plus')
@@ -188,7 +211,7 @@ export function computeTaxAggregate({
   const wealthMinus = entries
     .filter((e) => e.contributionType === 'wealth_minus')
     .reduce((sum, e) => sum + e.effective, 0)
-  const taxableWealthCantonal = Math.round(wealthPlus - wealthMinus)
+  const taxableWealthCantonal = wealthPlus - wealthMinus
 
   // Federal income isn't computed separately yet — treated as equal to the
   // cantonal figure until federal-specific rules are mapped. There is no
@@ -202,7 +225,7 @@ export function computeTaxAggregate({
     return {
       documentId: entry.documentId,
       componentType: CONTRIBUTION_TO_COMPONENT[entry.contributionType],
-      sectionKey: sectionKeyForGroup(entry.groupKey),
+      sectionKey: CONTRIBUTION_TO_SECTION[entry.contributionType] || null,
       amount: entry.effective,
       label,
       // The "how this was calculated" table has just two columns (item,

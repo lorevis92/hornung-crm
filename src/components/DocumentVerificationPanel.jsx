@@ -1,5 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCheck } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import Modal from './Modal'
 import ExtractedFieldRow from './ExtractedFieldRow'
 import { Spinner } from './ui'
@@ -15,6 +14,9 @@ import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions } from '../lib/extraction'
 import { recalculateInBackground } from '../lib/recalc'
 
+// Extracted values already feed the calculation as soon as they exist — no
+// bulk "confirm all" step needed here either. This panel is for reviewing,
+// correcting, excluding, or manually adding a value on a single document.
 export default function DocumentVerificationPanel({ open, onClose, doc, categories = [], clientId, taxYear }) {
   const { t, lang } = useI18n()
   const { profile } = useAuth()
@@ -26,7 +28,6 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
   const [view, setView] = useState('list')
   const [sourceField, setSourceField] = useState(null)
   const [savingKey, setSavingKey] = useState(null)
-  const [bulkSaving, setBulkSaving] = useState(false)
   const [togglingKey, setTogglingKey] = useState(null)
   const fieldRefs = useRef({})
 
@@ -55,42 +56,33 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
     }
   }, [open, doc])
 
-  const pendingCount = useMemo(
-    () => fields.filter((f) => f.field_value.trim() && !f.verified_by_specialist).length,
-    [fields]
-  )
-
   if (!doc) return null
 
   const updateValue = (key, value) => {
     setFields((list) => list.map((f) => (f.field_key === key ? { ...f, field_value: value } : f)))
   }
 
-  const persistField = async (field) => {
-    const saved = await api.saveExtractedField(doc.id, {
-      field_key: field.field_key,
-      field_value: field.field_value.trim(),
-      confidence: field.confidence,
-      source_quote: field.source_quote,
-      source_page: field.source_page,
-      verified_by_specialist: true,
-      verified_at: new Date().toISOString(),
-      verified_by: profile?.id || null
-    })
-    setFields((list) =>
-      list.map((f) =>
-        f.field_key === field.field_key
-          ? { ...f, verified_by_specialist: true, verified_at: saved.verified_at || new Date().toISOString() }
-          : f
-      )
-    )
-  }
-
-  const confirmField = async (field) => {
+  const saveField = async (field) => {
     if (!field.field_value.trim()) return
     setSavingKey(field.field_key)
     try {
-      await persistField(field)
+      const saved = await api.saveExtractedField(doc.id, {
+        field_key: field.field_key,
+        field_value: field.field_value.trim(),
+        confidence: field.confidence,
+        source_quote: field.source_quote,
+        source_page: field.source_page,
+        verified_by_specialist: true,
+        verified_at: new Date().toISOString(),
+        verified_by: profile?.id || null
+      })
+      setFields((list) =>
+        list.map((f) =>
+          f.field_key === field.field_key
+            ? { ...f, verified_by_specialist: true, verified_at: saved.verified_at || new Date().toISOString() }
+            : f
+        )
+      )
       toast.success(t('common.saved'))
       recalculateInBackground(clientId, taxYear, lang)
     } catch (error) {
@@ -98,27 +90,6 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
       toast.error(error.message || t('common.error'))
     } finally {
       setSavingKey(null)
-    }
-  }
-
-  const confirmAll = async () => {
-    const pending = fields.filter((f) => f.field_value.trim() && !f.verified_by_specialist)
-    if (!pending.length) return
-    setBulkSaving(true)
-    try {
-      for (const field of pending) {
-        // Sequential, not Promise.all: keeps state updates predictable and
-        // avoids hammering the DB with a burst of concurrent upserts.
-        await persistField(field)
-      }
-      toast.success(t('common.saved'))
-      // Once for the whole batch, not once per field.
-      recalculateInBackground(clientId, taxYear, lang)
-    } catch (error) {
-      console.error(error)
-      toast.error(error.message || t('common.error'))
-    } finally {
-      setBulkSaving(false)
     }
   }
 
@@ -131,7 +102,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
         confidence: field.confidence,
         source_quote: field.source_quote,
         source_page: field.source_page,
-        verified_by_specialist: true,
+        verified_by_specialist: field.verified_by_specialist,
         verified_at: field.verified_at,
         verified_by: field.verified_by,
         included_in_calculation: field.included_in_calculation === false
@@ -166,7 +137,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
   }
 
   const handleClose = () => {
-    if (savingKey || bulkSaving) return
+    if (savingKey) return
     onClose()
   }
 
@@ -183,20 +154,9 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
       size="xl"
       footer={
         view === 'list' ? (
-          <>
-            <button type="button" className="btn-secondary btn-sm" onClick={handleClose}>
-              {t('common.close')}
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm"
-              onClick={confirmAll}
-              disabled={bulkSaving || !pendingCount}
-            >
-              {bulkSaving ? <Spinner size={16} /> : <CheckCheck size={16} aria-hidden="true" />}
-              {t('extraction.confirmAll', { count: pendingCount })}
-            </button>
-          </>
+          <button type="button" className="btn-secondary btn-sm" onClick={handleClose}>
+            {t('common.close')}
+          </button>
         ) : null
       }
     >
@@ -233,7 +193,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
               saving={savingKey === field.field_key}
               togglingInclude={togglingKey === field.field_key}
               onChange={(value) => updateValue(field.field_key, value)}
-              onConfirm={() => confirmField(field)}
+              onConfirm={() => saveField(field)}
               onViewSource={() => viewSource(field)}
               onToggleInclude={() => toggleInclude(field)}
             />

@@ -172,13 +172,136 @@ export const TAX_PARAMETERS = [
   { scope: 'cantonal', canton_code: 'ZH', tax_year: 2026, parameter_key: 'health_insurance_premium_single', parameter_family: 'health_insurance_premium_cap', parameter_label: 'Premio cassa malati (persona singola)', value_numeric: 2900, value_type: 'fixed_amount', source_url: null, notes: 'Persona singola — verificare per coniugati/con figli.', last_verified_at: null }
 ].map((item, index) => ({ id: `param-${index}`, ...item }))
 
-// A small representative sample (not the full 73-row real dataset, seeded in
-// supabase/migrations/20260101000014_field_calculation_rules.sql) — just
-// enough to preview the "Calculation rules" screen in demo mode. Every other
-// field defaults to contribution_type 'none' until the specialist sets it.
+// Mirrors the full rule set seeded in
+// supabase/migrations/20260101000014_field_calculation_rules.sql — one row
+// per (category_code, field_key), so demo mode exercises exactly the same
+// income/deduction/wealth mapping as production instead of a partial
+// preview (fields left out here would silently default to contribution_type
+// 'none', which is fine for a screen preview but not for actually testing
+// the calculation engine end to end).
 export const FIELD_CALCULATION_RULES = [
+  // current_tax_sheet — basic data, not part of the calculation
+  { category_code: 'current_tax_sheet', field_key: 'full_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'date_of_birth', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'marital_status', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'canton', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'municipality', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'zip', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'children_count', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'religious_affiliation', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'partner_full_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'partner_date_of_birth', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'current_tax_sheet', field_key: 'partner_religious_affiliation', contribution_type: 'none', cap_parameter_family: null, notes: null },
+
+  // previous_tax_return / previous_tax_assessment — reference only
+  { category_code: 'previous_tax_return', field_key: 'tax_year', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'previous_tax_return', field_key: 'previous_taxable_income', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'previous_tax_return', field_key: 'previous_taxable_wealth', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'previous_tax_assessment', field_key: 'assessment_date', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'previous_tax_assessment', field_key: 'assessed_taxable_income', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'previous_tax_assessment', field_key: 'assessed_taxable_wealth', contribution_type: 'none', cap_parameter_family: null, notes: null },
+
+  // salary_statement
   { category_code: 'salary_statement', field_key: 'employer_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'salary_statement', field_key: 'gross_salary', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
   { category_code: 'salary_statement', field_key: 'net_salary', contribution_type: 'none', cap_parameter_family: null, notes: null },
-  { category_code: 'pillar_3a_certificate', field_key: 'annual_contribution', contribution_type: 'income_minus', cap_parameter_family: null, notes: 'Il tetto dipende dalla situazione previdenziale del cliente.' }
+  { category_code: 'salary_statement', field_key: 'withholding_tax', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'salary_statement', field_key: 'ahv_contributions', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'salary_statement', field_key: 'pension_fund_contributions', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'salary_statement', field_key: 'expense_allowances', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'salary_statement', field_key: 'employment_period_from', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'salary_statement', field_key: 'employment_period_to', contribution_type: 'none', cap_parameter_family: null, notes: null },
+
+  // self_employed_income_statement
+  { category_code: 'self_employed_income_statement', field_key: 'business_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'self_employed_income_statement', field_key: 'revenue', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'self_employed_income_statement', field_key: 'expenses', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'self_employed_income_statement', field_key: 'net_profit', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
+  { category_code: 'self_employed_income_statement', field_key: 'fiscal_year', contribution_type: 'none', cap_parameter_family: null, notes: null },
+
+  // alimony_received / alimony_paid
+  { category_code: 'alimony_received', field_key: 'payer_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'alimony_received', field_key: 'annual_amount', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
+  { category_code: 'alimony_received', field_key: 'type', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'alimony_paid', field_key: 'recipient_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'alimony_paid', field_key: 'annual_amount', contribution_type: 'income_minus', cap_parameter_family: null, notes: null },
+  { category_code: 'alimony_paid', field_key: 'type', contribution_type: 'none', cap_parameter_family: null, notes: null },
+
+  // childcare_costs
+  { category_code: 'childcare_costs', field_key: 'child_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'childcare_costs', field_key: 'provider_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'childcare_costs', field_key: 'annual_amount', contribution_type: 'income_minus', cap_parameter_family: 'childcare_costs_cap', notes: null },
+
+  // debt_certificate — the balance is a wealth item, only the interest is an income deduction
+  { category_code: 'debt_certificate', field_key: 'creditor_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'debt_certificate', field_key: 'debt_type', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'debt_certificate', field_key: 'debt_balance', contribution_type: 'wealth_minus', cap_parameter_family: null, notes: null },
+  {
+    category_code: 'debt_certificate',
+    field_key: 'annual_interest_paid',
+    contribution_type: 'income_minus',
+    cap_parameter_family: 'debt_interest_extra_allowance',
+    notes: "Il tetto non è un importo fisso: è pari al reddito da patrimonio del cliente più l'importo del parametro."
+  },
+
+  // pillar_3a_certificate
+  { category_code: 'pillar_3a_certificate', field_key: 'institution_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'pillar_3a_certificate', field_key: 'policy_number', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  {
+    category_code: 'pillar_3a_certificate',
+    field_key: 'annual_contribution',
+    contribution_type: 'income_minus',
+    cap_parameter_family: null,
+    notes: 'Il tetto dipende dalla situazione previdenziale del cliente: usare il parametro "3° pilastro a, con LPP" se affiliato a una cassa pensione, altrimenti "3° pilastro a, senza LPP".'
+  },
+
+  // health_insurance_policy
+  { category_code: 'health_insurance_policy', field_key: 'insurer_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'health_insurance_policy', field_key: 'insured_persons_count', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'health_insurance_policy', field_key: 'annual_premium', contribution_type: 'income_minus', cap_parameter_family: 'health_insurance_premium_cap', notes: null },
+
+  // medical_costs
+  { category_code: 'medical_costs', field_key: 'description', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  {
+    category_code: 'medical_costs',
+    field_key: 'total_amount',
+    contribution_type: 'income_minus',
+    cap_parameter_family: 'medical_costs_threshold_pct',
+    notes: "È una soglia, non un tetto: deducibile solo l'importo che eccede la percentuale del reddito netto."
+  },
+
+  // donation_certificate
+  { category_code: 'donation_certificate', field_key: 'recipient_organization', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'donation_certificate', field_key: 'annual_amount', contribution_type: 'income_minus', cap_parameter_family: 'donation_cap_pct', notes: null },
+
+  // supported_person_transfer
+  { category_code: 'supported_person_transfer', field_key: 'supported_person_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'supported_person_transfer', field_key: 'relationship', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'supported_person_transfer', field_key: 'annual_amount', contribution_type: 'income_minus', cap_parameter_family: null, notes: null },
+
+  // bank_securities_crypto_statement
+  { category_code: 'bank_securities_crypto_statement', field_key: 'institution_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_type', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_balance_31_12', contribution_type: 'wealth_plus', cap_parameter_family: null, notes: null },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'interest_income', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'dividend_income', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
+
+  // pension_fund_statement — informational, not part of the calculation
+  { category_code: 'pension_fund_statement', field_key: 'institution_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'pension_fund_statement', field_key: 'accumulated_capital', contribution_type: 'none', cap_parameter_family: null, notes: null },
+
+  // inheritance_gift_lpp_payment — taxed separately, not part of ordinary income/wealth
+  { category_code: 'inheritance_gift_lpp_payment', field_key: 'type', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'inheritance_gift_lpp_payment', field_key: 'amount', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'inheritance_gift_lpp_payment', field_key: 'date_received', contribution_type: 'none', cap_parameter_family: null, notes: null },
+
+  // property_tax_value — the tax value is wealth; rental value/maintenance are income items
+  { category_code: 'property_tax_value', field_key: 'property_address', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'property_tax_value', field_key: 'tax_value', contribution_type: 'wealth_plus', cap_parameter_family: null, notes: null },
+  { category_code: 'property_tax_value', field_key: 'imputed_rental_value', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
+  { category_code: 'property_tax_value', field_key: 'maintenance_costs', contribution_type: 'income_minus', cap_parameter_family: null, notes: null },
+
+  // rental_contract_zug
+  { category_code: 'rental_contract_zug', field_key: 'property_address', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'rental_contract_zug', field_key: 'annual_rent', contribution_type: 'income_minus', cap_parameter_family: null, notes: null }
 ].map((item, index) => ({ id: `calcrule-${index}`, ...item }))

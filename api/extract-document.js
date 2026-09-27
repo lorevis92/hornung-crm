@@ -17,6 +17,7 @@
 //      in the document.
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, serviceClient } from './_lib.js'
+import { recalculateAndPersist } from './_recalc.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
 // import.meta.env) — keep this in sync with that file.
@@ -210,6 +211,18 @@ async function runExtraction(admin, anthropic, documentId) {
     .update({ status: 'extracted', processed_at: new Date().toISOString() })
     .eq('id', documentId)
   if (finishError) throw finishError
+
+  // Extracted values feed the calculation as soon as they exist — no
+  // specialist confirmation needed — so the aggregate is kept in sync right
+  // here too, the same as an edit/exclude/delete already does from the
+  // browser. Best-effort: a failure here shouldn't mark the extraction
+  // itself (which did succeed) as failed — the manual "Recalculate" button
+  // remains a fallback.
+  try {
+    await recalculateAndPersist(admin, claimed.client_id, claimed.tax_year)
+  } catch (recalcError) {
+    console.error(`[extract-document] recalculation failed for document ${documentId}:`, recalcError)
+  }
 }
 
 export default async function handler(req, res) {

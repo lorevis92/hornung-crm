@@ -709,7 +709,6 @@ export const demoApi = {
           (f) =>
             f.document_id === sheetDoc.id &&
             f.field_key === 'canton' &&
-            f.verified_by_specialist &&
             f.included_in_calculation !== false
         )
         if (cantonField?.field_value) canton = cantonField.field_value.trim() || null
