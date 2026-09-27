@@ -171,6 +171,17 @@ function resolveChild(child, taxYear) {
   return { bracket: '16_plus', uncertain: true }
 }
 
+// Cantons where a deduction this app models everywhere else is actually a
+// tax CREDIT (applied to the final tax bill, not the taxable base) — never
+// added as an income_minus entry there; a warning is pushed instead, same
+// treatment for each such canton/deduction pair.
+const CHILD_CREDIT_NOT_DEDUCTION_CANTONS = new Set(['BL'])
+const MARRIED_CREDIT_NOT_DEDUCTION_CANTONS = new Set(['VS'])
+// Confirmed (not just "no cantonal override found") to have no such
+// deduction at all — the generic advisory entry is skipped outright rather
+// than shown as if it might still apply.
+const NO_TWO_INCOME_DEDUCTION_CANTONS = new Set(['TG'])
+
 const CHILD_BRACKET_FAMILY = {
   '0_6': 'child_deduction_0_6',
   '6_16': 'child_deduction_6_16',
@@ -543,28 +554,34 @@ export function computeTaxAggregate({
   // Social deductions — added last, against income already reduced by
   // everything above. Fixed amounts, so they never affect any threshold
   // computed earlier; only their presence in the final total matters.
-  for (const { child, resolved } of qualifyingChildren) {
-    const family = CHILD_BRACKET_FAMILY[resolved.bracket]
-    let param = findParam(parameters, family, canton)
-    if (!param) param = findParam(parameters, 'child_deduction_flat', canton)
-    if (!param) continue
-    entries.push(
-      makeSyntheticEntry({
-        contributionType: 'income_minus',
-        rawAmount: param.value_numeric || 0,
-        categoryLabel: 'Social deductions',
-        fieldLabel: `Child deduction — ${child.full_name || 'child'}`,
-        note: resolved.uncertain
-          ? 'child over 16 — training/education status not confirmed from the questionnaire, verify manually'
-          : null,
-        needsVerification: resolved.uncertain,
-        groupKey: 'deductions'
-      })
+  if (qualifyingChildren.length && CHILD_CREDIT_NOT_DEDUCTION_CANTONS.has(canton)) {
+    warnings.push(
+      'Basilea Campagna: la deduzione per figli è un credito d\'imposta di CHF 750/figlio applicato sull\'imposta finale, non una deduzione sulla base imponibile — non calcolato da questa app.'
     )
+  } else {
+    for (const { child, resolved } of qualifyingChildren) {
+      const family = CHILD_BRACKET_FAMILY[resolved.bracket]
+      let param = findParam(parameters, family, canton)
+      if (!param) param = findParam(parameters, 'child_deduction_flat', canton)
+      if (!param) continue
+      entries.push(
+        makeSyntheticEntry({
+          contributionType: 'income_minus',
+          rawAmount: param.value_numeric || 0,
+          categoryLabel: 'Social deductions',
+          fieldLabel: `Child deduction — ${child.full_name || 'child'}`,
+          note: resolved.uncertain
+            ? 'child over 16 — training/education status not confirmed from the questionnaire, verify manually'
+            : null,
+          needsVerification: resolved.uncertain,
+          groupKey: 'deductions'
+        })
+      )
+    }
   }
 
   if (isMarried) {
-    if (canton === 'VS') {
+    if (MARRIED_CREDIT_NOT_DEDUCTION_CANTONS.has(canton)) {
       warnings.push(
         'Vallese: la deduzione per coniugati è uno sconto d\'imposta del 35% (max CHF 4\'900) applicato sull\'imposta finale, non una deduzione sulla base imponibile — non calcolato da questa app.'
       )
@@ -590,10 +607,10 @@ export function computeTaxAggregate({
   // salary income per spouse and compute it automatically.
   const spouseAppearsEmployed = Boolean(spousePerson) && (spousePerson.work_percentage == null || spousePerson.work_percentage > 0)
   const primaryAppearsEmployed = !primaryPerson || primaryPerson.work_percentage == null || primaryPerson.work_percentage > 0
-  if (isMarried && spouseAppearsEmployed && primaryAppearsEmployed) {
+  if (isMarried && spouseAppearsEmployed && primaryAppearsEmployed && !NO_TWO_INCOME_DEDUCTION_CANTONS.has(canton)) {
     const minParam = findParam(parameters, 'two_income_deduction_min', canton)
-    const vsFixedParam = findParam(parameters, 'two_income_deduction_vs_fixed', canton)
-    const indicative = (canton === 'VS' ? vsFixedParam?.value_numeric : minParam?.value_numeric) || 0
+    const cantonalParam = findParam(parameters, 'two_income_deduction_cantonal_amount', canton)
+    const indicative = (cantonalParam?.value_numeric ?? minParam?.value_numeric) || 0
     entries.push(
       makeSyntheticEntry({
         contributionType: 'income_minus',
