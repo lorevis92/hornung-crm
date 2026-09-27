@@ -39,10 +39,18 @@ export function formatChf(amount, lang = 'en') {
 // specialist's chosen UI language, and match the apostrophe grouping the
 // verified field values themselves already use.
 export function formatChfSwiss(amount) {
+  return formatAmountSwiss(amount, 'CHF')
+}
+
+// Same fixed Swiss grouping as formatChfSwiss, but with a configurable
+// currency code — used for figures explicitly NOT converted to CHF (e.g. a
+// foreign-currency account excluded from the calculation), where labeling
+// the raw number "CHF" would misrepresent it.
+export function formatAmountSwiss(amount, currency) {
   const n = Math.round(Number(amount || 0))
   const sign = n < 0 ? '-' : ''
   const grouped = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'")
-  return `CHF ${sign}${grouped}`
+  return `${currency} ${sign}${grouped}`
 }
 
 export function formatBytes(bytes) {

@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import logoUrl from '../assets/logo.png'
 import { verifiedFieldsByDocument } from './extraction'
-import { formatChfSwiss, formatDateTime, fullName, safeFileName } from './format'
+import { formatAmountSwiss, formatChfSwiss, formatDateTime, fullName, safeFileName } from './format'
 import { FIRM_CONTACT } from './constants'
 
 const GOLD = [169, 133, 69]
@@ -162,7 +162,10 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
       startY: y,
       margin: { left: marginX, right: marginX },
       head: [[t('summary.colItem'), t('summary.colAmount')]],
-      body: needsVerificationComponents.map((c) => [c.field_label || c.label, formatChfSwiss(Math.abs(c.amount))]),
+      body: needsVerificationComponents.map((c) => [
+        c.field_label || c.label,
+        c.currency_code ? formatAmountSwiss(Math.abs(c.amount), c.currency_code) : formatChfSwiss(Math.abs(c.amount))
+      ]),
       columnStyles: { 1: { halign: 'right' } },
       styles: { fontSize: 9, cellPadding: 2.5, textColor: AMBER_TEXT, fillColor: AMBER_PANEL },
       headStyles: { fillColor: AMBER_LINE, textColor: AMBER_TEXT, fontStyle: 'bold' },

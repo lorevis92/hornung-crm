@@ -12,7 +12,7 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions, verifiedFieldsByDocument } from '../lib/extraction'
-import { formatChfSwiss, formatDateTime, fullName } from '../lib/format'
+import { formatAmountSwiss, formatChfSwiss, formatDateTime, fullName } from '../lib/format'
 import { recalculateInBackground, syncPersonalDetailsInBackground } from '../lib/recalc'
 
 // pdfjs-dist is a large dependency — only fetched when a specialist actually
@@ -523,7 +523,9 @@ export default function TaxSummary() {
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-right font-medium tabular-nums text-amber-900">
-                          {formatChfSwiss(Math.abs(c.amount))}
+                          {c.currency_code
+                            ? formatAmountSwiss(Math.abs(c.amount), c.currency_code)
+                            : formatChfSwiss(Math.abs(c.amount))}
                         </td>
                       </tr>
                     ))}

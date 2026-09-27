@@ -19,6 +19,43 @@ const DEBT_INTEREST_FAMILY = 'debt_interest_extra_allowance'
 // family is treated as a plain cap at that percentage.
 const MEDICAL_THRESHOLD_FAMILY = 'medical_costs_threshold_pct'
 
+// A handful of fields need to look at a sibling field on the SAME document
+// before they can be turned into a plain amount — same "special-cased by
+// name" style as the two family constants above, kept as small explicit
+// maps rather than new generic schema for what only a few fields need.
+
+// Deductible cost = the field's own amount minus the paired field (e.g.
+// medical costs net of the insurance reimbursement) — never negative.
+const NETS_AGAINST = {
+  'medical_costs:total_amount': 'insurance_reimbursement'
+}
+
+// The field is excluded (not a real deduction) when the paired field is
+// affirmative — e.g. a "membership fee" isn't a pure donation once the
+// document indicates a consideration/benefit was received in exchange.
+const VOID_IF_TRUTHY = {
+  'donation_certificate:annual_amount': 'has_consideration'
+}
+const AFFIRMATIVE_VALUES = new Set(['yes', 'sì', 'si', 'ja', 'oui', 'true', '1', 'x'])
+
+// Categories whose monetary fields are only trustworthy in CHF — a sibling
+// "currency" field that says otherwise excludes every numeric field on that
+// document rather than silently summing a foreign-currency figure as if it
+// were francs.
+const CURRENCY_FIELD_BY_CATEGORY = {
+  bank_securities_crypto_statement: 'currency'
+}
+const CHF_ALIASES = new Set(['CHF', 'SFR'])
+
+function isAffirmative(value) {
+  return AFFIRMATIVE_VALUES.has(String(value || '').trim().toLowerCase())
+}
+
+function isChfOrUnspecified(value) {
+  const v = String(value || '').trim().toUpperCase()
+  return !v || CHF_ALIASES.has(v)
+}
+
 function parseAmount(value) {
   if (value == null) return null
   const cleaned = String(value).trim().replace(/['’\s]/g, '').replace(/,/g, '')
@@ -101,6 +138,15 @@ export function computeTaxAggregate({
     identifierByDocId[doc.id] = nameField ? nameField.field_value : null
   }
 
+  // For the sibling-field lookups below (net-of-reimbursement, voided-by,
+  // currency) — keyed the same way regardless of whether the companion
+  // field itself has a contribution_type (most don't; they're purely
+  // informational on their own).
+  const fieldByDocAndKey = Object.fromEntries(
+    (extractedFields || []).map((f) => [`${f.document_id}:${f.field_key}`, f.field_value])
+  )
+  const siblingValue = (documentId, fieldKey) => fieldByDocAndKey[`${documentId}:${fieldKey}`]
+
   const warnings = []
   const entries = []
 
@@ -116,10 +162,35 @@ export function computeTaxAggregate({
     const rule = ruleByKey[`${doc.category_code}:${field.field_key}`]
     if (!rule || rule.contribution_type === 'none') continue
 
-    const rawAmount = parseAmount(field.field_value)
+    let rawAmount = parseAmount(field.field_value)
     if (rawAmount == null) {
       warnings.push(`"${field.field_key}" in "${doc.file_name}" is not a number and was skipped.`)
       continue
+    }
+
+    const ruleKey = `${doc.category_code}:${field.field_key}`
+    let needsVerification = false
+    let note = null
+
+    const netsAgainstKey = NETS_AGAINST[ruleKey]
+    if (netsAgainstKey) {
+      const reimbursement = parseAmount(siblingValue(doc.id, netsAgainstKey)) || 0
+      rawAmount = Math.max(0, rawAmount - reimbursement)
+    }
+
+    const voidIfKey = VOID_IF_TRUTHY[ruleKey]
+    if (voidIfKey && isAffirmative(siblingValue(doc.id, voidIfKey))) {
+      needsVerification = true
+      note = 'not deductible — the document indicates a consideration/benefit was received, not a pure donation'
+    }
+
+    const currencyFieldKey = CURRENCY_FIELD_BY_CATEGORY[doc.category_code]
+    const currencyValue = currencyFieldKey ? siblingValue(doc.id, currencyFieldKey) : null
+    let currencyCode = null
+    if (!needsVerification && currencyValue && !isChfOrUnspecified(currencyValue)) {
+      needsVerification = true
+      currencyCode = currencyValue.trim().toUpperCase()
+      note = `in foreign currency (${currencyCode}), not converted — manual verification needed`
     }
 
     const category = categoryByCode[doc.category_code]
@@ -140,22 +211,41 @@ export function computeTaxAggregate({
       verifiedBySpecialist: field.verified_by_specialist === true,
       rawAmount,
       effective: rawAmount,
-      note: null,
-      needsVerification: false,
+      note,
+      needsVerification,
+      currencyCode,
       deferred: false
     })
+  }
+
+  // Entries already excluded at creation time (voided donation, foreign
+  // currency) contribute nothing from here on — zeroed immediately, not
+  // just at the final rounding pass, so every intermediate figure below
+  // (wealth-derived income, provisional income for percentage thresholds)
+  // is correct too, not just the final total.
+  for (const entry of entries) {
+    if (entry.needsVerification) entry.effective = 0
   }
 
   // Wealth-derived income — needed for the debt-interest allowance, defined
   // generically as income_plus contributions from asset/property documents
   // (interest, dividends, imputed rental value), not by field name.
   const wealthDerivedIncome = entries
-    .filter((e) => e.contributionType === 'income_plus' && (e.groupKey === 'assets' || e.groupKey === 'property'))
+    .filter(
+      (e) =>
+        e.contributionType === 'income_plus' &&
+        (e.groupKey === 'assets' || e.groupKey === 'property') &&
+        !e.needsVerification
+    )
     .reduce((sum, e) => sum + e.rawAmount, 0)
 
   // Resolve every capped entry except percentage-type ones, which depend on
   // a provisional income figure computed further down.
   for (const entry of entries) {
+    // Already excluded above (voided donation, foreign currency) — nothing
+    // left to resolve, and the cap/param logic below would only overwrite
+    // that reason with an unrelated one.
+    if (entry.needsVerification) continue
     if (!entry.capFamily) continue
     const param = findParam(parameters, entry.capFamily, canton)
     if (!param) {
@@ -250,6 +340,10 @@ export function computeTaxAggregate({
       // section instead.
       amount: entry.needsVerification ? entry.rawAmount : entry.effective,
       needsVerification: entry.needsVerification,
+      // Set only for the foreign-currency exclusion reason — the display
+      // layer uses this instead of formatting the (untouched, still in
+      // that currency) amount as if it were CHF.
+      currencyCode: entry.currencyCode || null,
       label,
       // The "how this was calculated" table has just two columns (item,
       // signed amount) — when several documents contribute to the same

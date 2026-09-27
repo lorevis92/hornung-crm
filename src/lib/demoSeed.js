@@ -101,6 +101,7 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'debt_certificate', field_key: 'debt_type', field_label: 'Debt type', value_type: 'text', sort_order: 20 },
   { category_code: 'debt_certificate', field_key: 'debt_balance', field_label: 'Debt balance', value_type: 'numeric', sort_order: 30 },
   { category_code: 'debt_certificate', field_key: 'annual_interest_paid', field_label: 'Annual interest paid', value_type: 'numeric', sort_order: 40 },
+  { category_code: 'debt_certificate', field_key: 'annual_amortization', field_label: 'Annual amortization (principal repayment)', value_type: 'numeric', sort_order: 50 },
 
   { category_code: 'pillar_3a_certificate', field_key: 'institution_name', field_label: 'Institution name', value_type: 'text', sort_order: 10 },
   { category_code: 'pillar_3a_certificate', field_key: 'policy_number', field_label: 'Policy number', value_type: 'text', sort_order: 20 },
@@ -111,16 +112,19 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'health_insurance_policy', field_key: 'annual_premium', field_label: 'Annual premium', value_type: 'numeric', sort_order: 30 },
 
   { category_code: 'medical_costs', field_key: 'description', field_label: 'Description', value_type: 'text', sort_order: 10 },
+  { category_code: 'medical_costs', field_key: 'insurance_reimbursement', field_label: 'Insurance reimbursement received', value_type: 'numeric', sort_order: 15 },
   { category_code: 'medical_costs', field_key: 'total_amount', field_label: 'Total amount', value_type: 'numeric', sort_order: 20 },
 
   { category_code: 'donation_certificate', field_key: 'recipient_organization', field_label: 'Recipient organization', value_type: 'text', sort_order: 10 },
   { category_code: 'donation_certificate', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 20 },
+  { category_code: 'donation_certificate', field_key: 'has_consideration', field_label: 'Consideration/benefit received in return (yes/no)', value_type: 'text', sort_order: 30 },
 
   { category_code: 'supported_person_transfer', field_key: 'supported_person_name', field_label: 'Supported person name', value_type: 'text', sort_order: 10 },
   { category_code: 'supported_person_transfer', field_key: 'relationship', field_label: 'Relationship', value_type: 'text', sort_order: 20 },
   { category_code: 'supported_person_transfer', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 30 },
 
   { category_code: 'bank_securities_crypto_statement', field_key: 'institution_name', field_label: 'Institution name', value_type: 'text', sort_order: 10 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'currency', field_label: 'Currency', value_type: 'text', sort_order: 15 },
   { category_code: 'bank_securities_crypto_statement', field_key: 'account_type', field_label: 'Account type', value_type: 'text', sort_order: 20 },
   { category_code: 'bank_securities_crypto_statement', field_key: 'account_balance_31_12', field_label: 'Account balance (31.12)', value_type: 'numeric', sort_order: 30 },
   { category_code: 'bank_securities_crypto_statement', field_key: 'interest_income', field_label: 'Interest income', value_type: 'numeric', sort_order: 40 },
@@ -136,6 +140,7 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'property_tax_value', field_key: 'property_address', field_label: 'Property address', value_type: 'text', sort_order: 10 },
   { category_code: 'property_tax_value', field_key: 'tax_value', field_label: 'Tax value', value_type: 'numeric', sort_order: 20 },
   { category_code: 'property_tax_value', field_key: 'imputed_rental_value', field_label: 'Imputed rental value', value_type: 'numeric', sort_order: 30 },
+  { category_code: 'property_tax_value', field_key: 'annual_rental_income', field_label: 'Annual rental income received', value_type: 'numeric', sort_order: 35 },
   { category_code: 'property_tax_value', field_key: 'maintenance_costs', field_label: 'Maintenance costs', value_type: 'numeric', sort_order: 40 },
 
   { category_code: 'rental_contract_zug', field_key: 'property_address', field_label: 'Property address', value_type: 'text', sort_order: 10 },
@@ -169,7 +174,10 @@ export const TAX_PARAMETERS = [
   { scope: 'federal', canton_code: null, tax_year: 2026, parameter_key: 'pillar_3a_with_lpp', parameter_family: 'pillar_3a_with_lpp', parameter_label: '3° pilastro a, con LPP', value_numeric: 7258, value_type: 'fixed_amount', source_url: 'https://www.admin.ch', notes: null, last_verified_at: new Date().toISOString() },
   { scope: 'federal', canton_code: null, tax_year: 2026, parameter_key: 'pillar_3a_without_lpp', parameter_family: 'pillar_3a_without_lpp', parameter_label: '3° pilastro a, senza LPP', value_numeric: 36288, value_type: 'formula', source_url: 'https://www.admin.ch', notes: "20% del reddito netto da attività lucrativa, fino a un massimo di CHF 36'288.", last_verified_at: new Date().toISOString() },
   { scope: 'cantonal', canton_code: 'ZH', tax_year: 2026, parameter_key: 'childcare_costs', parameter_family: 'childcare_costs_cap', parameter_label: 'Custodia di terzi per i figli', value_numeric: 25000, value_type: 'fixed_amount', source_url: null, notes: null, last_verified_at: new Date().toISOString() },
-  { scope: 'cantonal', canton_code: 'ZH', tax_year: 2026, parameter_key: 'health_insurance_premium_single', parameter_family: 'health_insurance_premium_cap', parameter_label: 'Premio cassa malati (persona singola)', value_numeric: 2900, value_type: 'fixed_amount', source_url: null, notes: 'Persona singola — verificare per coniugati/con figli.', last_verified_at: null }
+  { scope: 'cantonal', canton_code: 'ZH', tax_year: 2026, parameter_key: 'health_insurance_premium_single', parameter_family: 'health_insurance_premium_cap', parameter_label: 'Premio cassa malati (persona singola)', value_numeric: 2900, value_type: 'fixed_amount', source_url: null, notes: 'Persona singola — verificare per coniugati/con figli.', last_verified_at: null },
+  { scope: 'federal', canton_code: null, tax_year: 2026, parameter_key: 'medical_costs_threshold', parameter_family: 'medical_costs_threshold_pct', parameter_label: 'Spese mediche', value_numeric: 5, value_type: 'percentage', source_url: null, notes: 'Soglia di deducibilità, non un tetto: deducibile solo la parte eccedente il 5% del reddito netto.', last_verified_at: new Date().toISOString() },
+  { scope: 'cantonal', canton_code: 'VS', tax_year: 2026, parameter_key: 'medical_costs_threshold', parameter_family: 'medical_costs_threshold_pct', parameter_label: 'Spese mediche', value_numeric: 2, value_type: 'percentage', source_url: 'https://www.estv2.admin.ch/stp/kb/vs-fr.pdf', notes: 'Valore 2025 secondo la scheda fiscale AFC Vallese — da riverificare per il 2026.', last_verified_at: null },
+  { scope: 'federal', canton_code: null, tax_year: 2026, parameter_key: 'donations_cap', parameter_family: 'donation_cap_pct', parameter_label: 'Donazioni', value_numeric: 20, value_type: 'percentage', source_url: null, notes: 'Tetto massimo deducibile: 20% del reddito netto.', last_verified_at: new Date().toISOString() }
 ].map((item, index) => ({ id: `param-${index}`, ...item }))
 
 // Mirrors the full rule set seeded in
@@ -203,8 +211,11 @@ export const FIELD_CALCULATION_RULES = [
 
   // salary_statement
   { category_code: 'salary_statement', field_key: 'employer_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
-  { category_code: 'salary_statement', field_key: 'gross_salary', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
-  { category_code: 'salary_statement', field_key: 'net_salary', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  // Taxable income is the net salary (gross minus mandatory AHV/IV/ALV/LPP
+  // contributions, already netted out on the certificate) — gross_salary
+  // stays extracted/visible for reference, it just doesn't count itself.
+  { category_code: 'salary_statement', field_key: 'gross_salary', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'salary_statement', field_key: 'net_salary', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
   { category_code: 'salary_statement', field_key: 'withholding_tax', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'salary_statement', field_key: 'ahv_contributions', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'salary_statement', field_key: 'pension_fund_contributions', contribution_type: 'none', cap_parameter_family: null, notes: null },
@@ -236,6 +247,15 @@ export const FIELD_CALCULATION_RULES = [
   { category_code: 'debt_certificate', field_key: 'creditor_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'debt_certificate', field_key: 'debt_type', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'debt_certificate', field_key: 'debt_balance', contribution_type: 'wealth_minus', cap_parameter_family: null, notes: null },
+  // Amortization is a repayment of capital, not a cost — never deductible,
+  // unlike the interest paid on the same debt.
+  {
+    category_code: 'debt_certificate',
+    field_key: 'annual_amortization',
+    contribution_type: 'none',
+    cap_parameter_family: null,
+    notes: 'Ammortamento del mutuo: pagamento patrimoniale, mai deducibile dal reddito.'
+  },
   {
     category_code: 'debt_certificate',
     field_key: 'annual_interest_paid',
@@ -262,6 +282,7 @@ export const FIELD_CALCULATION_RULES = [
 
   // medical_costs
   { category_code: 'medical_costs', field_key: 'description', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'medical_costs', field_key: 'insurance_reimbursement', contribution_type: 'none', cap_parameter_family: null, notes: null },
   {
     category_code: 'medical_costs',
     field_key: 'total_amount',
@@ -273,6 +294,7 @@ export const FIELD_CALCULATION_RULES = [
   // donation_certificate
   { category_code: 'donation_certificate', field_key: 'recipient_organization', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'donation_certificate', field_key: 'annual_amount', contribution_type: 'income_minus', cap_parameter_family: 'donation_cap_pct', notes: null },
+  { category_code: 'donation_certificate', field_key: 'has_consideration', contribution_type: 'none', cap_parameter_family: null, notes: null },
 
   // supported_person_transfer
   { category_code: 'supported_person_transfer', field_key: 'supported_person_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
@@ -281,6 +303,7 @@ export const FIELD_CALCULATION_RULES = [
 
   // bank_securities_crypto_statement
   { category_code: 'bank_securities_crypto_statement', field_key: 'institution_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'currency', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'bank_securities_crypto_statement', field_key: 'account_type', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'bank_securities_crypto_statement', field_key: 'account_balance_31_12', contribution_type: 'wealth_plus', cap_parameter_family: null, notes: null },
   { category_code: 'bank_securities_crypto_statement', field_key: 'interest_income', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
@@ -299,6 +322,9 @@ export const FIELD_CALCULATION_RULES = [
   { category_code: 'property_tax_value', field_key: 'property_address', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'property_tax_value', field_key: 'tax_value', contribution_type: 'wealth_plus', cap_parameter_family: null, notes: null },
   { category_code: 'property_tax_value', field_key: 'imputed_rental_value', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
+  // Rent actually received from letting the property to a third party —
+  // distinct from imputed_rental_value (owner-occupied figurative income).
+  { category_code: 'property_tax_value', field_key: 'annual_rental_income', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
   { category_code: 'property_tax_value', field_key: 'maintenance_costs', contribution_type: 'income_minus', cap_parameter_family: null, notes: null },
 
   // rental_contract_zug
