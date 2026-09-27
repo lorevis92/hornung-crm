@@ -488,6 +488,7 @@ export default {
     needsReview: 'Zu prüfen',
     addedManually: 'Manuell erfasst',
     excludeFromCalculation: 'Von der Berechnung ausschliessen',
+    includeInCalculation: 'In die Berechnung einbeziehen',
     excludedBadge: 'Von der Berechnung ausgeschlossen',
     notFound: 'Nicht gefunden — bei Bedarf manuell eingeben',
     notFoundPlaceholder: 'Im Dokument nicht gefunden',
@@ -510,6 +511,9 @@ export default {
     sectionWealth: 'Vermögen',
     sectionOther: 'Sonstiges',
     noData: 'Für dieses Steuerjahr sind noch keine kategorisierten Dokumente vorhanden.',
+    fieldViewToggle: 'Feldansicht',
+    fieldViewSpacious: 'Ausführliche Ansicht',
+    fieldViewCompact: 'Kompakte Ansicht',
 
     calculate: 'Berechnen',
     recalculate: 'Neu berechnen',

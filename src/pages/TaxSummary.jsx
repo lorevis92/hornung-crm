@@ -2,8 +2,9 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Link, useParams } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowLeft, Calculator, FileDown, FolderOpen, Info, Landmark, PiggyBank, Receipt
+  AlertTriangle, AlignJustify, ArrowLeft, Calculator, FileDown, FolderOpen, Info, Landmark, List, PiggyBank, Receipt
 } from 'lucide-react'
+import CompactFieldRow from '../components/CompactFieldRow'
 import ExtractedFieldRow from '../components/ExtractedFieldRow'
 import Modal from '../components/Modal'
 import { EmptyState, PageLoader, Spinner, Stat } from '../components/ui'
@@ -42,6 +43,26 @@ function groupBy(list, key) {
   }, {})
 }
 
+// Which of the two field-review layouts a specialist last picked — same
+// remembered-choice pattern as DocumentList's list/grid toggle.
+const FIELD_LAYOUT_KEY = 'hornung.fieldLayout'
+
+function readStoredFieldLayout() {
+  try {
+    return localStorage.getItem(FIELD_LAYOUT_KEY) === 'compact' ? 'compact' : 'spacious'
+  } catch {
+    return 'spacious'
+  }
+}
+
+function storeFieldLayout(layout) {
+  try {
+    localStorage.setItem(FIELD_LAYOUT_KEY, layout)
+  } catch {
+    /* localStorage unavailable — ignore, the app still works */
+  }
+}
+
 export default function TaxSummary() {
   const { caseId } = useParams()
   const { t, lang } = useI18n()
@@ -55,6 +76,7 @@ export default function TaxSummary() {
   const [fields, setFields] = useState([])
 
   const [view, setView] = useState('list')
+  const [fieldLayout, setFieldLayoutState] = useState(readStoredFieldLayout)
   const [sourceField, setSourceField] = useState(null)
   const [fileUrls, setFileUrls] = useState({})
   const [busyKey, setBusyKey] = useState(null)
@@ -370,6 +392,11 @@ export default function TaxSummary() {
     setView('source')
   }
 
+  const setFieldLayout = (layout) => {
+    setFieldLayoutState(layout)
+    storeFieldLayout(layout)
+  }
+
   const backToList = () => {
     setView('list')
     const key = sourceField ? fieldKey(sourceField) : null
@@ -425,6 +452,28 @@ export default function TaxSummary() {
         </Suspense>
       ) : sections.length ? (
         <div className="space-y-8">
+          <div className="flex items-center justify-end gap-1" role="group" aria-label={t('summary.fieldViewToggle')}>
+            <button
+              type="button"
+              className={clsx('btn-ghost btn-sm', fieldLayout === 'spacious' && 'bg-ink-100 text-ink-900')}
+              onClick={() => setFieldLayout('spacious')}
+              aria-pressed={fieldLayout === 'spacious'}
+              aria-label={t('summary.fieldViewSpacious')}
+              title={t('summary.fieldViewSpacious')}
+            >
+              <List size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={clsx('btn-ghost btn-sm', fieldLayout === 'compact' && 'bg-ink-100 text-ink-900')}
+              onClick={() => setFieldLayout('compact')}
+              aria-pressed={fieldLayout === 'compact'}
+              aria-label={t('summary.fieldViewCompact')}
+              title={t('summary.fieldViewCompact')}
+            >
+              <AlignJustify size={16} aria-hidden="true" />
+            </button>
+          </div>
           {sections.map((section) => (
             <section key={section.key} className="space-y-4">
               <h2 className="section-title text-xl">{t(section.titleKey)}</h2>
@@ -440,30 +489,57 @@ export default function TaxSummary() {
                         </span>
                       ) : null}
                     </h3>
-                    {catDocuments.map((docGroup) => (
-                      <div key={docGroup.documentId} className="space-y-2 rounded-xl bg-sand/40 p-3">
-                        <p className="px-1 text-[12.5px] font-medium text-ink-500">{docGroup.fileName}</p>
-                        <ul className="space-y-3">
-                          {docGroup.fields.map((field) => (
-                            <ExtractedFieldRow
-                              key={field.field_key}
-                              innerRef={(el) => {
-                                fieldRefs.current[fieldKey(field)] = el
-                              }}
-                              field={field}
-                              showDocument={false}
-                              saving={busyKey === fieldKey(field)}
-                              togglingInclude={togglingKey === fieldKey(field)}
-                              viewingSource={viewingKey === fieldKey(field)}
-                              onChange={(value) => updateValue(field, value)}
-                              onConfirm={() => confirmField(field)}
-                              onViewSource={() => viewSource(field)}
-                              onToggleInclude={() => toggleInclude(field)}
-                            />
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
+                    {catDocuments.map((docGroup) =>
+                      fieldLayout === 'compact' ? (
+                        <div key={docGroup.documentId} className="overflow-hidden rounded-xl border border-line bg-white">
+                          <p className="border-b border-line/70 bg-sand/40 px-2 py-1 text-[12.5px] font-medium text-ink-500">
+                            {docGroup.fileName}
+                          </p>
+                          <ul>
+                            {docGroup.fields.map((field) => (
+                              <CompactFieldRow
+                                key={field.field_key}
+                                innerRef={(el) => {
+                                  fieldRefs.current[fieldKey(field)] = el
+                                }}
+                                field={field}
+                                showDocument={false}
+                                saving={busyKey === fieldKey(field)}
+                                togglingInclude={togglingKey === fieldKey(field)}
+                                viewingSource={viewingKey === fieldKey(field)}
+                                onChange={(value) => updateValue(field, value)}
+                                onConfirm={() => confirmField(field)}
+                                onViewSource={() => viewSource(field)}
+                                onToggleInclude={() => toggleInclude(field)}
+                              />
+                            ))}
+                          </ul>
+                        </div>
+                      ) : (
+                        <div key={docGroup.documentId} className="space-y-2 rounded-xl bg-sand/40 p-3">
+                          <p className="px-1 text-[12.5px] font-medium text-ink-500">{docGroup.fileName}</p>
+                          <ul className="space-y-3">
+                            {docGroup.fields.map((field) => (
+                              <ExtractedFieldRow
+                                key={field.field_key}
+                                innerRef={(el) => {
+                                  fieldRefs.current[fieldKey(field)] = el
+                                }}
+                                field={field}
+                                showDocument={false}
+                                saving={busyKey === fieldKey(field)}
+                                togglingInclude={togglingKey === fieldKey(field)}
+                                viewingSource={viewingKey === fieldKey(field)}
+                                onChange={(value) => updateValue(field, value)}
+                                onConfirm={() => confirmField(field)}
+                                onViewSource={() => viewSource(field)}
+                                onToggleInclude={() => toggleInclude(field)}
+                              />
+                            ))}
+                          </ul>
+                        </div>
+                      )
+                    )}
                   </div>
                 ))}
               </div>

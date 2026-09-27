@@ -489,6 +489,7 @@ export default {
     needsReview: 'À vérifier',
     addedManually: 'Ajouté manuellement',
     excludeFromCalculation: 'Exclure du calcul',
+    includeInCalculation: 'Inclure dans le calcul',
     excludedBadge: 'Exclu du calcul',
     notFound: 'Non trouvé — saisissez-le manuellement si vous l’avez',
     notFoundPlaceholder: 'Non trouvé dans le document',
@@ -511,6 +512,9 @@ export default {
     sectionWealth: 'Fortune',
     sectionOther: 'Autre',
     noData: "Aucun document catégorisé pour cette année fiscale pour l'instant.",
+    fieldViewToggle: 'Affichage des champs',
+    fieldViewSpacious: 'Vue spacieuse',
+    fieldViewCompact: 'Vue compacte',
 
     calculate: 'Calculer',
     recalculate: 'Recalculer',

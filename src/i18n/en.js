@@ -489,6 +489,7 @@ export default {
     needsReview: 'Needs review',
     addedManually: 'Added manually',
     excludeFromCalculation: 'Exclude from calculation',
+    includeInCalculation: 'Include in calculation',
     excludedBadge: 'Excluded from calculation',
     notFound: 'Not found — enter it manually if you have it',
     notFoundPlaceholder: 'Not found in the document',
@@ -511,6 +512,9 @@ export default {
     sectionWealth: 'Wealth',
     sectionOther: 'Other',
     noData: 'No categorized documents yet for this tax year.',
+    fieldViewToggle: 'Field view',
+    fieldViewSpacious: 'Spacious view',
+    fieldViewCompact: 'Compact view',
 
     calculate: 'Calculate',
     recalculate: 'Recalculate',
