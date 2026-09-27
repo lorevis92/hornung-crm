@@ -201,10 +201,12 @@ function resolveInsurancePremiumCap(isMarried, qualifyingChildCount, useParam) {
   return { cap, baseParam }
 }
 
-function makeSyntheticEntry({ contributionType, rawAmount, categoryLabel, fieldLabel, note, needsVerification, groupKey }) {
+function makeSyntheticEntry({
+  contributionType, rawAmount, categoryLabel, fieldLabel, note, needsVerification, groupKey, documentId, fileName
+}) {
   return {
-    documentId: null,
-    fileName: null,
+    documentId: documentId || null,
+    fileName: fileName || null,
     categoryCode: null,
     categoryLabel,
     groupKey: groupKey || null,
@@ -506,34 +508,39 @@ export function computeTaxAggregate({
   }
 
   // Flat-rate professional expenses (3% of net salary, min/max clamped) —
-  // computed once across every salary_statement document combined, since
-  // documents aren't attributed to a specific spouse. Added before
-  // provisional income is computed, so it counts as an "organic" deduction
-  // like every other one above.
+  // an INDIVIDUAL deduction in Swiss tax law: each working person computes
+  // their own forfait on their own net salary, with their own min/max, and
+  // the results are summed — never 3% of the household's combined salary.
+  // Documents aren't attributed to a specific spouse in this app, but each
+  // salary_statement document already represents one employment
+  // relationship, which is the best available proxy for "one person" — so
+  // the forfait is computed per net_salary entry, not pooled first. Added
+  // before provisional income is computed, so it counts as an "organic"
+  // deduction like every other one above.
   const netSalaryEntries = entries.filter(
     (e) => e.categoryCode === 'salary_statement' && e.fieldKey === 'net_salary' && !e.needsVerification
   )
   if (netSalaryEntries.length) {
     const pctParam = useParam('professional_expenses_pct')
     if (pctParam) {
-      const totalNetSalary = netSalaryEntries.reduce((sum, e) => sum + e.rawAmount, 0)
       const minParam = useParam('professional_expenses_min')
       const maxParam = useParam('professional_expenses_max')
-      let amount = (totalNetSalary * (pctParam.value_numeric || 0)) / 100
-      if (minParam) amount = Math.max(amount, minParam.value_numeric || 0)
-      if (maxParam) amount = Math.min(amount, maxParam.value_numeric || 0)
-      entries.push(
-        makeSyntheticEntry({
-          contributionType: 'income_minus',
-          rawAmount: amount,
-          categoryLabel: 'Professional expenses (flat-rate)',
-          fieldLabel:
-            netSalaryEntries.length > 1
-              ? 'Flat-rate professional expenses (3% of combined net salary, min/max applied)'
-              : 'Flat-rate professional expenses (3% of net salary, min/max applied)',
-          groupKey: 'deductions'
-        })
-      )
+      for (const salaryEntry of netSalaryEntries) {
+        let amount = (salaryEntry.rawAmount * (pctParam.value_numeric || 0)) / 100
+        if (minParam) amount = Math.max(amount, minParam.value_numeric || 0)
+        if (maxParam) amount = Math.min(amount, maxParam.value_numeric || 0)
+        entries.push(
+          makeSyntheticEntry({
+            contributionType: 'income_minus',
+            rawAmount: amount,
+            categoryLabel: 'Professional expenses (flat-rate)',
+            fieldLabel: 'Flat-rate professional expenses (3% of net salary, min/max applied)',
+            groupKey: 'deductions',
+            documentId: salaryEntry.documentId,
+            fileName: salaryEntry.fileName
+          })
+        )
+      }
     }
   }
 
@@ -552,19 +559,36 @@ export function computeTaxAggregate({
   const generalDeferred = deferredEntries.filter((e) => e.capFamily !== MEDICAL_THRESHOLD_FAMILY)
   const medicalDeferred = deferredEntries.filter((e) => e.capFamily === MEDICAL_THRESHOLD_FAMILY)
 
+  // A negative income base (heavy deductions, or a synthetic test case with
+  // little/no income) must never turn into a negative percentage cap/
+  // threshold — that would let a cap "add" to the raw amount instead of
+  // limiting it, or push a threshold below zero and inflate the medical
+  // floor beyond the actual net expense. Floored at zero before either
+  // percentage is computed.
+  const donationBaseIncome = Math.max(0, provisionalIncome)
+
   for (const entry of generalDeferred) {
     const pct = entry.param.value_numeric || 0
-    const cap = provisionalIncome * (pct / 100)
-    entry.effective = Math.min(entry.rawAmount, cap)
+    const cap = donationBaseIncome * (pct / 100)
+    // Structural floor/ceiling, independent of how cap ended up computed:
+    // a capped deduction can never be negative, and never exceeds the raw
+    // amount that generated it.
+    entry.effective = Math.max(0, Math.min(entry.rawAmount, cap))
     if (entry.effective < entry.rawAmount) entry.note = 'cap applied'
   }
 
-  const incomeAfterGeneralDeductions = provisionalIncome - generalDeferred.reduce((sum, e) => sum + e.effective, 0)
+  const incomeAfterGeneralDeductions = Math.max(
+    0,
+    provisionalIncome - generalDeferred.reduce((sum, e) => sum + e.effective, 0)
+  )
 
   for (const entry of medicalDeferred) {
     const pct = entry.param.value_numeric || 0
     const threshold = incomeAfterGeneralDeductions * (pct / 100)
-    entry.effective = Math.max(0, entry.rawAmount - threshold)
+    // Structural ceiling: whatever the threshold computes to, the
+    // deductible amount can never exceed the net expense that generated it
+    // (deduction = min(net expense above threshold, net expense)).
+    entry.effective = Math.min(entry.rawAmount, Math.max(0, entry.rawAmount - threshold))
     entry.note = 'only the amount exceeding the threshold is deductible'
   }
 

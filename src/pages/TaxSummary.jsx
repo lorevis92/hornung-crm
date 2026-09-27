@@ -15,7 +15,10 @@ import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions, verifiedFieldsByDocument } from '../lib/extraction'
 import { formatAmountSwiss, formatChfSwiss, formatDateTime, fullName } from '../lib/format'
-import { recalculateInBackground, syncPersonalDetailsInBackground } from '../lib/recalc'
+import {
+  recalculateInBackground, syncChildSuggestionsInBackground, syncPersonalDetailsInBackground,
+  syncPropertySuggestionInBackground
+} from '../lib/recalc'
 
 // pdfjs-dist is a large dependency — only fetched when a specialist actually
 // opens the source view, not on every page load.
@@ -203,7 +206,24 @@ export default function TaxSummary() {
     return Number.isFinite(n) ? n : null
   }, [fields])
   const childrenMismatch = extractedChildrenCount != null && extractedChildrenCount !== childrenCount
-  const completenessIssueCount = failedDocuments.length + (childrenMismatch ? 1 : 0)
+
+  // A document extracted successfully, categorized under a group that
+  // normally produces income/wealth (not just reference data), with at
+  // least one filled-in field — yet none of its fields show up in ANY
+  // aggregate component, included or not. Catches a broken document/field
+  // link regardless of cause: the report should never present itself as
+  // final while data it clearly has access to went silently unused.
+  const orphanedDocuments = useMemo(() => {
+    if (!result) return []
+    const componentDocIds = new Set((result.components || []).map((c) => c.document_id).filter(Boolean))
+    const calcGroups = new Set(['income', 'deductions', 'assets', 'property'])
+    return documents.filter((doc) => {
+      if (doc.status !== 'extracted' || componentDocIds.has(doc.id)) return false
+      return fields.some((f) => f.document_id === doc.id && calcGroups.has(f.group_key) && f.field_value)
+    })
+  }, [documents, fields, result])
+
+  const completenessIssueCount = failedDocuments.length + (childrenMismatch ? 1 : 0) + orphanedDocuments.length
 
   const retryFailedExtraction = async (doc) => {
     setRetryingDocId(doc.id)
@@ -339,6 +359,10 @@ export default function TaxSummary() {
         if (computed) setResult(computed)
       })
       if (field.category_code === 'current_tax_sheet') syncPersonalDetailsInBackground(field.document_id)
+      if (field.category_code === 'property_tax_value') syncPropertySuggestionInBackground(field.document_id)
+      if (field.category_code === 'current_tax_sheet' || field.category_code === 'childcare_costs') {
+        syncChildSuggestionsInBackground(caseRow.client_id, caseRow.tax_year)
+      }
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -527,6 +551,15 @@ export default function TaxSummary() {
                 </Link>
               </li>
             ) : null}
+            {orphanedDocuments.map((doc) => (
+              <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 text-[13.5px] text-red-800">
+                <span>{t('summary.incompleteOrphanedDoc', { name: doc.file_name })}</span>
+                <button type="button" className="btn-secondary btn-sm shrink-0" onClick={calculate} disabled={calculating}>
+                  {calculating ? <Spinner size={14} /> : null}
+                  {t('summary.recalculate')}
+                </button>
+              </li>
+            ))}
           </ul>
         </div>
       ) : null}
