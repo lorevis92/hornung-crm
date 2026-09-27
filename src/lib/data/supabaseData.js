@@ -480,6 +480,10 @@ export const supabaseApi = {
     return callApi('/api/diagnose-client', { email, clientId, taxYear: Number(taxYear) })
   },
 
+  async retryExtraction(documentId) {
+    return callApi('/api/retry-extraction', { documentId })
+  },
+
   async getTaxAggregate(clientId, taxYear) {
     const { data: aggregate, error } = await supabase
       .from('tax_aggregates')

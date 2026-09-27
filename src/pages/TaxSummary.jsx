@@ -87,6 +87,9 @@ export default function TaxSummary() {
   const [result, setResult] = useState(null)
   const [calculating, setCalculating] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
+  const [allDocuments, setAllDocuments] = useState([])
+  const [childrenCount, setChildrenCount] = useState(0)
+  const [retryingDocId, setRetryingDocId] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -99,17 +102,20 @@ export default function TaxSummary() {
       }
       setCaseRow(row)
 
-      const [docs, cats, allDefs, existingAggregate] = await Promise.all([
+      const [docs, cats, allDefs, existingAggregate, questionnaire] = await Promise.all([
         api.listClientDocuments(row.client_id, row.tax_year),
         api.listDocumentCategories(),
         api.listFieldDefinitions(),
-        api.getTaxAggregate(row.client_id, row.tax_year)
+        api.getTaxAggregate(row.client_id, row.tax_year),
+        api.getQuestionnaire(row.client_id)
       ])
       if (!active) return
       const categorized = docs.filter((d) => d.category_code)
+      setAllDocuments(docs)
       setDocuments(categorized)
       setCategories(cats)
       setResult(existingAggregate)
+      setChildrenCount((questionnaire?.children || []).length)
 
       const extractedByDoc = await Promise.all(
         categorized.map((d) => api.listExtractedFieldsForDocument(d.id))
@@ -179,6 +185,55 @@ export default function TaxSummary() {
     () => (result?.components || []).filter((c) => c.needs_verification),
     [result]
   )
+
+  // Data the calculation is silently missing, as opposed to data it has but
+  // flags as uncertain (the popup below) — a document AI extraction never
+  // finished on, or a stated number of children the registry doesn't
+  // actually have records for. Unlike the uncertainty popup, this is never
+  // dismissed: it stays visible for as long as the underlying gap does.
+  const failedDocuments = useMemo(
+    () => allDocuments.filter((d) => d.status === 'extraction_failed'),
+    [allDocuments]
+  )
+  const extractedChildrenCount = useMemo(() => {
+    const field = fields.find(
+      (f) => f.category_code === 'current_tax_sheet' && f.field_key === 'children_count' && f.field_value
+    )
+    const n = field ? parseInt(field.field_value, 10) : null
+    return Number.isFinite(n) ? n : null
+  }, [fields])
+  const childrenMismatch = extractedChildrenCount != null && extractedChildrenCount !== childrenCount
+  const completenessIssueCount = failedDocuments.length + (childrenMismatch ? 1 : 0)
+
+  const retryFailedExtraction = async (doc) => {
+    setRetryingDocId(doc.id)
+    try {
+      await api.retryExtraction(doc.id)
+      toast.success(t('common.saved'))
+      const docs = await api.listClientDocuments(caseRow.client_id, caseRow.tax_year)
+      setAllDocuments(docs)
+      const categorized = docs.filter((d) => d.category_code)
+      setDocuments(categorized)
+      const extractedByDoc = await Promise.all(categorized.map((d) => api.listExtractedFieldsForDocument(d.id)))
+      const allDefs = await api.listFieldDefinitions()
+      const flat = []
+      categorized.forEach((d, i) => {
+        const defs = allDefs.filter((def) => def.category_code === d.category_code)
+        const category = categories.find((c) => c.code === d.category_code)
+        mergeFieldsWithDefinitions(defs, extractedByDoc[i], d).forEach((field) => {
+          flat.push({ ...field, category_code: d.category_code, group_key: category?.group_key || 'other' })
+        })
+      })
+      setFields(flat)
+      const computed = await api.calculateAggregates(caseRow.client_id, caseRow.tax_year, lang)
+      setResult(computed)
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setRetryingDocId(null)
+    }
+  }
 
   // Proactive "things to verify" index — three sources, all already
   // computed elsewhere, never re-derived here:
@@ -432,6 +487,41 @@ export default function TaxSummary() {
           </button>
         ) : null}
       </div>
+
+      {view === 'list' && completenessIssueCount ? (
+        <div className="space-y-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3.5">
+          <p className="flex items-center gap-2 text-[14.5px] font-semibold text-red-900">
+            <AlertTriangle size={17} aria-hidden="true" />
+            {t('summary.incompleteTitle', { count: completenessIssueCount })}
+          </p>
+          <ul className="space-y-1.5">
+            {failedDocuments.map((doc) => (
+              <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 text-[13.5px] text-red-800">
+                <span>
+                  {t('summary.incompleteFailedDoc', { name: doc.file_name })}
+                  {doc.extraction_error ? (
+                    <span className="block text-[12px] text-red-700/80">{doc.extraction_error}</span>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm shrink-0"
+                  onClick={() => retryFailedExtraction(doc)}
+                  disabled={retryingDocId === doc.id}
+                >
+                  {retryingDocId === doc.id ? <Spinner size={14} /> : null}
+                  {t('summary.retryExtraction')}
+                </button>
+              </li>
+            ))}
+            {childrenMismatch ? (
+              <li className="text-[13.5px] text-red-800">
+                {t('summary.incompleteChildrenMismatch', { extracted: extractedChildrenCount, registered: childrenCount })}
+              </li>
+            ) : null}
+          </ul>
+        </div>
+      ) : null}
 
       {view === 'source' ? (
         <Suspense

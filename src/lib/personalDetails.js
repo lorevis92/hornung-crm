@@ -16,16 +16,31 @@ function splitFullName(fullName = '') {
   return { first: parts[0] || '', last: parts.slice(1).join(' ') }
 }
 
+// Italian (and to a lesser extent French) marital-status adjectives agree in
+// number — a real Swiss tax document describing a couple jointly reads
+// "Coniugati dal 2016", not the singular "coniugato" this list originally
+// only had. Both singular and plural forms are listed explicitly (matched
+// as whole words, see normalizeMaritalStatus below, so the surrounding
+// "dal 2016" doesn't prevent a match).
 const MARITAL_SYNONYMS = {
   single: ['single', 'ledig', 'célibataire', 'celibataire', 'celibe', 'nubile'],
-  married: ['married', 'verheiratet', 'marié', 'marie', 'mariée', 'mariee', 'coniugato', 'coniugata'],
+  married: [
+    'married', 'verheiratet', 'marié', 'marie', 'mariée', 'mariee', 'mariés', 'maries', 'mariées', 'mariees',
+    'coniugato', 'coniugata', 'coniugati', 'coniugate'
+  ],
   registered_partnership: [
     'registered partnership', 'eingetragene partnerschaft', 'partenariat enregistré',
     'partenariat enregistre', 'unione domestica registrata'
   ],
-  separated: ['separated', 'getrennt', 'séparé', 'separe', 'séparée', 'separee', 'separato', 'separata'],
-  divorced: ['divorced', 'geschieden', 'divorcé', 'divorce', 'divorcée', 'divorcee', 'divorziato', 'divorziata'],
-  widowed: ['widowed', 'verwitwet', 'veuf', 'veuve', 'vedovo', 'vedova']
+  separated: [
+    'separated', 'getrennt', 'séparé', 'separe', 'séparée', 'separee', 'séparés', 'separes', 'séparées', 'separees',
+    'separato', 'separata', 'separati', 'separate'
+  ],
+  divorced: [
+    'divorced', 'geschieden', 'divorcé', 'divorce', 'divorcée', 'divorcee', 'divorcés', 'divorces', 'divorcées', 'divorcees',
+    'divorziato', 'divorziata', 'divorziati', 'divorziate'
+  ],
+  widowed: ['widowed', 'verwitwet', 'veuf', 'veuve', 'veufs', 'veuves', 'vedovo', 'vedova', 'vedovi', 'vedove']
 }
 
 // Extraction can come back in any of the app's four languages — only
@@ -36,8 +51,16 @@ const MARITAL_SYNONYMS = {
 function normalizeMaritalStatus(raw) {
   if (!raw) return null
   const v = raw.trim().toLowerCase()
+  // Exact match first (the common case — extraction returns just the
+  // status word). Real documents often add context instead ("Coniugati dal
+  // 2016", "Married since 2018") — a whole-word match anywhere in the
+  // string catches those too, without e.g. "separated" matching inside an
+  // unrelated longer word.
   for (const [key, synonyms] of Object.entries(MARITAL_SYNONYMS)) {
     if (synonyms.includes(v)) return key
+  }
+  for (const [key, synonyms] of Object.entries(MARITAL_SYNONYMS)) {
+    if (synonyms.some((syn) => new RegExp(`(?:^|[^\\p{L}])${syn}(?:$|[^\\p{L}])`, 'iu').test(v))) return key
   }
   return null
 }
@@ -56,18 +79,34 @@ function normalizeMaritalStatus(raw) {
 //   resolved    — fields extracted here whose value now matches the current
 //                 one exactly, so a stale pending suggestion (if any) is no
 //                 longer relevant: [{ table, person, field }]
+// Fields where the extraction's own confidence, when high enough, is
+// trusted to overwrite an existing (different) value outright instead of
+// sitting as a pending suggestion. Reserved for structural data the
+// calculation engine itself depends on — marital status directly gates
+// which tax_parameters rows apply (e.g. the wealth-exempt amount, several
+// social deductions) — not for identity fields like a name, which stay
+// conservative even at high confidence. Below this confidence, or when the
+// extraction carried no confidence at all, the normal suggest-on-conflict
+// path still applies.
+const FORCE_APPLY_THRESHOLD = 0.75
+const FORCE_APPLY_FIELDS = new Set(['marital_status'])
+
 export function computePersonalDetailsSync({ extractedFields, canton, primary, spouse }) {
   const byKey = Object.fromEntries((extractedFields || []).map((f) => [f.field_key, f.field_value]))
+  const confidenceByKey = Object.fromEntries((extractedFields || []).map((f) => [f.field_key, f.confidence]))
 
   const autoFill = []
   const suggestions = []
   const resolved = []
 
-  const consider = (table, person, field, fieldLabel, rawValue, currentValue) => {
+  const consider = (table, person, field, fieldLabel, rawValue, currentValue, sourceFieldKey) => {
     if (!rawValue || !String(rawValue).trim()) return
     const value = String(rawValue).trim()
     const current = currentValue == null ? '' : String(currentValue).trim()
-    if (!current) {
+    const confidence = sourceFieldKey ? confidenceByKey[sourceFieldKey] : null
+    const forceApply =
+      FORCE_APPLY_FIELDS.has(field) && (confidence == null || confidence >= FORCE_APPLY_THRESHOLD)
+    if (!current || (forceApply && current !== value)) {
       autoFill.push({ table, person, field, value })
     } else if (current !== value) {
       suggestions.push({ table, person, field, fieldLabel, currentValue: current, suggestedValue: value })
@@ -76,7 +115,7 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
     }
   }
 
-  consider('clients', 'none', 'canton', 'Canton', byKey.canton, canton)
+  consider('clients', 'none', 'canton', 'Canton', byKey.canton, canton, 'canton')
 
   if (byKey.full_name) {
     const { first, last } = splitFullName(byKey.full_name)
@@ -86,7 +125,10 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
   consider('client_persons', 'primary', 'date_of_birth', 'Date of birth', byKey.date_of_birth, primary?.date_of_birth)
   const normalizedMarital = normalizeMaritalStatus(byKey.marital_status)
   if (normalizedMarital) {
-    consider('client_persons', 'primary', 'marital_status', 'Marital status', normalizedMarital, primary?.marital_status)
+    consider(
+      'client_persons', 'primary', 'marital_status', 'Marital status',
+      normalizedMarital, primary?.marital_status, 'marital_status'
+    )
   }
   consider(
     'client_persons', 'primary', 'religious_denomination', 'Religious denomination',

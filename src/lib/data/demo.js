@@ -910,6 +910,21 @@ export const demoApi = {
     return wait({ aggregate, components, warnings: result.warnings, cantonUsed: canton, cantonMissing: !canton })
   },
 
+  // Demo mode has no real AI extraction to retry — simulates the same
+  // outcome a real retry has when it succeeds (status flips back to
+  // 'extracted', the error clears) so the completeness banner's "Retry"
+  // action is testable end to end without a live Anthropic call.
+  async retryExtraction(documentId) {
+    const s = store()
+    const doc = s.documents.find((d) => d.id === documentId)
+    if (!doc) throw new Error('Document not found.')
+    doc.status = 'extracted'
+    doc.extraction_error = null
+    doc.processed_at = iso(Date.now())
+    commit()
+    return wait({ ok: true })
+  },
+
   async getTaxAggregate(clientId, taxYear) {
     const s = store()
     const year = Number(taxYear)
@@ -951,6 +966,7 @@ export const demoApi = {
       categoryCode: doc.category_code,
       categoryLabel: doc.category_code ? categoryLabel[doc.category_code] || doc.category_code : null,
       status: doc.status || 'uploaded',
+      extractionError: doc.extraction_error || null,
       uploadedAt: doc.created_at,
       processedAt: doc.processed_at || null,
       fields: (fieldsByDoc[doc.id] || []).map((f) => ({

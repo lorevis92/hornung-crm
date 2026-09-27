@@ -80,6 +80,7 @@ export default async function handler(req, res) {
       categoryCode: doc.category_code,
       categoryLabel: doc.category_code ? categoryLabel[doc.category_code] || doc.category_code : null,
       status: doc.status,
+      extractionError: doc.extraction_error || null,
       uploadedAt: doc.uploaded_at,
       processedAt: doc.processed_at,
       fields: (fieldsByDoc[doc.id] || []).map((f) => ({

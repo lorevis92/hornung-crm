@@ -55,19 +55,17 @@ function textOf(message) {
   return (message.content || []).find((block) => block.type === 'text')?.text || ''
 }
 
-async function runExtraction(admin, anthropic, documentId) {
-  // Atomic claim: only proceed if this row is still 'uploaded'. Prevents a
-  // duplicate webhook delivery (pg_net can retry) from processing it twice.
-  const { data: claimed, error: claimError } = await admin
-    .from('client_documents')
-    .update({ status: 'extracting' })
-    .eq('id', documentId)
-    .eq('status', 'uploaded')
-    .select()
-    .maybeSingle()
+export async function runExtraction(admin, anthropic, documentId, { fromStatuses = ['uploaded'] } = {}) {
+  // Atomic claim: only proceed if this row is still in one of the expected
+  // starting states. Prevents a duplicate webhook delivery (pg_net can
+  // retry) from processing it twice; api/retry-extraction.js passes
+  // ['extraction_failed'] instead so a specialist can re-run a failed one.
+  let claimQuery = admin.from('client_documents').update({ status: 'extracting' }).eq('id', documentId)
+  claimQuery = fromStatuses.length === 1 ? claimQuery.eq('status', fromStatuses[0]) : claimQuery.in('status', fromStatuses)
+  const { data: claimed, error: claimError } = await claimQuery.select().maybeSingle()
   if (claimError) throw claimError
   if (!claimed) {
-    console.log(`[extract-document] ${documentId} is not 'uploaded' anymore — skipping`)
+    console.log(`[extract-document] ${documentId} is not in ${JSON.stringify(fromStatuses)} anymore — skipping`)
     return
   }
 
@@ -209,7 +207,7 @@ async function runExtraction(admin, anthropic, documentId) {
 
   const { error: finishError } = await admin
     .from('client_documents')
-    .update({ status: 'extracted', processed_at: new Date().toISOString() })
+    .update({ status: 'extracted', processed_at: new Date().toISOString(), extraction_error: null })
     .eq('id', documentId)
   if (finishError) throw finishError
 
@@ -261,7 +259,10 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error(`[extract-document] failed for document ${documentId}:`, error)
     try {
-      await admin.from('client_documents').update({ status: 'extraction_failed' }).eq('id', documentId)
+      await admin
+        .from('client_documents')
+        .update({ status: 'extraction_failed', extraction_error: (error.message || 'EXTRACTION_FAILED').slice(0, 2000) })
+        .eq('id', documentId)
     } catch (updateError) {
       console.error(`[extract-document] could not mark ${documentId} as extraction_failed:`, updateError)
     }

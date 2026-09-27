@@ -23,7 +23,7 @@ export async function syncPersonalDetails(admin, documentId) {
 
   const [{ data: fields, error: fieldsError }, { data: client, error: clientError }, { data: persons, error: personsError }] =
     await Promise.all([
-      admin.from('extracted_document_fields').select('field_key, field_value').eq('document_id', documentId),
+      admin.from('extracted_document_fields').select('field_key, field_value, confidence').eq('document_id', documentId),
       admin.from('clients').select('id, canton').eq('id', clientId).maybeSingle(),
       admin.from('client_persons').select('*').eq('client_id', clientId)
     ])

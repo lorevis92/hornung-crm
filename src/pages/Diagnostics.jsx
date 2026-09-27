@@ -37,6 +37,7 @@ function buildDiagnosticText(data) {
   push(`DOCUMENTS (${data.documents.length})`)
   data.documents.forEach((doc, i) => {
     push(`  [${i + 1}] ${doc.fileName} — ${doc.categoryLabel || 'uncategorized'} (${doc.status})`)
+    if (doc.extractionError) push(`      ERROR: ${doc.extractionError}`)
     doc.fields.forEach((f) => {
       const touched = f.handEditedBySpecialist ? `HAND-EDITED on ${f.verifiedAt || '?'}` : 'original extraction'
       const included = f.includedInCalculation ? '' : ' [EXCLUDED from calculation]'
@@ -193,10 +194,17 @@ export default function Diagnostics() {
             {data.documents.length ? (
               data.documents.map((doc) => (
                 <div key={doc.documentId} className="card overflow-hidden">
-                  <p className="border-b border-line bg-sand/50 px-4 py-2 text-[13.5px] font-medium text-ink-700">
-                    {doc.fileName} — {doc.categoryLabel || t('diagnostics.uncategorized')}{' '}
-                    <span className="text-ink-400">({doc.status})</span>
-                  </p>
+                  <div className="border-b border-line bg-sand/50 px-4 py-2">
+                    <p className="text-[13.5px] font-medium text-ink-700">
+                      {doc.fileName} — {doc.categoryLabel || t('diagnostics.uncategorized')}{' '}
+                      <span className={clsx(doc.status === 'extraction_failed' ? 'text-red-700' : 'text-ink-400')}>
+                        ({doc.status})
+                      </span>
+                    </p>
+                    {doc.extractionError ? (
+                      <p className="mt-0.5 text-[12px] text-red-700">{doc.extractionError}</p>
+                    ) : null}
+                  </div>
                   <ul className="divide-y divide-line/70">
                     {doc.fields.map((f) => (
                       <li key={f.fieldKey} className="flex flex-wrap items-center justify-between gap-2 px-4 py-1.5 text-[13.5px]">
