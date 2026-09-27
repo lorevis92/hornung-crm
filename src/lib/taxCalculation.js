@@ -624,15 +624,22 @@ export function computeTaxAggregate({
     )
   }
 
-  // Wealth exempt amount (cantonal only — no federal wealth tax exists).
+  // Wealth exempt amount (cantonal only — no federal wealth tax exists) —
+  // base amount by marital status, plus a per-child increment for the
+  // cantons that have one, using the same qualifying-children list as the
+  // income-side child deduction above.
   const wealthExemptParam = findParam(parameters, isMarried ? 'wealth_exempt_married' : 'wealth_exempt_single', canton)
-  if (wealthExemptParam && wealthExemptParam.value_numeric) {
+  const wealthExemptChildParam = findParam(parameters, 'wealth_exempt_child', canton)
+  const wealthExemptChildTotal = (wealthExemptChildParam?.value_numeric || 0) * qualifyingChildren.length
+  const wealthExemptTotal = (wealthExemptParam?.value_numeric || 0) + wealthExemptChildTotal
+  if (wealthExemptTotal) {
     entries.push(
       makeSyntheticEntry({
         contributionType: 'wealth_minus',
-        rawAmount: wealthExemptParam.value_numeric,
+        rawAmount: wealthExemptTotal,
         categoryLabel: 'Wealth exemption',
         fieldLabel: isMarried ? 'Net wealth exempt amount (married)' : 'Net wealth exempt amount (single)',
+        note: wealthExemptChildTotal ? `includes CHF ${wealthExemptChildTotal.toLocaleString('de-CH')} for ${qualifyingChildren.length} child(ren)` : null,
         groupKey: 'wealth'
       })
     )
