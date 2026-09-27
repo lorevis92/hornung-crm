@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, ArrowRight, Archive, CalendarPlus, Mail, Pencil, Phone, RefreshCw, Save, FolderOpen, Trash2
+  ArrowLeft, ArrowRight, Archive, CalendarPlus, Check, Mail, Pencil, Phone, RefreshCw, Save, FolderOpen,
+  Trash2, X
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
@@ -34,12 +35,19 @@ export default function SpecialistClient() {
   const [editingClient, setEditingClient] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [suggestions, setSuggestions] = useState([])
+  const [resolvingId, setResolvingId] = useState(null)
 
   const load = useCallback(async () => {
-    const [row, rows] = await Promise.all([api.getClient(clientId), api.listCases(clientId)])
+    const [row, rows, suggestionRows] = await Promise.all([
+      api.getClient(clientId),
+      api.listCases(clientId),
+      api.listFieldSuggestions(clientId)
+    ])
     setClient(row)
     setNotes(row?.internal_notes || '')
     setCases(rows)
+    setSuggestions(suggestionRows)
     setLoading(false)
   }, [clientId])
 
@@ -100,6 +108,25 @@ export default function SpecialistClient() {
   const cancelDelete = () => {
     if (deletingClient) return
     setConfirmingDelete(false)
+  }
+
+  const resolveSuggestion = async (suggestion, accept) => {
+    setResolvingId(suggestion.id)
+    try {
+      await api.resolveFieldSuggestion(suggestion, accept)
+      setSuggestions((list) => list.filter((s) => s.id !== suggestion.id))
+      if (accept) {
+        // The client_persons/clients row this suggestion targeted may have
+        // just changed — refresh the header (canton shows there).
+        setClient(await api.getClient(clientId))
+      }
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setResolvingId(null)
+    }
   }
 
   const openEdit = () => {
@@ -211,6 +238,48 @@ export default function SpecialistClient() {
           </p>
         ) : null}
       </header>
+
+      {suggestions.length ? (
+        <section className="space-y-2">
+          <p className="text-[13px] font-medium uppercase tracking-wide text-ink-400">
+            {t('specialist.suggestionsTitle')}
+          </p>
+          {suggestions.map((s) => (
+            <div
+              key={s.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
+            >
+              <p>
+                {t('specialist.suggestionText', {
+                  field: s.field_label || s.target_field,
+                  from: s.current_value,
+                  to: s.suggested_value
+                })}
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => resolveSuggestion(s, false)}
+                  disabled={resolvingId === s.id}
+                >
+                  <X size={14} aria-hidden="true" />
+                  {t('specialist.ignoreSuggestion')}
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  onClick={() => resolveSuggestion(s, true)}
+                  disabled={resolvingId === s.id}
+                >
+                  {resolvingId === s.id ? <Spinner size={14} /> : <Check size={14} aria-hidden="true" />}
+                  {t('specialist.acceptSuggestion')}
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       <nav className="flex gap-1 border-b border-line" aria-label="Sections">
         {[

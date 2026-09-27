@@ -9,6 +9,7 @@ import {
   PRICING_ITEMS, TAX_PARAMETERS
 } from '../demoSeed'
 import { computeTaxAggregate } from '../taxCalculation'
+import { computePersonalDetailsSync } from '../personalDetails'
 
 const KEY = 'hornung.demo.v2'
 const blobs = new Map() // document id -> object URL (this session only)
@@ -228,7 +229,8 @@ function seed() {
     taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS)),
     calculationRules: JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES)),
     taxAggregates: [],
-    taxAggregateComponents: []
+    taxAggregateComponents: [],
+    fieldSuggestions: []
   }
 }
 
@@ -251,6 +253,9 @@ function load() {
       // Same for sessions started before the tax calculation engine existed.
       parsed.taxAggregates ||= []
       parsed.taxAggregateComponents ||= []
+      // Same for sessions started before the personal-details auto-fill
+      // feature existed.
+      parsed.fieldSuggestions ||= []
       return parsed
     }
   } catch {
@@ -619,6 +624,133 @@ export const demoApi = {
 
   async saveExtractedField(caseDocumentId, payload) {
     return this.saveExtractedFieldForDocument(caseDocumentId, payload)
+  },
+
+  // "Personal details" (current_tax_sheet) -> registry sync. In demo mode
+  // there's no extraction webhook to call this automatically, so the client
+  // call sites (after a manual field save) are the only trigger — see
+  // api/_personalDetails.js for the real-backend equivalent this mirrors.
+  async syncPersonalDetails(documentId) {
+    const s = store()
+    const doc = s.documents.find((d) => d.id === documentId)
+    if (!doc || doc.category_code !== 'current_tax_sheet') {
+      return wait({ autoFilled: [], suggestions: [] })
+    }
+    const caseRow = s.cases.find((c) => c.id === doc.case_id)
+    const clientId = caseRow?.client_id
+    if (!clientId) return wait({ autoFilled: [], suggestions: [] })
+
+    const client = s.clients.find((c) => c.id === clientId)
+    const fields = s.extractedDocumentFields.filter((f) => f.document_id === documentId)
+    const primary = s.persons.find((p) => p.client_id === clientId && p.person_type === 'primary') || null
+    const spouse = s.persons.find((p) => p.client_id === clientId && p.person_type === 'spouse') || null
+
+    const { autoFill, suggestions, resolved } = computePersonalDetailsSync({
+      extractedFields: fields,
+      canton: client?.canton,
+      primary,
+      spouse
+    })
+
+    const clientPatch = {}
+    const primaryPatch = {}
+    const spousePatch = {}
+    for (const item of autoFill) {
+      if (item.table === 'clients') clientPatch[item.field] = item.value
+      else if (item.person === 'primary') primaryPatch[item.field] = item.value
+      else if (item.person === 'spouse') spousePatch[item.field] = item.value
+    }
+    if (Object.keys(clientPatch).length && client) {
+      Object.assign(client, clientPatch, { updated_at: iso(Date.now()) })
+    }
+    if (Object.keys(primaryPatch).length) {
+      if (primary) Object.assign(primary, primaryPatch, { updated_at: iso(Date.now()) })
+      else s.persons.push({ id: uid('person'), client_id: clientId, person_type: 'primary', ...primaryPatch })
+    }
+    if (Object.keys(spousePatch).length) {
+      if (spouse) Object.assign(spouse, spousePatch, { updated_at: iso(Date.now()) })
+      else s.persons.push({ id: uid('person'), client_id: clientId, person_type: 'spouse', ...spousePatch })
+    }
+
+    for (const sug of suggestions) {
+      const existing = s.fieldSuggestions.find(
+        (row) =>
+          row.client_id === clientId &&
+          row.target_table === sug.table &&
+          row.target_person === sug.person &&
+          row.target_field === sug.field
+      )
+      if (existing) {
+        Object.assign(existing, {
+          document_id: documentId,
+          field_label: sug.fieldLabel,
+          current_value: sug.currentValue,
+          suggested_value: sug.suggestedValue,
+          created_at: iso(Date.now())
+        })
+      } else {
+        s.fieldSuggestions.push({
+          id: uid('sug'),
+          client_id: clientId,
+          document_id: documentId,
+          target_table: sug.table,
+          target_person: sug.person,
+          target_field: sug.field,
+          field_label: sug.fieldLabel,
+          current_value: sug.currentValue,
+          suggested_value: sug.suggestedValue,
+          created_at: iso(Date.now())
+        })
+      }
+    }
+    for (const r of resolved) {
+      s.fieldSuggestions = s.fieldSuggestions.filter(
+        (row) =>
+          !(
+            row.client_id === clientId &&
+            row.target_table === r.table &&
+            row.target_person === r.person &&
+            row.target_field === r.field
+          )
+      )
+    }
+
+    commit()
+    return wait({ autoFilled: autoFill, suggestions })
+  },
+
+  async listFieldSuggestions(clientId) {
+    const s = store()
+    return wait(s.fieldSuggestions.filter((row) => row.client_id === clientId))
+  },
+
+  async resolveFieldSuggestion(suggestion, accept) {
+    const s = store()
+    if (accept) {
+      if (suggestion.target_table === 'clients') {
+        const client = s.clients.find((c) => c.id === suggestion.client_id)
+        if (client) {
+          Object.assign(client, { [suggestion.target_field]: suggestion.suggested_value, updated_at: iso(Date.now()) })
+        }
+      } else {
+        const existing = s.persons.find(
+          (p) => p.client_id === suggestion.client_id && p.person_type === suggestion.target_person
+        )
+        if (existing) {
+          Object.assign(existing, { [suggestion.target_field]: suggestion.suggested_value, updated_at: iso(Date.now()) })
+        } else {
+          s.persons.push({
+            id: uid('person'),
+            client_id: suggestion.client_id,
+            person_type: suggestion.target_person,
+            [suggestion.target_field]: suggestion.suggested_value
+          })
+        }
+      }
+    }
+    s.fieldSuggestions = s.fieldSuggestions.filter((row) => row.id !== suggestion.id)
+    commit()
+    return wait(true)
   },
 
   // All of a client's documents for one tax year, across every case in that

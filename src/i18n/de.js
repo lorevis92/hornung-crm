@@ -333,6 +333,10 @@ export default {
     archived: 'Archiviert',
     editClient: 'Daten bearbeiten',
     editClientTitle: 'Kundendaten bearbeiten',
+    suggestionsTitle: 'Vorschläge aus einem Dokument',
+    suggestionText: '{field}: „{from}“ → „{to}“',
+    acceptSuggestion: 'Übernehmen',
+    ignoreSuggestion: 'Ignorieren',
     deleteClient: 'Kunde löschen',
     deleteClientConfirm: 'Diesen Kunden löschen?',
     deleteClientConfirmBody:

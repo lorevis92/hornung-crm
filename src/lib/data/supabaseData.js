@@ -493,6 +493,64 @@ export const supabaseApi = {
     return { aggregate, components: components || [] }
   },
 
+  // "Personal details" (current_tax_sheet) -> registry sync — same
+  // service-role pattern as calculateAggregates: the AI-extraction path
+  // (api/extract-document.js) triggers this on its own; this call is for
+  // right after a specialist manually corrects a field on such a document.
+  async syncPersonalDetails(documentId) {
+    return callApi('/api/sync-personal-details', { documentId })
+  },
+
+  async listFieldSuggestions(clientId) {
+    return unwrap(
+      await supabase
+        .from('client_field_suggestions')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: true })
+    )
+  },
+
+  async resolveFieldSuggestion(suggestion, accept) {
+    if (accept) {
+      if (suggestion.target_table === 'clients') {
+        unwrap(
+          await supabase
+            .from('clients')
+            .update({ [suggestion.target_field]: suggestion.suggested_value })
+            .eq('id', suggestion.client_id)
+        )
+      } else {
+        const existing = unwrap(
+          await supabase
+            .from('client_persons')
+            .select('id')
+            .eq('client_id', suggestion.client_id)
+            .eq('person_type', suggestion.target_person)
+            .maybeSingle()
+        )
+        if (existing) {
+          unwrap(
+            await supabase
+              .from('client_persons')
+              .update({ [suggestion.target_field]: suggestion.suggested_value })
+              .eq('id', existing.id)
+          )
+        } else {
+          unwrap(
+            await supabase.from('client_persons').insert({
+              client_id: suggestion.client_id,
+              person_type: suggestion.target_person,
+              [suggestion.target_field]: suggestion.suggested_value
+            })
+          )
+        }
+      }
+    }
+    unwrap(await supabase.from('client_field_suggestions').delete().eq('id', suggestion.id))
+    return true
+  },
+
   async uploadDocument(caseId, file, meta = {}) {
     const { clientId, taxYear, direction = 'client_upload', profileId } = meta
     const path = [

@@ -13,7 +13,7 @@ import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions, verifiedFieldsByDocument } from '../lib/extraction'
 import { formatChfSwiss, formatDateTime, fullName } from '../lib/format'
-import { recalculateInBackground } from '../lib/recalc'
+import { recalculateInBackground, syncPersonalDetailsInBackground } from '../lib/recalc'
 
 // pdfjs-dist is a large dependency — only fetched when a specialist actually
 // opens the source view, not on every page load.
@@ -194,6 +194,7 @@ export default function TaxSummary() {
       recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang).then((computed) => {
         if (computed) setResult(computed)
       })
+      if (field.category_code === 'current_tax_sheet') syncPersonalDetailsInBackground(field.document_id)
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))

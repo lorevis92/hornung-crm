@@ -12,7 +12,7 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions } from '../lib/extraction'
-import { recalculateInBackground } from '../lib/recalc'
+import { recalculateInBackground, syncPersonalDetailsInBackground } from '../lib/recalc'
 
 // Extracted values already feed the calculation as soon as they exist — no
 // bulk "confirm all" step needed here either. This panel is for reviewing,
@@ -85,6 +85,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
       )
       toast.success(t('common.saved'))
       recalculateInBackground(clientId, taxYear, lang)
+      if (doc.category_code === 'current_tax_sheet') syncPersonalDetailsInBackground(doc.id)
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))

@@ -18,3 +18,20 @@ export async function recalculateInBackground(clientId, taxYear, lang) {
     return null
   }
 }
+
+// Same reasoning, for the "Personal details" -> client registry auto-fill
+// (src/lib/personalDetails.js): called after a specialist manually saves a
+// field on a current_tax_sheet document (the AI-extraction path triggers
+// it server-side instead, see api/extract-document.js). Grouped here
+// alongside recalculateInBackground rather than its own module — both are
+// thin "fire a server-computed side effect, log but don't surface errors"
+// wrappers around a mutation that already succeeded.
+export async function syncPersonalDetailsInBackground(documentId) {
+  if (!documentId) return null
+  try {
+    return await api.syncPersonalDetails(documentId)
+  } catch (error) {
+    console.error('[syncPersonalDetailsInBackground]', error)
+    return null
+  }
+}

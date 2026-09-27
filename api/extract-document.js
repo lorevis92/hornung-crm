@@ -18,6 +18,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, serviceClient } from './_lib.js'
 import { recalculateAndPersist } from './_recalc.js'
+import { syncPersonalDetails } from './_personalDetails.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
 // import.meta.env) — keep this in sync with that file.
@@ -222,6 +223,19 @@ async function runExtraction(admin, anthropic, documentId) {
     await recalculateAndPersist(admin, claimed.client_id, claimed.tax_year)
   } catch (recalcError) {
     console.error(`[extract-document] recalculation failed for document ${documentId}:`, recalcError)
+  }
+
+  // "Personal details" (current_tax_sheet) documents feed the client's
+  // registry directly — empty fields are filled in, fields that already
+  // hold a different value become a pending suggestion instead. Same
+  // best-effort reasoning as the recalculation above: this document was
+  // still extracted successfully either way.
+  if (categoryCode === 'current_tax_sheet') {
+    try {
+      await syncPersonalDetails(admin, documentId)
+    } catch (syncError) {
+      console.error(`[extract-document] personal-details sync failed for document ${documentId}:`, syncError)
+    }
   }
 }
 
