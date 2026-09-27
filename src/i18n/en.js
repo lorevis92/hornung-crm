@@ -564,6 +564,7 @@ export default {
     incompleteFailedDoc: 'Extraction failed on "{name}" — its data is missing from every total below.',
     incompleteChildrenMismatch: 'The personal details document states {extracted} child(ren), but only {registered} are on the client’s record.',
     retryExtraction: 'Retry extraction',
+    fixChildren: 'Fix on client record',
     uncertaintyBadge: '{count} to verify',
     uncertaintyModalTitle: 'Before relying on this calculation, check these points',
     uncertaintyModalHelp: 'This calculation includes items that need a specialist to review:',

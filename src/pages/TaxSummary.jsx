@@ -515,8 +515,16 @@ export default function TaxSummary() {
               </li>
             ))}
             {childrenMismatch ? (
-              <li className="text-[13.5px] text-red-800">
-                {t('summary.incompleteChildrenMismatch', { extracted: extractedChildrenCount, registered: childrenCount })}
+              <li className="flex flex-wrap items-center justify-between gap-2 text-[13.5px] text-red-800">
+                <span>
+                  {t('summary.incompleteChildrenMismatch', { extracted: extractedChildrenCount, registered: childrenCount })}
+                </span>
+                <Link
+                  to={`/clients/${caseRow.client_id}?tab=questionnaire#questionnaire-children`}
+                  className="btn-secondary btn-sm shrink-0"
+                >
+                  {t('summary.fixChildren')}
+                </Link>
               </li>
             ) : null}
           </ul>

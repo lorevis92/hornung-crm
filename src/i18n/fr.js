@@ -564,6 +564,7 @@ export default {
     incompleteFailedDoc: 'L’extraction a échoué sur « {name} » — ses données sont absentes de tous les totaux ci-dessous.',
     incompleteChildrenMismatch: 'Le document de données personnelles indique {extracted} enfant(s), mais seuls {registered} sont enregistrés sur la fiche du client.',
     retryExtraction: "Réessayer l'extraction",
+    fixChildren: 'Corriger sur la fiche client',
     uncertaintyBadge: '{count} à vérifier',
     uncertaintyModalTitle: 'Avant de vous fier à ce calcul, vérifiez ces points',
     uncertaintyModalHelp: 'Ce calcul comprend des éléments nécessitant une vérification par le spécialiste :',

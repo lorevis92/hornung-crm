@@ -30,9 +30,9 @@ const emptyPerson = (type) => ({
   asset_statement_count: 0
 })
 
-function SectionCard({ icon: Icon, title, description, children, actions }) {
+function SectionCard({ id, icon: Icon, title, description, children, actions }) {
   return (
-    <section className="card card-pad">
+    <section id={id} className="card card-pad scroll-mt-4">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-2.5">
           {Icon ? <Icon size={20} className="mt-1 shrink-0 text-gold-600" aria-hidden="true" /> : null}
@@ -174,6 +174,14 @@ export default function QuestionnaireForm({ clientId, readOnly = false, onSaved 
       setVehicles(data.vehicles || [])
       setProperties(data.properties || [])
       setLoading(false)
+      // A link into this form (e.g. the Tax Summary completeness banner's
+      // "Fix this" action) can target a specific section via the URL hash —
+      // only scrollable once its data has actually rendered.
+      if (window.location.hash) {
+        requestAnimationFrame(() => {
+          document.querySelector(window.location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+      }
     })
     return () => {
       active = false
@@ -294,6 +302,7 @@ export default function QuestionnaireForm({ clientId, readOnly = false, onSaved 
 
       {/* ----------------------------------------------------- children --- */}
       <SectionCard
+        id="questionnaire-children"
         icon={Users}
         title={t('data.children')}
         actions={

@@ -563,6 +563,7 @@ export default {
     incompleteFailedDoc: 'Extraktion fehlgeschlagen bei „{name}“ — dessen Daten fehlen in allen untenstehenden Summen.',
     incompleteChildrenMismatch: 'Das Dokument mit den persönlichen Daten nennt {extracted} Kind(er), aber nur {registered} sind beim Kunden erfasst.',
     retryExtraction: 'Extraktion erneut versuchen',
+    fixChildren: 'Auf der Kundenkarte korrigieren',
     uncertaintyBadge: '{count} zu prüfen',
     uncertaintyModalTitle: 'Vor Verwendung dieser Berechnung diese Punkte prüfen',
     uncertaintyModalHelp: 'Diese Berechnung enthält Punkte, die eine Prüfung durch den Fachspezialisten benötigen:',

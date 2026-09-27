@@ -562,6 +562,7 @@ export default {
     incompleteFailedDoc: 'Estrazione fallita su "{name}" — i suoi dati mancano da ogni totale qui sotto.',
     incompleteChildrenMismatch: 'Il documento dei dati personali indica {extracted} figlio/i, ma solo {registered} risultano registrati sulla scheda del cliente.',
     retryExtraction: 'Riprova estrazione',
+    fixChildren: 'Correggi sulla scheda cliente',
     uncertaintyBadge: '{count} da verificare',
     uncertaintyModalTitle: 'Prima di affidarti a questo calcolo, verifica questi punti',
     uncertaintyModalHelp: 'Il calcolo attuale include elementi che richiedono una verifica da parte dello specialista:',

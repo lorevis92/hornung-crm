@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, ArrowRight, Archive, CalendarPlus, Check, Mail, Pencil, Phone, RefreshCw, Save, FolderOpen,
   Trash2, X
@@ -21,10 +21,16 @@ export default function SpecialistClient() {
   const { t, lang } = useI18n()
   const toast = useToast()
 
+  // Lets an external link (e.g. the Tax Summary completeness banner) send a
+  // specialist straight to a specific tab — ?tab=questionnaire — instead of
+  // just the client page in general.
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab')
+
   const [loading, setLoading] = useState(true)
   const [client, setClient] = useState(null)
   const [cases, setCases] = useState([])
-  const [tab, setTab] = useState('years')
+  const [tab, setTab] = useState(['years', 'questionnaire', 'notes'].includes(initialTab) ? initialTab : 'years')
   const [notes, setNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [newYear, setNewYear] = useState(String(currentTaxYear()))
