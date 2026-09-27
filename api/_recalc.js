@@ -15,6 +15,16 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
   if (clientError) throw clientError
   if (!client) throw new Error('CLIENT_NOT_FOUND')
 
+  const [personsRes, childrenRes] = await Promise.all([
+    admin.from('client_persons').select('*').eq('client_id', clientId),
+    admin.from('client_children').select('*').eq('client_id', clientId)
+  ])
+  if (personsRes.error) throw personsRes.error
+  if (childrenRes.error) throw childrenRes.error
+  const primaryPerson = (personsRes.data || []).find((p) => p.person_type === 'primary') || null
+  const spousePerson = (personsRes.data || []).find((p) => p.person_type === 'spouse') || null
+  const children = childrenRes.data || []
+
   const { data: documents, error: docsError } = await admin
     .from('client_documents')
     .select('id, category_code, file_name')
@@ -66,6 +76,10 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
     fieldDefs: fieldDefsRes.data || [],
     categories: categoriesRes.data || [],
     parameters: parametersRes.data || [],
+    taxYear,
+    primaryPerson,
+    spousePerson,
+    children,
     lang
   })
 

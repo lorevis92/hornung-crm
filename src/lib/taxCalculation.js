@@ -18,11 +18,17 @@ const DEBT_INTEREST_FAMILY = 'debt_interest_extra_allowance'
 // threshold is deductible), not a ceiling. Every other percentage-type
 // family is treated as a plain cap at that percentage.
 const MEDICAL_THRESHOLD_FAMILY = 'medical_costs_threshold_pct'
+const DONATION_CAP_FAMILY = 'donation_cap_pct'
+const DONATION_MIN_FAMILY = 'donation_min_amount'
+// Not a real tax_parameters family on its own — a marker the pooling
+// pre-pass recognizes; the actual cap is resolved dynamically from marital
+// status + qualifying-children count (see resolveInsurancePremiumCap).
+const INSURANCE_POOL_FAMILY = 'insurance_premium_pool'
 
 // A handful of fields need to look at a sibling field on the SAME document
 // before they can be turned into a plain amount — same "special-cased by
-// name" style as the two family constants above, kept as small explicit
-// maps rather than new generic schema for what only a few fields need.
+// name" style as the family constants above, kept as small explicit maps
+// rather than new generic schema for what only a few fields need.
 
 // Deductible cost = the field's own amount minus the paired field (e.g.
 // medical costs net of the insurance reimbursement) — never negative.
@@ -32,11 +38,44 @@ const NETS_AGAINST = {
 
 // The field is excluded (not a real deduction) when the paired field is
 // affirmative — e.g. a "membership fee" isn't a pure donation once the
-// document indicates a consideration/benefit was received in exchange.
+// document indicates a consideration/benefit was received in exchange, and
+// a commute deduction doesn't apply when the employer already provides free
+// transport (Lohnausweis code F).
 const VOID_IF_TRUTHY = {
-  'donation_certificate:annual_amount': 'has_consideration'
+  'donation_certificate:annual_amount': {
+    siblingKey: 'has_consideration',
+    note: 'not deductible — the document indicates a consideration/benefit was received, not a pure donation'
+  },
+  'salary_statement:annual_commute_cost': {
+    siblingKey: 'code_f_present',
+    note: 'not deductible — the employer already provides free commute (Lohnausweis code F)'
+  }
 }
 const AFFIRMATIVE_VALUES = new Set(['yes', 'sì', 'si', 'ja', 'oui', 'true', '1', 'x'])
+
+// The field's cap is halved when the paired field is affirmative — extra
+// meal costs are only deductible at half the usual rate once the employer
+// already subsidizes meals (Lohnausweis code G).
+const HALVE_CAP_IF_TRUTHY = {
+  'salary_statement:annual_meal_costs': 'code_g_present'
+}
+
+// Alimony is only deductible (payer) / taxable (recipient) while the
+// beneficiary is a minor child — an ex-spouse has no such cutoff.
+const ALIMONY_CHILD_CUTOFF_KEYS = new Set(['alimony_paid:annual_amount', 'alimony_received:annual_amount'])
+const CHILD_BENEFICIARY_VALUES = new Set(['child', 'children', 'figlio', 'figli', 'kind', 'kinder', 'enfant', 'enfants'])
+
+// Categories whose amount is always shown, but never counted in the ordinary
+// calculation — either because Swiss law taxes it separately (pension
+// capital withdrawals, inheritances/gifts, real-estate sale gains) or
+// because this app has no reliable way to compute the figure it would need
+// (a vehicle's cantonally-depreciated value).
+const ALWAYS_FLAGGED_CATEGORIES = {
+  pension_capital_withdrawal: 'separately taxed — not included in the ordinary income/wealth calculation',
+  inheritance_gift_lpp_payment: 'separately taxed — not included in the ordinary income/wealth calculation',
+  property_sale: 'separately taxed — not included in the ordinary income/wealth calculation',
+  private_vehicle: 'purchase price shown for reference only — no cantonal depreciation schedule implemented, verify the current value manually'
+}
 
 // Categories whose monetary fields are only trustworthy in CHF — a sibling
 // "currency" field that says otherwise excludes every numeric field on that
@@ -46,6 +85,8 @@ const CURRENCY_FIELD_BY_CATEGORY = {
   bank_securities_crypto_statement: 'currency'
 }
 const CHF_ALIASES = new Set(['CHF', 'SFR'])
+
+const MARRIED_STATUSES = new Set(['married', 'registered_partnership'])
 
 function isAffirmative(value) {
   return AFFIRMATIVE_VALUES.has(String(value || '').trim().toLowerCase())
@@ -97,6 +138,74 @@ function findParam(parameters, family, cantonCode) {
   return parameters.find((p) => p.parameter_family === family && p.scope === 'federal') || null
 }
 
+function isMarriedHousehold(primaryPerson, spousePerson) {
+  const hasSpouse = Boolean(
+    spousePerson && (spousePerson.first_name || spousePerson.last_name || spousePerson.date_of_birth)
+  )
+  return MARRIED_STATUSES.has(primaryPerson?.marital_status) || hasSpouse
+}
+
+// A child's age as of 31.12 of the tax year, and which VS deduction bracket
+// (0-6 / 6-16 / 16+ in training) that puts them in. A child past 16 only
+// still counts if `until_when` (free text from the questionnaire, e.g. an
+// expected graduation year) indicates they're still in education during the
+// tax year — parsed leniently for a 4-digit year; if that can't be
+// determined at all, the child is still surfaced (flagged) rather than
+// silently dropped, since a real deduction may well still apply.
+function resolveChild(child, taxYear) {
+  if (!child?.date_of_birth) return null
+  const birthYear = new Date(child.date_of_birth).getFullYear()
+  if (!Number.isFinite(birthYear)) return null
+  const age = taxYear - birthYear
+  if (age < 0) return null
+
+  if (age <= 6) return { bracket: '0_6', uncertain: false }
+  if (age <= 16) return { bracket: '6_16', uncertain: false }
+
+  const yearMatch = String(child.until_when || '').match(/\b(20\d{2})\b/)
+  if (yearMatch) {
+    const untilYear = Number(yearMatch[1])
+    return untilYear >= taxYear ? { bracket: '16_plus', uncertain: false } : null
+  }
+  // Over 16 with no parseable "until when" — can't confirm training status.
+  return { bracket: '16_plus', uncertain: true }
+}
+
+const CHILD_BRACKET_FAMILY = {
+  '0_6': 'child_deduction_0_6',
+  '6_16': 'child_deduction_6_16',
+  '16_plus': 'child_deduction_16_plus'
+}
+
+function resolveInsurancePremiumCap(parameters, canton, isMarried, qualifyingChildCount) {
+  const baseParam = findParam(parameters, isMarried ? 'insurance_premium_cap_married' : 'insurance_premium_cap_single', canton)
+  if (!baseParam) return null
+  const incrementParam = findParam(parameters, 'insurance_premium_child_increment', canton)
+  const cap = (baseParam.value_numeric || 0) + qualifyingChildCount * (incrementParam?.value_numeric || 0)
+  return { cap, baseParam }
+}
+
+function makeSyntheticEntry({ contributionType, rawAmount, categoryLabel, fieldLabel, note, needsVerification, groupKey }) {
+  return {
+    documentId: null,
+    fileName: null,
+    categoryCode: null,
+    categoryLabel,
+    groupKey: groupKey || null,
+    fieldKey: null,
+    fieldLabel,
+    contributionType,
+    capFamily: null,
+    verifiedBySpecialist: false,
+    rawAmount,
+    effective: needsVerification ? 0 : rawAmount,
+    note: note || null,
+    needsVerification: Boolean(needsVerification),
+    currencyCode: null,
+    deferred: false
+  }
+}
+
 // documents: client_documents rows (id, category_code, file_name), already
 //   scoped to one client/tax_year and to only the categorized ones.
 // extractedFields: extracted_document_fields rows for those documents.
@@ -105,6 +214,9 @@ function findParam(parameters, family, cantonCode) {
 // categories: the full document_categories table (for group_key + labels).
 // parameters: tax_parameters rows already filtered to the target tax_year.
 // canton: the resolved canton code, or null if genuinely unknown.
+// taxYear: the tax year being computed (needed to age children as of 31.12).
+// primaryPerson/spousePerson: client_persons rows (or null/undefined).
+// children: client_children rows for this client (or empty/undefined).
 export function computeTaxAggregate({
   canton,
   documents,
@@ -113,6 +225,10 @@ export function computeTaxAggregate({
   fieldDefs,
   categories,
   parameters,
+  taxYear,
+  primaryPerson,
+  spousePerson,
+  children,
   lang = 'en'
 }) {
   const categoryByCode = Object.fromEntries((categories || []).map((c) => [c.code, c]))
@@ -139,9 +255,9 @@ export function computeTaxAggregate({
   }
 
   // For the sibling-field lookups below (net-of-reimbursement, voided-by,
-  // currency) — keyed the same way regardless of whether the companion
-  // field itself has a contribution_type (most don't; they're purely
-  // informational on their own).
+  // currency, F/G codes) — keyed the same way regardless of whether the
+  // companion field itself has a contribution_type (most don't; they're
+  // purely informational on their own).
   const fieldByDocAndKey = Object.fromEntries(
     (extractedFields || []).map((f) => [`${f.document_id}:${f.field_key}`, f.field_value])
   )
@@ -153,7 +269,8 @@ export function computeTaxAggregate({
   // Extracted values feed the calculation as soon as they exist — there is
   // no "confirmed by the specialist" gate. The specialist can still
   // exclude a field (included_in_calculation) or correct/add a value at
-  // any time; verified_by_specialist is no longer read here at all.
+  // any time; verified_by_specialist is only read for the missing-cap-
+  // parameter override below.
   for (const field of extractedFields || []) {
     if (field.included_in_calculation === false) continue
     if (!field.field_value || !field.field_value.trim()) continue
@@ -172,18 +289,43 @@ export function computeTaxAggregate({
     let needsVerification = false
     let note = null
 
+    // 1. Categories that are always shown but never counted (separate
+    // taxation, or a figure this app can't reliably compute).
+    if (ALWAYS_FLAGGED_CATEGORIES[doc.category_code]) {
+      needsVerification = true
+      note = ALWAYS_FLAGGED_CATEGORIES[doc.category_code]
+    }
+
+    // 2. Net against a sibling field (e.g. medical costs net of
+    // reimbursement) — computed regardless, it's part of the raw amount.
     const netsAgainstKey = NETS_AGAINST[ruleKey]
     if (netsAgainstKey) {
       const reimbursement = parseAmount(siblingValue(doc.id, netsAgainstKey)) || 0
       rawAmount = Math.max(0, rawAmount - reimbursement)
     }
 
-    const voidIfKey = VOID_IF_TRUTHY[ruleKey]
-    if (voidIfKey && isAffirmative(siblingValue(doc.id, voidIfKey))) {
-      needsVerification = true
-      note = 'not deductible — the document indicates a consideration/benefit was received, not a pure donation'
+    // 3. Voided by a sibling flag (donation with consideration, commute
+    // with employer-provided free transport).
+    if (!needsVerification) {
+      const voidRule = VOID_IF_TRUTHY[ruleKey]
+      if (voidRule && isAffirmative(siblingValue(doc.id, voidRule.siblingKey))) {
+        needsVerification = true
+        note = voidRule.note
+      }
     }
 
+    // 4. Alimony — no longer deductible/taxable once the child beneficiary
+    // is no longer a minor.
+    if (!needsVerification && ALIMONY_CHILD_CUTOFF_KEYS.has(ruleKey)) {
+      const beneficiaryType = String(siblingValue(doc.id, 'beneficiary_type') || '').trim().toLowerCase()
+      const minorValue = siblingValue(doc.id, 'beneficiary_is_minor')
+      if (CHILD_BENEFICIARY_VALUES.has(beneficiaryType) && minorValue && !isAffirmative(minorValue)) {
+        needsVerification = true
+        note = 'not deductible/taxable — the child beneficiary is no longer a minor'
+      }
+    }
+
+    // 5. Foreign currency — never summed as if it were CHF.
     const currencyFieldKey = CURRENCY_FIELD_BY_CATEGORY[doc.category_code]
     const currencyValue = currencyFieldKey ? siblingValue(doc.id, currencyFieldKey) : null
     let currencyCode = null
@@ -191,6 +333,15 @@ export function computeTaxAggregate({
       needsVerification = true
       currencyCode = currencyValue.trim().toUpperCase()
       note = `in foreign currency (${currencyCode}), not converted — manual verification needed`
+    }
+
+    // 6. Donations below the statutory minimum aren't deductible at all.
+    if (!needsVerification && rule.cap_parameter_family === DONATION_CAP_FAMILY) {
+      const minParam = findParam(parameters, DONATION_MIN_FAMILY, canton)
+      if (minParam && rawAmount < (minParam.value_numeric || 0)) {
+        needsVerification = true
+        note = `below the CHF ${minParam.value_numeric} minimum for a deductible donation`
+      }
     }
 
     const category = categoryByCode[doc.category_code]
@@ -219,10 +370,10 @@ export function computeTaxAggregate({
   }
 
   // Entries already excluded at creation time (voided donation, foreign
-  // currency) contribute nothing from here on — zeroed immediately, not
-  // just at the final rounding pass, so every intermediate figure below
-  // (wealth-derived income, provisional income for percentage thresholds)
-  // is correct too, not just the final total.
+  // currency, separate taxation, ...) contribute nothing from here on —
+  // zeroed immediately, not just at the final rounding pass, so every
+  // intermediate figure below (wealth-derived income, provisional income
+  // for percentage thresholds) is correct too, not just the final total.
   for (const entry of entries) {
     if (entry.needsVerification) entry.effective = 0
   }
@@ -239,12 +390,54 @@ export function computeTaxAggregate({
     )
     .reduce((sum, e) => sum + e.rawAmount, 0)
 
+  const isMarried = isMarriedHousehold(primaryPerson, spousePerson)
+
+  // Qualifying children (age/bracket resolved once, reused for both the
+  // insurance-premium per-child increment and the per-child social
+  // deduction added right before the final total).
+  const resolvedYear = Number(taxYear)
+  const qualifyingChildren = Number.isFinite(resolvedYear)
+    ? (children || [])
+        .map((child) => ({ child, resolved: resolveChild(child, resolvedYear) }))
+        .filter((c) => c.resolved)
+    : []
+
+  // Pool health + life insurance premiums under one shared cap (base amount
+  // by marital status, plus a per-child increment) before the generic
+  // per-entry cap loop runs — a plain per-entry cap would let each premium
+  // independently use the full allowance instead of sharing one.
+  const insuranceEntries = entries.filter((e) => !e.needsVerification && e.capFamily === INSURANCE_POOL_FAMILY)
+  if (insuranceEntries.length) {
+    const resolved = resolveInsurancePremiumCap(parameters, canton, isMarried, qualifyingChildren.length)
+    if (!resolved) {
+      for (const entry of insuranceEntries) {
+        if (entry.verifiedBySpecialist) {
+          entry.note = 'tax parameter not found — included by the specialist despite the missing cap'
+        } else {
+          entry.needsVerification = true
+          entry.effective = 0
+          entry.note = 'not verified — missing tax parameter, excluded from calculation'
+        }
+      }
+    } else {
+      const rawSum = insuranceEntries.reduce((sum, e) => sum + e.rawAmount, 0)
+      if (rawSum > resolved.cap) {
+        const scale = resolved.cap / rawSum
+        for (const entry of insuranceEntries) {
+          entry.effective = entry.rawAmount * scale
+          entry.note = 'cap applied (pooled with other insurance premiums)'
+        }
+      }
+    }
+    for (const entry of insuranceEntries) entry.capFamily = null // resolved — skip the generic loop below
+  }
+
   // Resolve every capped entry except percentage-type ones, which depend on
   // a provisional income figure computed further down.
   for (const entry of entries) {
-    // Already excluded above (voided donation, foreign currency) — nothing
-    // left to resolve, and the cap/param logic below would only overwrite
-    // that reason with an unrelated one.
+    // Already excluded above (voided donation, foreign currency, separate
+    // taxation, ...) — nothing left to resolve, and the cap/param logic
+    // below would only overwrite that reason with an unrelated one.
     if (entry.needsVerification) continue
     if (!entry.capFamily) continue
     const param = findParam(parameters, entry.capFamily, canton)
@@ -268,14 +461,50 @@ export function computeTaxAggregate({
       entry.param = param
       continue
     }
+    let cap
     if (entry.capFamily === DEBT_INTEREST_FAMILY) {
-      const cap = wealthDerivedIncome + (param.value_numeric || 0)
-      entry.effective = Math.min(entry.rawAmount, cap)
+      cap = wealthDerivedIncome + (param.value_numeric || 0)
     } else {
-      const cap = param.value_numeric ?? entry.rawAmount
-      entry.effective = Math.min(entry.rawAmount, cap)
+      cap = param.value_type === 'no_cap' ? Infinity : (param.value_numeric ?? entry.rawAmount)
+      const halveKey = `${entry.categoryCode}:${entry.fieldKey}`
+      if (Number.isFinite(cap) && HALVE_CAP_IF_TRUTHY[halveKey] && isAffirmative(siblingValue(entry.documentId, HALVE_CAP_IF_TRUTHY[halveKey]))) {
+        cap = cap / 2
+      }
     }
+    entry.effective = Math.min(entry.rawAmount, cap)
     if (entry.effective < entry.rawAmount) entry.note = 'cap applied'
+  }
+
+  // Flat-rate professional expenses (3% of net salary, min/max clamped) —
+  // computed once across every salary_statement document combined, since
+  // documents aren't attributed to a specific spouse. Added before
+  // provisional income is computed, so it counts as an "organic" deduction
+  // like every other one above.
+  const netSalaryEntries = entries.filter(
+    (e) => e.categoryCode === 'salary_statement' && e.fieldKey === 'net_salary' && !e.needsVerification
+  )
+  if (netSalaryEntries.length) {
+    const pctParam = findParam(parameters, 'professional_expenses_pct', canton)
+    if (pctParam) {
+      const totalNetSalary = netSalaryEntries.reduce((sum, e) => sum + e.rawAmount, 0)
+      const minParam = findParam(parameters, 'professional_expenses_min', canton)
+      const maxParam = findParam(parameters, 'professional_expenses_max', canton)
+      let amount = (totalNetSalary * (pctParam.value_numeric || 0)) / 100
+      if (minParam) amount = Math.max(amount, minParam.value_numeric || 0)
+      if (maxParam) amount = Math.min(amount, maxParam.value_numeric || 0)
+      entries.push(
+        makeSyntheticEntry({
+          contributionType: 'income_minus',
+          rawAmount: amount,
+          categoryLabel: 'Professional expenses (flat-rate)',
+          fieldLabel:
+            netSalaryEntries.length > 1
+              ? 'Flat-rate professional expenses (3% of combined net salary, min/max applied)'
+              : 'Flat-rate professional expenses (3% of net salary, min/max applied)',
+          groupKey: 'deductions'
+        })
+      )
+    }
   }
 
   const provisionalIncome =
@@ -284,25 +513,121 @@ export function computeTaxAggregate({
       .filter((e) => e.contributionType === 'income_minus' && !e.deferred)
       .reduce((sum, e) => sum + e.effective, 0)
 
-  for (const entry of entries.filter((e) => e.deferred)) {
+  // Percentage-capped deductions are resolved in two sequential stages, not
+  // together: donations (and any other general %-of-income cap) first,
+  // against the plain provisional income: medical costs LAST, against
+  // income already reduced by every deduction above INCLUDING donations —
+  // "solo l'eccedenza sul reddito netto già ridotto dalle altre deduzioni".
+  const deferredEntries = entries.filter((e) => e.deferred)
+  const generalDeferred = deferredEntries.filter((e) => e.capFamily !== MEDICAL_THRESHOLD_FAMILY)
+  const medicalDeferred = deferredEntries.filter((e) => e.capFamily === MEDICAL_THRESHOLD_FAMILY)
+
+  for (const entry of generalDeferred) {
     const pct = entry.param.value_numeric || 0
-    const thresholdOrCap = provisionalIncome * (pct / 100)
-    if (entry.capFamily === MEDICAL_THRESHOLD_FAMILY) {
-      entry.effective = Math.max(0, entry.rawAmount - thresholdOrCap)
-      entry.note = 'only the amount exceeding the threshold is deductible'
+    const cap = provisionalIncome * (pct / 100)
+    entry.effective = Math.min(entry.rawAmount, cap)
+    if (entry.effective < entry.rawAmount) entry.note = 'cap applied'
+  }
+
+  const incomeAfterGeneralDeductions = provisionalIncome - generalDeferred.reduce((sum, e) => sum + e.effective, 0)
+
+  for (const entry of medicalDeferred) {
+    const pct = entry.param.value_numeric || 0
+    const threshold = incomeAfterGeneralDeductions * (pct / 100)
+    entry.effective = Math.max(0, entry.rawAmount - threshold)
+    entry.note = 'only the amount exceeding the threshold is deductible'
+  }
+
+  const incomeAfterMedical = incomeAfterGeneralDeductions - medicalDeferred.reduce((sum, e) => sum + e.effective, 0)
+
+  // Social deductions — added last, against income already reduced by
+  // everything above. Fixed amounts, so they never affect any threshold
+  // computed earlier; only their presence in the final total matters.
+  for (const { child, resolved } of qualifyingChildren) {
+    const family = CHILD_BRACKET_FAMILY[resolved.bracket]
+    let param = findParam(parameters, family, canton)
+    if (!param) param = findParam(parameters, 'child_deduction_flat', canton)
+    if (!param) continue
+    entries.push(
+      makeSyntheticEntry({
+        contributionType: 'income_minus',
+        rawAmount: param.value_numeric || 0,
+        categoryLabel: 'Social deductions',
+        fieldLabel: `Child deduction — ${child.full_name || 'child'}`,
+        note: resolved.uncertain
+          ? 'child over 16 — training/education status not confirmed from the questionnaire, verify manually'
+          : null,
+        needsVerification: resolved.uncertain,
+        groupKey: 'deductions'
+      })
+    )
+  }
+
+  if (isMarried) {
+    if (canton === 'VS') {
+      warnings.push(
+        'Vallese: la deduzione per coniugati è uno sconto d\'imposta del 35% (max CHF 4\'900) applicato sull\'imposta finale, non una deduzione sulla base imponibile — non calcolato da questa app.'
+      )
     } else {
-      entry.effective = Math.min(entry.rawAmount, thresholdOrCap)
-      if (entry.effective < entry.rawAmount) entry.note = 'cap applied'
+      const marriedParam = findParam(parameters, 'married_deduction_flat', canton)
+      if (marriedParam) {
+        entries.push(
+          makeSyntheticEntry({
+            contributionType: 'income_minus',
+            rawAmount: marriedParam.value_numeric || 0,
+            categoryLabel: 'Social deductions',
+            fieldLabel: 'Married/partnered deduction',
+            groupKey: 'deductions'
+          })
+        )
+      }
     }
+  }
+
+  // "Doppio reddito" (both spouses employed) — flagged for manual review
+  // only. The deduction is 50% of the LOWER spouse's income, but documents
+  // aren't attributed to a specific person, so this app can't attribute
+  // salary income per spouse and compute it automatically.
+  const spouseAppearsEmployed = Boolean(spousePerson) && (spousePerson.work_percentage == null || spousePerson.work_percentage > 0)
+  const primaryAppearsEmployed = !primaryPerson || primaryPerson.work_percentage == null || primaryPerson.work_percentage > 0
+  if (isMarried && spouseAppearsEmployed && primaryAppearsEmployed) {
+    const minParam = findParam(parameters, 'two_income_deduction_min', canton)
+    const vsFixedParam = findParam(parameters, 'two_income_deduction_vs_fixed', canton)
+    const indicative = (canton === 'VS' ? vsFixedParam?.value_numeric : minParam?.value_numeric) || 0
+    entries.push(
+      makeSyntheticEntry({
+        contributionType: 'income_minus',
+        rawAmount: indicative,
+        categoryLabel: 'Social deductions',
+        fieldLabel: 'Possible two-income deduction ("doppio reddito")',
+        note: 'both spouses appear employed — this deduction requires manually attributing income per spouse, which this app cannot do from uploaded documents',
+        needsVerification: true,
+        groupKey: 'deductions'
+      })
+    )
+  }
+
+  // Wealth exempt amount (cantonal only — no federal wealth tax exists).
+  const wealthExemptParam = findParam(parameters, isMarried ? 'wealth_exempt_married' : 'wealth_exempt_single', canton)
+  if (wealthExemptParam && wealthExemptParam.value_numeric) {
+    entries.push(
+      makeSyntheticEntry({
+        contributionType: 'wealth_minus',
+        rawAmount: wealthExemptParam.value_numeric,
+        categoryLabel: 'Wealth exemption',
+        fieldLabel: isMarried ? 'Net wealth exempt amount (married)' : 'Net wealth exempt amount (single)',
+        groupKey: 'wealth'
+      })
+    )
   }
 
   // Round every contributing amount to whole CHF now, once — capping/
   // threshold logic above needed the unrounded figures for precision, but
   // from here on every total is built by summing THESE same rounded
-  // numbers, which are also exactly what the "how this was calculated"
-  // rows show. That guarantees the totals above are always exactly the sum
-  // of the rows below, rather than summing unrounded amounts and rounding
-  // only the final total (which can drift by a franc or two once several
+  // numbers, which are also exactly what the "how this was calculated" rows
+  // show. That guarantees the totals above are always exactly the sum of
+  // the rows below, rather than summing unrounded amounts and rounding only
+  // the final total (which can drift by a franc or two once several
   // fractional components are involved).
   for (const entry of entries) {
     entry.effective = entry.needsVerification ? 0 : Math.round(entry.effective)
@@ -326,9 +651,11 @@ export function computeTaxAggregate({
   const taxableIncomeFederal = taxableIncomeCantonal
 
   const components = entries.map((entry) => {
-    const identifier = identifierByDocId[entry.documentId]
-    const suffix = identifier ? identifier : entry.fileName
-    const label = `${entry.fieldLabel} — ${entry.categoryLabel} ${identifier ? identifier : `(${entry.fileName})`}${entry.note ? ` — ${entry.note}` : ''}`
+    const identifier = entry.documentId ? identifierByDocId[entry.documentId] : null
+    const suffix = identifier || entry.fileName || null
+    const label = suffix
+      ? `${entry.fieldLabel} — ${entry.categoryLabel} ${identifier ? identifier : `(${entry.fileName})`}${entry.note ? ` — ${entry.note}` : ''}`
+      : `${entry.fieldLabel} — ${entry.categoryLabel}${entry.note ? ` — ${entry.note}` : ''}`
     return {
       documentId: entry.documentId,
       componentType: CONTRIBUTION_TO_COMPONENT[entry.contributionType],
@@ -349,9 +676,11 @@ export function computeTaxAggregate({
       // signed amount) — when several documents contribute to the same
       // section, the item text itself carries the document identifier
       // (e.g. "Gross salary — LONZA AG") so rows stay distinguishable
-      // without a separate source column.
-      fieldLabel: `${entry.fieldLabel}${entry.note ? ` (${entry.note})` : ''} — ${suffix}`,
-      sourceLabel: `${entry.categoryLabel} — ${suffix}`
+      // without a separate source column. Synthetic (computed) entries have
+      // no document at all, so the suffix is dropped instead of showing
+      // "(null)".
+      fieldLabel: `${entry.fieldLabel}${entry.note ? ` (${entry.note})` : ''}${suffix ? ` — ${suffix}` : ''}`,
+      sourceLabel: suffix ? `${entry.categoryLabel} — ${suffix}` : entry.categoryLabel
     }
   })
 

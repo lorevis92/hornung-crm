@@ -847,6 +847,10 @@ export const demoApi = {
       }
     }
 
+    const primaryPerson = s.persons.find((p) => p.client_id === clientId && p.person_type === 'primary') || null
+    const spousePerson = s.persons.find((p) => p.client_id === clientId && p.person_type === 'spouse') || null
+    const children = s.children.filter((c) => c.client_id === clientId)
+
     const result = computeTaxAggregate({
       canton,
       documents,
@@ -855,6 +859,10 @@ export const demoApi = {
       fieldDefs: s.fieldDefinitions,
       categories: DOCUMENT_CATEGORIES,
       parameters,
+      taxYear: year,
+      primaryPerson,
+      spousePerson,
+      children,
       lang
     })
 
