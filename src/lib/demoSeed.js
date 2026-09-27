@@ -228,7 +228,7 @@ export const TAX_PARAMETERS = [
   { scope: 'federal', canton_code: null, tax_year: 2025, parameter_key: 'pillar_3a_without_lpp', parameter_family: 'pillar_3a_without_lpp', parameter_label: '3° pilastro a, senza LPP', value_numeric: 36288, value_type: 'formula', source_url: 'https://www.admin.ch', notes: "20% del reddito netto da attività lucrativa, fino a un massimo di CHF 36'288.", last_verified_at: new Date().toISOString() },
   { scope: 'federal', canton_code: null, tax_year: 2025, parameter_key: 'medical_costs_threshold', parameter_family: 'medical_costs_threshold_pct', parameter_label: 'Spese mediche', value_numeric: 5, value_type: 'percentage', source_url: null, notes: 'Soglia di deducibilità, non un tetto: calcolata dopo tutte le altre deduzioni.', last_verified_at: new Date().toISOString() },
   { scope: 'federal', canton_code: null, tax_year: 2025, parameter_key: 'donations_cap', parameter_family: 'donation_cap_pct', parameter_label: 'Donazioni', value_numeric: 20, value_type: 'percentage', source_url: null, notes: 'Tetto massimo deducibile: 20% del reddito netto.', last_verified_at: new Date().toISOString() },
-  { scope: 'federal', canton_code: null, tax_year: 2025, parameter_key: 'debt_interest_deduction', parameter_family: 'debt_interest_extra_allowance', parameter_label: 'Interessi passivi su debiti', value_numeric: 50000, value_type: 'formula', source_url: null, notes: "Deducibili fino a un importo pari al reddito da patrimonio più CHF 50'000.", last_verified_at: new Date().toISOString() },
+  { scope: 'federal', canton_code: null, tax_year: 2025, parameter_key: 'debt_interest_deduction', parameter_family: 'debt_interest_extra_allowance', parameter_label: 'Interessi passivi su debiti', value_numeric: 50000, value_type: 'formula', source_url: null, notes: "Deducibili fino a un importo pari al reddito da patrimonio più CHF 50'000.\nFonte: regola federale uniforme, LAID art. 9 cpv. 2 lett. a — nessuna fonte cantonale specifica.", last_verified_at: new Date().toISOString() },
   { scope: 'federal', canton_code: null, tax_year: 2025, parameter_key: 'childcare_costs', parameter_family: 'childcare_costs_cap', parameter_label: 'Custodia di terzi per i figli', value_numeric: 25800, value_type: 'fixed_amount', source_url: 'https://www.estv.admin.ch', notes: 'Valore 2025 verificato via Steuermäppchen AFC.', last_verified_at: new Date().toISOString() },
   { scope: 'federal', canton_code: null, tax_year: 2025, parameter_key: 'professional_expenses_pct', parameter_family: 'professional_expenses_pct', parameter_label: 'Spese professionali forfait (%)', value_numeric: 3, value_type: 'percentage', source_url: null, notes: 'Federale e Vallese uguali.', last_verified_at: new Date().toISOString() },
   { scope: 'federal', canton_code: null, tax_year: 2025, parameter_key: 'professional_expenses_min', parameter_family: 'professional_expenses_min', parameter_label: 'Spese professionali forfait (minimo)', value_numeric: 2000, value_type: 'fixed_amount', source_url: null, notes: null, last_verified_at: new Date().toISOString() },
@@ -260,8 +260,53 @@ export const TAX_PARAMETERS = [
   { scope: 'cantonal', canton_code: 'VS', tax_year: 2025, parameter_key: 'dependent_support_cap', parameter_family: 'dependent_support_cap', parameter_label: 'Persone a carico', value_numeric: 2510, value_type: 'fixed_amount', source_url: null, notes: "Varia CHF 2'510–6'030 in base al contributo — usato il minimo come stima prudente.", last_verified_at: null },
   { scope: 'cantonal', canton_code: 'VS', tax_year: 2025, parameter_key: 'two_income_deduction_vs_fixed', parameter_family: 'two_income_deduction_vs_fixed', parameter_label: 'Deduzione doppio reddito (Vallese)', value_numeric: 6290, value_type: 'fixed_amount', source_url: null, notes: 'Non calcolato automaticamente.', last_verified_at: new Date().toISOString() },
   { scope: 'cantonal', canton_code: 'VS', tax_year: 2025, parameter_key: 'wealth_exempt_single', parameter_family: 'wealth_exempt_single', parameter_label: 'Importo esente sulla sostanza (persona singola)', value_numeric: 45000, value_type: 'fixed_amount', source_url: null, notes: 'Nessun importo esente a livello federale.', last_verified_at: new Date().toISOString() },
-  { scope: 'cantonal', canton_code: 'VS', tax_year: 2025, parameter_key: 'wealth_exempt_married', parameter_family: 'wealth_exempt_married', parameter_label: 'Importo esente sulla sostanza (coniugi)', value_numeric: 90000, value_type: 'fixed_amount', source_url: null, notes: 'Nessun importo esente a livello federale.', last_verified_at: new Date().toISOString() }
-].map((item, index) => ({ id: `param-${index}`, ...item }))
+  { scope: 'cantonal', canton_code: 'VS', tax_year: 2025, parameter_key: 'wealth_exempt_married', parameter_family: 'wealth_exempt_married', parameter_label: 'Importo esente sulla sostanza (coniugi)', value_numeric: 90000, value_type: 'fixed_amount', source_url: null, notes: 'Nessun importo esente a livello federale.', last_verified_at: new Date().toISOString() },
+
+  // Regression fix, mirrors supabase/migrations/20260101000025: the
+  // "doppio reddito" advisory was generalized to read
+  // 'two_income_deduction_cantonal_amount' for any canton, but VS's own row
+  // (above, under the old VS-only 'two_income_deduction_vs_fixed' family)
+  // was never migrated — left in place as unused, this is the new one the
+  // engine actually reads.
+  { scope: 'cantonal', canton_code: 'VS', tax_year: 2025, parameter_key: 'two_income_deduction', parameter_family: 'two_income_deduction_cantonal_amount', parameter_label: 'Deduzione doppio reddito', value_numeric: 6290, value_type: 'fixed_amount', source_url: 'https://www.estv2.admin.ch/stp/sm/zweitverdiener-de-fr.pdf', notes: 'Non calcolato automaticamente.', last_verified_at: new Date().toISOString() }
+].map((item, index) => ({ id: `param-${index}`, ...item })).map((item) => {
+  // Mirrors supabase/migrations/20260101000025_tax_parameter_sources.sql:
+  // backfill the AFC Steuermäppchen source for every family it lists,
+  // unless the row already cites a more specific cantonal fact sheet
+  // ('/stp/kb/...').
+  const FAMILY_SOURCE_URLS = {
+    childcare_costs_cap: 'https://www.estv2.admin.ch/stp/sm/drittbetreuungskosten-de-fr.pdf',
+    two_income_deduction_min: 'https://www.estv2.admin.ch/stp/sm/zweitverdiener-de-fr.pdf',
+    two_income_deduction_max: 'https://www.estv2.admin.ch/stp/sm/zweitverdiener-de-fr.pdf',
+    two_income_deduction_pct: 'https://www.estv2.admin.ch/stp/sm/zweitverdiener-de-fr.pdf',
+    two_income_deduction_cantonal_amount: 'https://www.estv2.admin.ch/stp/sm/zweitverdiener-de-fr.pdf',
+    insurance_premium_cap_single: 'https://www.estv2.admin.ch/stp/sm/versicherungspraemien-zinsen-de-fr.pdf',
+    insurance_premium_cap_married: 'https://www.estv2.admin.ch/stp/sm/versicherungspraemien-zinsen-de-fr.pdf',
+    insurance_premium_child_increment: 'https://www.estv2.admin.ch/stp/sm/versicherungspraemien-zinsen-de-fr.pdf',
+    health_insurance_premium_cap: 'https://www.estv2.admin.ch/stp/sm/versicherungspraemien-zinsen-de-fr.pdf',
+    training_costs_cap: 'https://www.estv2.admin.ch/stp/sm/aus-weiterbildungskosten-de-fr.pdf',
+    child_deduction_flat: 'https://www.estv2.admin.ch/stp/sm/kinderabzug-e-de-fr.pdf',
+    child_deduction_0_6: 'https://www.estv2.admin.ch/stp/sm/kinderabzug-e-de-fr.pdf',
+    child_deduction_6_16: 'https://www.estv2.admin.ch/stp/sm/kinderabzug-e-de-fr.pdf',
+    child_deduction_16_plus: 'https://www.estv2.admin.ch/stp/sm/kinderabzug-e-de-fr.pdf',
+    dependent_support_cap: 'https://www.estv2.admin.ch/stp/sm/unterstuetzungsabzug-e-de-fr.pdf',
+    medical_costs_threshold_pct: 'https://www.estv2.admin.ch/stp/sm/krankheitskosten-de-fr.pdf',
+    party_contribution_cap: 'https://www.estv2.admin.ch/stp/sm/parteien-de-fr.pdf',
+    wealth_exempt_single: 'https://www.estv2.admin.ch/stp/sm/persoenlicher-abzug-v-de-fr.pdf',
+    wealth_exempt_married: 'https://www.estv2.admin.ch/stp/sm/persoenlicher-abzug-v-de-fr.pdf',
+    commute_costs_cap: 'https://www.estv2.admin.ch/stp/sm/fahrkosten-de-fr.pdf',
+    meal_costs_cap: 'https://www.estv2.admin.ch/stp/sm/mehrkosten-verpflegung-de-fr.pdf',
+    professional_expenses_pct: 'https://www.estv2.admin.ch/stp/sm/berufskosten-de-fr.pdf',
+    professional_expenses_min: 'https://www.estv2.admin.ch/stp/sm/berufskosten-de-fr.pdf',
+    professional_expenses_max: 'https://www.estv2.admin.ch/stp/sm/berufskosten-de-fr.pdf',
+    donation_cap_pct: 'https://www.estv2.admin.ch/stp/sm/freiwillige-leistungen-de-fr.pdf',
+    donation_min_amount: 'https://www.estv2.admin.ch/stp/sm/freiwillige-leistungen-de-fr.pdf'
+  }
+  const url = FAMILY_SOURCE_URLS[item.parameter_family]
+  if (!url) return item
+  if (item.source_url && item.source_url.includes('/stp/kb/')) return item
+  return { ...item, source_url: url }
+})
 
 // Mirrors the full rule set seeded in
 // supabase/migrations/20260101000014_field_calculation_rules.sql — one row
