@@ -198,6 +198,15 @@ export default function TaxSummary() {
     () => allDocuments.filter((d) => d.status === 'extraction_failed'),
     [allDocuments]
   )
+  // Still mid-pipeline — not even classified yet, or claimed but never
+  // finished (including one stuck there by a crashed/timed-out run). The
+  // aggregate itself never claims to be ready while any of these exist
+  // (see api/_recalc.js) — this just makes that visible instead of the
+  // report silently sitting on stale or partial numbers.
+  const processingDocuments = useMemo(
+    () => allDocuments.filter((d) => ['uploaded', 'extracting'].includes(d.status)),
+    [allDocuments]
+  )
   const extractedChildrenCount = useMemo(() => {
     const field = fields.find(
       (f) => f.category_code === 'current_tax_sheet' && f.field_key === 'children_count' && f.field_value
@@ -223,7 +232,8 @@ export default function TaxSummary() {
     })
   }, [documents, fields, result])
 
-  const completenessIssueCount = failedDocuments.length + (childrenMismatch ? 1 : 0) + orphanedDocuments.length
+  const completenessIssueCount =
+    failedDocuments.length + processingDocuments.length + (childrenMismatch ? 1 : 0) + orphanedDocuments.length
 
   const retryFailedExtraction = async (doc) => {
     setRetryingDocId(doc.id)
@@ -527,6 +537,20 @@ export default function TaxSummary() {
                     <span className="block text-[12px] text-red-700/80">{doc.extraction_error}</span>
                   ) : null}
                 </span>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm shrink-0"
+                  onClick={() => retryFailedExtraction(doc)}
+                  disabled={retryingDocId === doc.id}
+                >
+                  {retryingDocId === doc.id ? <Spinner size={14} /> : null}
+                  {t('summary.retryExtraction')}
+                </button>
+              </li>
+            ))}
+            {processingDocuments.map((doc) => (
+              <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 text-[13.5px] text-red-800">
+                <span>{t('summary.incompleteProcessingDoc', { name: doc.file_name })}</span>
                 <button
                   type="button"
                   className="btn-secondary btn-sm shrink-0"

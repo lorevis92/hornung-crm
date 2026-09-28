@@ -21,6 +21,7 @@ import { recalculateAndPersist } from './_recalc.js'
 import { syncPersonalDetails } from './_personalDetails.js'
 import { syncPropertySuggestion } from './_propertySuggestion.js'
 import { syncChildSuggestions } from './_childSuggestion.js'
+import { baseFieldKey, REPEATABLE_FIELD_KEYS } from '../src/lib/repeatableFields.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
 // import.meta.env) — keep this in sync with that file.
@@ -146,6 +147,17 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
     const fieldList = fieldDefs
       .map((f) => `- ${f.field_key} (${f.value_type}): ${f.field_label || f.field_key}`)
       .join('\n')
+    const repeatableKeys = fieldDefs.map((f) => f.field_key).filter((k) => REPEATABLE_FIELD_KEYS.has(k))
+    const repeatableInstruction = repeatableKeys.length
+      ? '\n\nSome fields can legitimately appear more than once on the same document — ' +
+        `${repeatableKeys.join(', ')} — e.g. several separate donations, several dividend ` +
+        'distributions or securities positions, several pillar 3a payments in the same year. If you ' +
+        'find more than one distinct entry for one of these fields, extract EACH one as its own row: ' +
+        'the first uses the plain field_key exactly as listed above, each additional one uses the ' +
+        'same field_key with "_2", "_3", etc. appended (e.g. "annual_amount", "annual_amount_2", ' +
+        '"annual_amount_3"). Never add multiple entries together into a single total — a specialist ' +
+        'needs to see and verify each one separately.'
+      : ''
 
     const extractMessage = await anthropic.messages.create({
       model: MODEL,
@@ -161,8 +173,9 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
                 'Extract the following fields from this document, if present. Only include a field ' +
                 "when you actually find its value in the document — never invent, guess, or infer a " +
                 'value that is not written there.\n\n' +
-                `Fields:\n${fieldList}\n\n` +
-                'For each field you find, also copy its exact source text — verbatim, character-for-' +
+                `Fields:\n${fieldList}` +
+                repeatableInstruction +
+                '\n\nFor each field you find, also copy its exact source text — verbatim, character-for-' +
                 'character as printed in the document, never paraphrased, summarized or translated ' +
                 '(it will be used afterwards to search for and highlight that exact text in the ' +
                 'document). ' +
@@ -183,7 +196,8 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
     })
 
     const extracted = parseJsonFromText(textOf(extractMessage))
-    const validKeys = new Set(fieldDefs.map((f) => f.field_key))
+    const definedKeys = new Set(fieldDefs.map((f) => f.field_key))
+    const validKeys = { has: (key) => definedKeys.has(key) || (REPEATABLE_FIELD_KEYS.has(baseFieldKey(key)) && definedKeys.has(baseFieldKey(key))) }
     const rows = (Array.isArray(extracted) ? extracted : [])
       .filter((row) => row && validKeys.has(row.field_key) && row.field_value !== null && row.field_value !== '')
       .map((row) => {

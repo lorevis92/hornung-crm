@@ -9,6 +9,10 @@
   "crons": [
     { "path": "/api/open-tax-year", "schedule": "0 6 1 * *" }
   ],
+  "functions": {
+    "api/extract-document.js": { "maxDuration": 300 },
+    "api/retry-extraction.js": { "maxDuration": 300 }
+  },
   "headers": [
     {
       "source": "/(.*)",

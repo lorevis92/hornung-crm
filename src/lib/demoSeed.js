@@ -103,6 +103,7 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'childcare_costs', field_key: 'child_name', field_label: 'Child name', value_type: 'text', sort_order: 10 },
   { category_code: 'childcare_costs', field_key: 'provider_name', field_label: 'Provider name', value_type: 'text', sort_order: 20 },
   { category_code: 'childcare_costs', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 30 },
+  { category_code: 'childcare_costs', field_key: 'subsidy_amount', field_label: 'Subsidy/contribution received', value_type: 'numeric', sort_order: 35 },
 
   { category_code: 'debt_certificate', field_key: 'creditor_name', field_label: 'Creditor name', value_type: 'text', sort_order: 10 },
   { category_code: 'debt_certificate', field_key: 'debt_type', field_label: 'Debt type', value_type: 'text', sort_order: 20 },
@@ -148,6 +149,7 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'property_tax_value', field_key: 'tax_value', field_label: 'Tax value', value_type: 'numeric', sort_order: 20 },
   { category_code: 'property_tax_value', field_key: 'imputed_rental_value', field_label: 'Imputed rental value', value_type: 'numeric', sort_order: 30 },
   { category_code: 'property_tax_value', field_key: 'annual_rental_income', field_label: 'Annual rental income received', value_type: 'numeric', sort_order: 35 },
+  { category_code: 'property_tax_value', field_key: 'annual_ancillary_income', field_label: 'Ancillary rental income (parking, cellar, etc.)', value_type: 'numeric', sort_order: 37 },
   { category_code: 'property_tax_value', field_key: 'maintenance_costs', field_label: 'Maintenance costs', value_type: 'numeric', sort_order: 40 },
 
   { category_code: 'rental_contract_zug', field_key: 'property_address', field_label: 'Property address', value_type: 'text', sort_order: 10 },
@@ -390,6 +392,7 @@ export const FIELD_CALCULATION_RULES = [
   { category_code: 'childcare_costs', field_key: 'child_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'childcare_costs', field_key: 'provider_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
   { category_code: 'childcare_costs', field_key: 'annual_amount', contribution_type: 'income_minus', cap_parameter_family: 'childcare_costs_cap', notes: null },
+  { category_code: 'childcare_costs', field_key: 'subsidy_amount', contribution_type: 'none', cap_parameter_family: null, notes: null },
 
   // debt_certificate — the balance is a wealth item, only the interest is an income deduction
   { category_code: 'debt_certificate', field_key: 'creditor_name', contribution_type: 'none', cap_parameter_family: null, notes: null },
@@ -542,6 +545,7 @@ export const FIELD_CALCULATION_RULES = [
   // Rent actually received from letting the property to a third party —
   // distinct from imputed_rental_value (owner-occupied figurative income).
   { category_code: 'property_tax_value', field_key: 'annual_rental_income', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
+  { category_code: 'property_tax_value', field_key: 'annual_ancillary_income', contribution_type: 'income_plus', cap_parameter_family: null, notes: null },
   { category_code: 'property_tax_value', field_key: 'maintenance_costs', contribution_type: 'income_minus', cap_parameter_family: null, notes: null },
 
   // rental_contract_zug

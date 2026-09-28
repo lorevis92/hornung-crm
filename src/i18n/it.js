@@ -581,6 +581,7 @@ export default {
     cantonMissing: 'Nessun cantone impostato per questo cliente — sono stati applicati solo i tetti federali.',
     incompleteTitle: 'Questo calcolo è incompleto ({count})',
     incompleteFailedDoc: 'Estrazione fallita su "{name}" — i suoi dati mancano da ogni totale qui sotto.',
+    incompleteProcessingDoc: '"{name}" è ancora in elaborazione — i suoi dati non sono ancora nei totali qui sotto.',
     incompleteChildrenMismatch: 'Il documento dei dati personali indica {extracted} figlio/i, ma solo {registered} risultano registrati sulla scheda del cliente.',
     retryExtraction: 'Riprova estrazione',
     fixChildren: 'Correggi sulla scheda cliente',

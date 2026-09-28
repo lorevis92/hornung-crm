@@ -937,7 +937,8 @@ export const demoApi = {
     const caseIds = new Set(
       s.cases.filter((c) => c.client_id === clientId && c.tax_year === year).map((c) => c.id)
     )
-    const documents = s.documents.filter((d) => caseIds.has(d.case_id) && d.category_code)
+    const allDocuments = s.documents.filter((d) => caseIds.has(d.case_id))
+    const documents = allDocuments.filter((d) => d.category_code)
     const documentIds = new Set(documents.map((d) => d.id))
     const extractedFields = s.extractedDocumentFields.filter((f) => documentIds.has(f.document_id))
     const parameters = s.taxParameters.filter((p) => p.tax_year === year)
@@ -975,6 +976,11 @@ export const demoApi = {
       lang
     })
 
+    // Never "ready for simulation" while a document is still mid-pipeline —
+    // see api/_recalc.js for the same check on the real backend.
+    const documentsStillProcessing = allDocuments.some((d) => ['uploaded', 'extracting'].includes(d.status))
+    const aggregateStatus = documentsStillProcessing ? 'draft' : 'ready_for_simulation'
+
     let aggregate = s.taxAggregates.find((a) => a.client_id === clientId && a.tax_year === year)
     const now = iso(Date.now())
     if (aggregate) {
@@ -983,7 +989,7 @@ export const demoApi = {
         taxable_wealth_cantonal: result.taxableWealthCantonal,
         taxable_income_federal: result.taxableIncomeFederal,
         uncertain_parameters: result.uncertainParameterNotes || [],
-        status: 'ready_for_simulation',
+        status: aggregateStatus,
         computed_at: now
       })
     } else {
@@ -995,7 +1001,7 @@ export const demoApi = {
         taxable_wealth_cantonal: result.taxableWealthCantonal,
         taxable_income_federal: result.taxableIncomeFederal,
         uncertain_parameters: result.uncertainParameterNotes || [],
-        status: 'ready_for_simulation',
+        status: aggregateStatus,
         computed_at: now
       }
       s.taxAggregates.push(aggregate)

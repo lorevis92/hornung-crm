@@ -25,15 +25,20 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
   const spousePerson = (personsRes.data || []).find((p) => p.person_type === 'spouse') || null
   const children = childrenRes.data || []
 
-  const { data: documents, error: docsError } = await admin
+  // Every document for this client/year, not just the categorized ones —
+  // readiness needs to see a document still stuck at 'uploaded'/'extracting'
+  // even before it has a category_code, otherwise a batch that's still
+  // mid-extraction would look "ready" simply because none of its documents
+  // have reached the calculation input yet.
+  const { data: allDocuments, error: docsError } = await admin
     .from('client_documents')
-    .select('id, category_code, file_name')
+    .select('id, category_code, file_name, status')
     .eq('client_id', clientId)
     .eq('tax_year', taxYear)
-    .not('category_code', 'is', null)
   if (docsError) throw docsError
 
-  const documentIds = (documents || []).map((d) => d.id)
+  const documents = (allDocuments || []).filter((d) => d.category_code)
+  const documentIds = documents.map((d) => d.id)
   let extractedFields = []
   if (documentIds.length) {
     const { data, error } = await admin
@@ -83,6 +88,17 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
     lang
   })
 
+  // Never "ready for simulation" while a document for this client/year is
+  // still mid-pipeline — 'uploaded' (not even classified yet) or
+  // 'extracting' (claimed but not finished, including one stuck there by a
+  // crashed/timed-out run). 'extracted', 'extraction_failed',
+  // 'verified_by_specialist' and 'rejected' are all final one way or
+  // another; the aggregate can be ready even alongside a failed extraction
+  // (the completeness banner already surfaces that separately) but never
+  // while one is genuinely still in flight.
+  const documentsStillProcessing = (allDocuments || []).some((d) => ['uploaded', 'extracting'].includes(d.status))
+  const aggregateStatus = documentsStillProcessing ? 'draft' : 'ready_for_simulation'
+
   const { data: aggregate, error: aggregateError } = await admin
     .from('tax_aggregates')
     .upsert(
@@ -93,7 +109,7 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
         taxable_wealth_cantonal: result.taxableWealthCantonal,
         taxable_income_federal: result.taxableIncomeFederal,
         uncertain_parameters: result.uncertainParameterNotes || [],
-        status: 'ready_for_simulation',
+        status: aggregateStatus,
         computed_at: new Date().toISOString()
       },
       { onConflict: 'client_id,tax_year' }

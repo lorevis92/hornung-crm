@@ -583,6 +583,7 @@ export default {
     cantonMissing: 'No canton is set for this client — only federal caps were applied.',
     incompleteTitle: 'This calculation is incomplete ({count})',
     incompleteFailedDoc: 'Extraction failed on "{name}" — its data is missing from every total below.',
+    incompleteProcessingDoc: '"{name}" is still being processed — its data isn\'t in the totals below yet.',
     incompleteChildrenMismatch: 'The personal details document states {extracted} child(ren), but only {registered} are on the client’s record.',
     retryExtraction: 'Retry extraction',
     fixChildren: 'Fix on client record',

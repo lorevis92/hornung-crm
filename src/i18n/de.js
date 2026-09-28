@@ -582,6 +582,7 @@ export default {
     cantonMissing: 'Für diesen Kunden ist kein Kanton hinterlegt — es wurden nur eidgenössische Höchstbeträge angewendet.',
     incompleteTitle: 'Diese Berechnung ist unvollständig ({count})',
     incompleteFailedDoc: 'Extraktion fehlgeschlagen bei „{name}“ — dessen Daten fehlen in allen untenstehenden Summen.',
+    incompleteProcessingDoc: '„{name}“ wird noch verarbeitet — dessen Daten sind noch nicht in den Summen unten enthalten.',
     incompleteChildrenMismatch: 'Das Dokument mit den persönlichen Daten nennt {extracted} Kind(er), aber nur {registered} sind beim Kunden erfasst.',
     retryExtraction: 'Extraktion erneut versuchen',
     fixChildren: 'Auf der Kundenkarte korrigieren',

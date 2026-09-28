@@ -583,6 +583,7 @@ export default {
     cantonMissing: "Aucun canton n'est défini pour ce client — seuls les plafonds fédéraux ont été appliqués.",
     incompleteTitle: 'Ce calcul est incomplet ({count})',
     incompleteFailedDoc: 'L’extraction a échoué sur « {name} » — ses données sont absentes de tous les totaux ci-dessous.',
+    incompleteProcessingDoc: '« {name} » est encore en cours de traitement — ses données ne sont pas encore dans les totaux ci-dessous.',
     incompleteChildrenMismatch: 'Le document de données personnelles indique {extracted} enfant(s), mais seuls {registered} sont enregistrés sur la fiche du client.',
     retryExtraction: "Réessayer l'extraction",
     fixChildren: 'Corriger sur la fiche client',

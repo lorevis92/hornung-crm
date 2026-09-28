@@ -3,6 +3,7 @@
 // data layer (in-memory data, browser), so the actual math is never
 // duplicated between the two. No import.meta.env / Vite-only syntax here —
 // this file is imported directly from a plain Node ESM serverless function.
+import { baseFieldKey, fieldSuffix } from './repeatableFields'
 
 const CONTRIBUTION_TO_COMPONENT = {
   income_plus: 'income',
@@ -33,7 +34,8 @@ const INSURANCE_POOL_FAMILY = 'insurance_premium_pool'
 // Deductible cost = the field's own amount minus the paired field (e.g.
 // medical costs net of the insurance reimbursement) — never negative.
 const NETS_AGAINST = {
-  'medical_costs:total_amount': 'insurance_reimbursement'
+  'medical_costs:total_amount': 'insurance_reimbursement',
+  'childcare_costs:annual_amount': 'subsidy_amount'
 }
 
 // The field is excluded (not a real deduction) when the paired field is
@@ -64,6 +66,10 @@ const HALVE_CAP_IF_TRUTHY = {
 // beneficiary is a minor child — an ex-spouse has no such cutoff.
 const ALIMONY_CHILD_CUTOFF_KEYS = new Set(['alimony_paid:annual_amount', 'alimony_received:annual_amount'])
 const CHILD_BENEFICIARY_VALUES = new Set(['child', 'children', 'figlio', 'figli', 'kind', 'kinder', 'enfant', 'enfants'])
+
+// See step 7 in the main loop below — a voluntary pension buy-in flagged
+// for manual double-deduction verification against the salary statement.
+const PENSION_BUYBACK_RULE_KEY = 'pension_buyback:annual_amount'
 
 // Categories whose amount is always shown, but never counted in the ordinary
 // calculation — either because Swiss law taxes it separately (pension
@@ -266,7 +272,7 @@ export function computeTaxAggregate({
       (f) =>
         f.document_id === doc.id &&
         f.included_in_calculation !== false &&
-        /_(name|organization)$/.test(f.field_key) &&
+        /_(name|organization)$/.test(baseFieldKey(f.field_key)) &&
         f.field_value
     )
     identifierByDocId[doc.id] = nameField ? nameField.field_value : null
@@ -308,7 +314,16 @@ export function computeTaxAggregate({
     if (!field.field_value || !field.field_value.trim()) continue
     const doc = documentById[field.document_id]
     if (!doc || !doc.category_code) continue
-    const rule = ruleByKey[`${doc.category_code}:${field.field_key}`]
+    // A repeated occurrence ("annual_amount_2") shares its base field's
+    // rule/label — never has one of its own — and its own sibling fields
+    // (e.g. donation #2's own has_consideration, not donation #1's) carry
+    // the same suffix, looked up via siblingValueFor() below instead of
+    // siblingValue() directly wherever a sibling lookup depends on which
+    // occurrence this is.
+    const baseKey = baseFieldKey(field.field_key)
+    const suffix = fieldSuffix(field.field_key)
+    const siblingValueFor = (fieldKey) => siblingValue(doc.id, fieldKey + suffix)
+    const rule = ruleByKey[`${doc.category_code}:${baseKey}`]
     if (!rule || rule.contribution_type === 'none') continue
 
     let rawAmount = parseAmount(field.field_value)
@@ -317,7 +332,7 @@ export function computeTaxAggregate({
       continue
     }
 
-    const ruleKey = `${doc.category_code}:${field.field_key}`
+    const ruleKey = `${doc.category_code}:${baseKey}`
     let needsVerification = false
     let note = null
 
@@ -332,7 +347,7 @@ export function computeTaxAggregate({
     // reimbursement) — computed regardless, it's part of the raw amount.
     const netsAgainstKey = NETS_AGAINST[ruleKey]
     if (netsAgainstKey) {
-      const reimbursement = parseAmount(siblingValue(doc.id, netsAgainstKey)) || 0
+      const reimbursement = parseAmount(siblingValueFor(netsAgainstKey)) || 0
       rawAmount = Math.max(0, rawAmount - reimbursement)
     }
 
@@ -340,7 +355,7 @@ export function computeTaxAggregate({
     // with employer-provided free transport).
     if (!needsVerification) {
       const voidRule = VOID_IF_TRUTHY[ruleKey]
-      if (voidRule && isAffirmative(siblingValue(doc.id, voidRule.siblingKey))) {
+      if (voidRule && isAffirmative(siblingValueFor(voidRule.siblingKey))) {
         needsVerification = true
         note = voidRule.note
       }
@@ -349,15 +364,17 @@ export function computeTaxAggregate({
     // 4. Alimony — no longer deductible/taxable once the child beneficiary
     // is no longer a minor.
     if (!needsVerification && ALIMONY_CHILD_CUTOFF_KEYS.has(ruleKey)) {
-      const beneficiaryType = String(siblingValue(doc.id, 'beneficiary_type') || '').trim().toLowerCase()
-      const minorValue = siblingValue(doc.id, 'beneficiary_is_minor')
+      const beneficiaryType = String(siblingValueFor('beneficiary_type') || '').trim().toLowerCase()
+      const minorValue = siblingValueFor('beneficiary_is_minor')
       if (CHILD_BENEFICIARY_VALUES.has(beneficiaryType) && minorValue && !isAffirmative(minorValue)) {
         needsVerification = true
         note = 'not deductible/taxable — the child beneficiary is no longer a minor'
       }
     }
 
-    // 5. Foreign currency — never summed as if it were CHF.
+    // 5. Foreign currency — never summed as if it were CHF. A whole-document
+    // flag (one "currency" field), not per-occurrence — a broker statement
+    // has one reporting currency for everything on it.
     const currencyFieldKey = CURRENCY_FIELD_BY_CATEGORY[doc.category_code]
     const currencyValue = currencyFieldKey ? siblingValue(doc.id, currencyFieldKey) : null
     let currencyCode = null
@@ -376,6 +393,30 @@ export function computeTaxAggregate({
       }
     }
 
+    // 7. A voluntary pension buy-in (Einkauf) might already be reflected in
+    // the salary certificate's own "pension fund contributions" figure
+    // (net salary is computed after it) — the buy-in document itself
+    // rarely states whether it's additional to that or the same payment
+    // counted twice. Never decide that silently: flag it for a specialist
+    // to confirm, unless one already has (editing/confirming the field via
+    // the normal Tax Summary review sets verified_by_specialist, same
+    // override used for the missing-cap-parameter case above).
+    if (!needsVerification && ruleKey === PENSION_BUYBACK_RULE_KEY && !field.verified_by_specialist) {
+      const hasSalaryPensionContribution = (extractedFields || []).some(
+        (f) =>
+          documentById[f.document_id]?.category_code === 'salary_statement' &&
+          baseFieldKey(f.field_key) === 'pension_fund_contributions' &&
+          f.field_value &&
+          f.included_in_calculation !== false
+      )
+      if (hasSalaryPensionContribution) {
+        needsVerification = true
+        note =
+          'possible double deduction — the salary certificate already shows pension fund contributions ' +
+          'that may include this buy-in; confirm the field once checked against the two documents'
+      }
+    }
+
     const category = categoryByCode[doc.category_code]
     entries.push({
       documentId: doc.id,
@@ -384,7 +425,14 @@ export function computeTaxAggregate({
       categoryLabel: categoryLabel(category, lang),
       groupKey: category?.group_key || null,
       fieldKey: field.field_key,
-      fieldLabel: fieldLabelByKey[`${doc.category_code}:${field.field_key}`] || field.field_key,
+      // A repeated field's later occurrences get a "#2"/"#3" marker so two
+      // rows sharing the same underlying field (two donations, two
+      // dividend distributions, ...) stay distinguishable in the
+      // breakdown — the first occurrence is unmarked, exactly as it read
+      // before this field could ever repeat.
+      fieldLabel:
+        (fieldLabelByKey[`${doc.category_code}:${baseKey}`] || field.field_key) +
+        (suffix ? ` #${suffix.slice(1)}` : ''),
       contributionType: rule.contribution_type,
       capFamily: rule.cap_parameter_family || null,
       // Only read for the "cap parameter missing" case below — an explicit
