@@ -70,7 +70,13 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
     setError(false)
     ;(async () => {
       try {
-        const pdf = await pdfjsLib.getDocument(fileUrl).promise
+        // pdfjs-dist 6.x dropped the old "bare URL string" shorthand —
+        // getDocument() now only recognizes its named { url } (or data/
+        // range) option, silently reading a string as {} otherwise and
+        // throwing "expected either `data`, `range`, or `url` parameter."
+        // This is why every PDF failed here regardless of fileUrl actually
+        // being valid.
+        const pdf = await pdfjsLib.getDocument({ url: fileUrl }).promise
         if (cancelled) return
         pdfRef.current = pdf
         setNumPages(pdf.numPages)
