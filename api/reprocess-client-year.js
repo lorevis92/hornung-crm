@@ -11,13 +11,18 @@
 // field, a new mortgage/rental field, ...) needs a fresh pass to actually
 // pick it up, not just the ones currently stuck or failed.
 //
-// Nothing extra needed after the loop: api/extract-document.js's
-// runExtraction() already re-runs the registry syncs
-// (personal details/property/children) and the tax recalculation as its
-// own side effect for every document it processes, so reprocessing every
-// document here already re-syncs everything derived from them.
+// Nothing extra needed after the loop for personal details/children:
+// api/extract-document.js's runExtraction() already re-runs the registry
+// syncs and the tax recalculation as its own side effect for every
+// document it processes. Properties are the one exception — the
+// address-matching in api/_propertySuggestion.js only ever prevents a NEW
+// duplicate going forward; a client whose duplicates were already
+// accepted before that existed (one client_properties row per document
+// that happened to mention the same real property) needs them merged
+// too, so this also runs dedupeClientProperties() once at the end.
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
+import { dedupeClientProperties } from './_propertySuggestion.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' })
@@ -37,24 +42,36 @@ export default async function handler(req, res) {
       .eq('client_id', clientId)
       .eq('tax_year', taxYear)
     if (docsError) throw docsError
-    if (!documents?.length) return res.status(200).json({ processed: 0, failed: 0, errors: [] })
 
-    // Dynamic, not static: see api/retry-extraction.js for why — a bad
-    // import anywhere in this graph must surface as a JSON error here,
-    // not a bare platform 500 with no message.
-    const { runExtraction } = await import('./extract-document.js')
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    let processed = 0
+    let failures = []
+    if (documents?.length) {
+      // Dynamic, not static: see api/retry-extraction.js for why — a bad
+      // import anywhere in this graph must surface as a JSON error here,
+      // not a bare platform 500 with no message.
+      const { runExtraction } = await import('./extract-document.js')
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-    const results = await Promise.allSettled(
-      documents.map((doc) => runExtraction(admin, anthropic, doc.id, { fromStatuses: [doc.status] }))
-    )
-    const failures = results.filter((r) => r.status === 'rejected')
-    failures.forEach((r) => console.error('[reprocess-client-year]', r.reason))
+      const results = await Promise.allSettled(
+        documents.map((doc) => runExtraction(admin, anthropic, doc.id, { fromStatuses: [doc.status] }))
+      )
+      failures = results.filter((r) => r.status === 'rejected')
+      failures.forEach((r) => console.error('[reprocess-client-year]', r.reason))
+      processed = documents.length - failures.length
+    }
+
+    let mergedProperties = 0
+    try {
+      mergedProperties = (await dedupeClientProperties(admin, clientId)).merged
+    } catch (dedupError) {
+      console.error('[reprocess-client-year] property dedup failed:', dedupError)
+    }
 
     return res.status(200).json({
-      processed: documents.length - failures.length,
+      processed,
       failed: failures.length,
-      errors: failures.map((r) => r.reason?.message || 'UNEXPECTED_ERROR')
+      errors: failures.map((r) => r.reason?.message || 'UNEXPECTED_ERROR'),
+      mergedProperties
     })
   } catch (error) {
     console.error('[reprocess-client-year]', error)

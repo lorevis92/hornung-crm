@@ -56,16 +56,27 @@ export async function syncPersonalDetails(admin, documentId) {
     const { error } = await admin.from('clients').update(clientPatch).eq('id', clientId)
     if (error) throw error
   }
+  // Upsert on (client_id, person_type) — the table's own unique constraint
+  // — rather than "select, then insert if nothing came back": "Reload
+  // everything from the documents" processes every document of a client
+  // concurrently (api/reprocess-client-year.js), and each one's own
+  // extraction independently re-runs this same sync as part of its
+  // recalculation. With no existing primary row yet, several of those
+  // could all see an empty select and all try to INSERT at once — only
+  // the first commits, the rest violate the unique constraint and throw,
+  // silently swallowed by the caller's try/catch. A single atomic upsert
+  // has no such window: Postgres itself serializes the conflict instead
+  // of this code racing to check-then-insert.
   if (Object.keys(primaryPatch).length) {
-    const { error } = primary
-      ? await admin.from('client_persons').update(primaryPatch).eq('id', primary.id)
-      : await admin.from('client_persons').insert({ client_id: clientId, person_type: 'primary', ...primaryPatch })
+    const { error } = await admin
+      .from('client_persons')
+      .upsert({ client_id: clientId, person_type: 'primary', ...primaryPatch }, { onConflict: 'client_id,person_type' })
     if (error) throw error
   }
   if (Object.keys(spousePatch).length) {
-    const { error } = spouse
-      ? await admin.from('client_persons').update(spousePatch).eq('id', spouse.id)
-      : await admin.from('client_persons').insert({ client_id: clientId, person_type: 'spouse', ...spousePatch })
+    const { error } = await admin
+      .from('client_persons')
+      .upsert({ client_id: clientId, person_type: 'spouse', ...spousePatch }, { onConflict: 'client_id,person_type' })
     if (error) throw error
   }
 

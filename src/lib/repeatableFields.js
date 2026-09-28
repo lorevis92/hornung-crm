@@ -25,7 +25,13 @@ export const REPEATABLE_FIELD_KEYS = new Set([
   'bank_securities_crypto_statement:dividend_income',
   'bank_securities_crypto_statement:account_balance_31_12',
   // pillar_3a_certificate — several separate payments in the year.
-  'pillar_3a_certificate:annual_contribution'
+  'pillar_3a_certificate:annual_contribution',
+  // health_insurance_policy — one uploaded document can bundle separate
+  // policies for different family members (e.g. "premi_cassa_malati.pdf"
+  // listing each person's own insurer and premium), not one combined
+  // policy with a single premium.
+  'health_insurance_policy:insurer_name',
+  'health_insurance_policy:annual_premium'
 ])
 
 const SUFFIX_PATTERN = /^(.*)_(\d+)$/

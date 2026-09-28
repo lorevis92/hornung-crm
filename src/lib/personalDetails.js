@@ -182,10 +182,32 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
 // suggestion slot for the same source document, so a specialist re-running
 // extraction gets an updated proposal instead of a second, duplicate one.
 //
+// The same real property gets described differently by different
+// documents — a tax-value statement, a mortgage certificate, a rental
+// statement — in case, punctuation, and whether the municipality/ZIP is
+// appended ("RUE DES FINETTES 6" vs. "Rue des Finettes 6, 1920 Martigny").
+// Comparing/deduplicating by this normalized form (just the street +
+// number, lowercased, accents stripped, punctuation collapsed) instead of
+// the raw string is what keeps one real property as one client_properties
+// row no matter which document happens to mention it.
+export function normalizePropertyAddress(address) {
+  if (!address) return ''
+  const streetPart = String(address).split(',')[0]
+  return streetPart
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
 // extractedFields: extracted_document_fields rows for ONE property_tax_value
 //   document.
-// existingProperty: the client_properties row already linked to this exact
-//   documentId (via source_document_id), or null/undefined if none yet.
+// existingProperty: the client_properties row this document's address
+//   matches — either because it's already linked to this exact documentId
+//   (source_document_id), or because a DIFFERENT document already created
+//   a property with the same normalized address — or null/undefined if
+//   neither.
 //
 // Returns null when there's nothing worth proposing (no address at all, or
 // the proposal is identical to what's already linked), otherwise
@@ -202,9 +224,10 @@ export function buildPropertySuggestionPayload({ extractedFields, existingProper
   if (Number.isFinite(rentalIncome)) payload.rental_income = rentalIncome
 
   if (existingProperty) {
-    const unchanged = Object.entries(payload).every(
-      ([key, value]) => String(existingProperty[key] ?? '') === String(value)
-    )
+    const unchanged = Object.entries(payload).every(([key, value]) => {
+      if (key === 'address') return normalizePropertyAddress(existingProperty.address) === normalizePropertyAddress(value)
+      return String(existingProperty[key] ?? '') === String(value)
+    })
     if (unchanged) return null
   }
 

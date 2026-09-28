@@ -6,6 +6,7 @@
 import { supabase } from '../supabaseClient'
 import { APP_ID, STORAGE_BUCKET, STORAGE_ROOT } from '../config'
 import { safeFileName } from '../format'
+import { normalizePropertyAddress } from '../personalDetails'
 
 async function authHeader() {
   const { data } = await supabase.auth.getSession()
@@ -569,19 +570,26 @@ export const supabaseApi = {
           )
         }
       } else if (suggestion.target_table === 'client_properties') {
-        // Deduplicated per source document — a property already linked to
-        // this exact document (from an earlier accepted suggestion) is
-        // updated in place instead of duplicated.
+        // Deduplicated first by source document (this exact document
+        // already linked from an earlier accepted suggestion), then by
+        // normalized address — a DIFFERENT document (mortgage certificate,
+        // rental statement, ...) naming the same real property, just
+        // formatted differently — updated in place either way instead of
+        // creating a duplicate row for the same property.
         const payload = JSON.parse(suggestion.suggested_value)
-        const existing = suggestion.document_id
-          ? unwrap(
-              await supabase
-                .from('client_properties')
-                .select('id')
-                .eq('source_document_id', suggestion.document_id)
-                .maybeSingle()
-            )
-          : null
+        const normalizedIncoming = normalizePropertyAddress(payload.address)
+        const clientProperties = unwrap(
+          await supabase
+            .from('client_properties')
+            .select('id, address, source_document_id')
+            .eq('client_id', suggestion.client_id)
+        )
+        const existing =
+          (clientProperties || []).find((p) => p.source_document_id === suggestion.document_id) ||
+          (normalizedIncoming
+            ? (clientProperties || []).find((p) => normalizePropertyAddress(p.address) === normalizedIncoming)
+            : null) ||
+          null
         if (existing) {
           unwrap(await supabase.from('client_properties').update(payload).eq('id', existing.id))
         } else {

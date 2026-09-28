@@ -10,7 +10,8 @@ import {
 } from '../demoSeed'
 import { computeTaxAggregate } from '../taxCalculation'
 import {
-  computePersonalDetailsSync, buildPropertySuggestionPayload, buildChildSuggestionCandidates
+  computePersonalDetailsSync, buildPropertySuggestionPayload, buildChildSuggestionCandidates,
+  normalizePropertyAddress
 } from '../personalDetails'
 
 const KEY = 'hornung.demo.v2'
@@ -734,7 +735,18 @@ export const demoApi = {
     if (!clientId) return wait({ suggested: false })
 
     const fields = s.extractedDocumentFields.filter((f) => f.document_id === documentId)
-    const existingProperty = s.properties.find((p) => p.source_document_id === documentId)
+    // Matched by document first, then by normalized address — a DIFFERENT
+    // document naming the same real property (mortgage certificate,
+    // rental statement, ...) — see api/_propertySuggestion.js.
+    const addressField = fields.find((f) => f.field_key === 'property_address')
+    const normalizedIncoming = normalizePropertyAddress(addressField?.field_value)
+    const clientPropertiesForClient = s.properties.filter((p) => p.client_id === clientId)
+    const existingProperty =
+      clientPropertiesForClient.find((p) => p.source_document_id === documentId) ||
+      (normalizedIncoming
+        ? clientPropertiesForClient.find((p) => normalizePropertyAddress(p.address) === normalizedIncoming)
+        : null) ||
+      null
     const proposal = buildPropertySuggestionPayload({ extractedFields: fields, existingProperty })
     if (!proposal) return wait({ suggested: false })
 
@@ -838,10 +850,18 @@ export const demoApi = {
           })
         }
       } else if (suggestion.target_table === 'client_properties') {
+        // Deduplicated first by source document, then by normalized
+        // address — see api/_propertySuggestion.js and
+        // supabaseData.js's resolveFieldSuggestion for the same logic.
         const payload = JSON.parse(suggestion.suggested_value)
-        const existing = suggestion.document_id
-          ? s.properties.find((p) => p.source_document_id === suggestion.document_id)
-          : null
+        const normalizedIncoming = normalizePropertyAddress(payload.address)
+        const clientProperties = s.properties.filter((p) => p.client_id === suggestion.client_id)
+        const existing =
+          clientProperties.find((p) => p.source_document_id === suggestion.document_id) ||
+          (normalizedIncoming
+            ? clientProperties.find((p) => normalizePropertyAddress(p.address) === normalizedIncoming)
+            : null) ||
+          null
         if (existing) {
           Object.assign(existing, payload)
         } else {
@@ -1085,7 +1105,46 @@ export const demoApi = {
     if (docs.some((d) => d.category_code === 'current_tax_sheet' || d.category_code === 'childcare_costs')) {
       await this.syncChildSuggestions(clientId, year)
     }
-    return wait({ processed: docs.length, failed: 0, errors: [] })
+    const { merged } = await this.dedupeClientProperties(clientId)
+    return wait({ processed: docs.length, failed: 0, errors: [], mergedProperties: merged })
+  },
+
+  // Merges existing duplicate client_properties rows for a client — see
+  // api/_propertySuggestion.js's dedupeClientProperties for the reasoning
+  // (the address-matching in syncPropertySuggestion only prevents a NEW
+  // duplicate going forward, not ones already accepted before it existed).
+  async dedupeClientProperties(clientId) {
+    const s = store()
+    const properties = s.properties.filter((p) => p.client_id === clientId)
+    const groups = new Map()
+    for (const property of properties) {
+      const key = normalizePropertyAddress(property.address)
+      if (!key) continue
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(property)
+    }
+    let merged = 0
+    const idsToRemove = new Set()
+    const filledCount = (p) => Object.values(p).filter((v) => v != null && v !== '').length
+    for (const group of groups.values()) {
+      if (group.length < 2) continue
+      const [survivor, ...duplicates] = [...group].sort((a, b) => filledCount(b) - filledCount(a))
+      for (const dup of duplicates) {
+        for (const [key, value] of Object.entries(dup)) {
+          if (['id', 'client_id', 'created_at'].includes(key)) continue
+          if ((survivor[key] == null || survivor[key] === '') && value != null && value !== '') {
+            survivor[key] = value
+          }
+        }
+        idsToRemove.add(dup.id)
+      }
+      merged += duplicates.length
+    }
+    if (idsToRemove.size) {
+      s.properties = s.properties.filter((p) => !idsToRemove.has(p.id))
+      commit()
+    }
+    return wait({ merged })
   },
 
   async getTaxAggregate(clientId, taxYear) {
