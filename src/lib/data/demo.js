@@ -787,7 +787,7 @@ export const demoApi = {
     if (!candidates.length) return wait({ suggested: 0 })
 
     for (const c of candidates) {
-      const slug = c.full_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      const slug = c.key.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
       const targetField = `child:${slug}`
       const existing = s.fieldSuggestions.find(
         (row) => row.client_id === clientId && row.target_table === 'client_children' && row.target_field === targetField
@@ -800,7 +800,7 @@ export const demoApi = {
         target_field: targetField,
         field_label: 'Child',
         current_value: null,
-        suggested_value: JSON.stringify(c),
+        suggested_value: JSON.stringify({ full_name: c.full_name }),
         created_at: iso(Date.now())
       }
       if (existing) Object.assign(existing, row)

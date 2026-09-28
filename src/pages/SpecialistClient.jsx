@@ -15,6 +15,7 @@ import { currentTaxYear, IS_DEMO } from '../lib/config'
 import { CANTONS, LANGUAGES } from '../lib/constants'
 import { formatDate, fullName } from '../lib/format'
 import { describeSuggestion } from '../lib/suggestions'
+import { catchUpRegistrySyncInBackground } from '../lib/recalc'
 
 export default function SpecialistClient() {
   const { clientId } = useParams()
@@ -46,15 +47,20 @@ export default function SpecialistClient() {
   const [resolvingId, setResolvingId] = useState(null)
 
   const load = useCallback(async () => {
-    const [row, rows, suggestionRows] = await Promise.all([
-      api.getClient(clientId),
-      api.listCases(clientId),
-      api.listFieldSuggestions(clientId)
-    ])
+    const [row, rows] = await Promise.all([api.getClient(clientId), api.listCases(clientId)])
     setClient(row)
     setNotes(row?.internal_notes || '')
     setCases(rows)
-    setSuggestions(suggestionRows)
+    // A document can sit fully extracted for a long time without its data
+    // ever having reached client_persons/client_field_suggestions — the
+    // sync only used to fire as a side effect of a FRESH extraction. Catch
+    // it up here, before reading suggestions, so both the suggestion feed
+    // below and the Questionnaire tab (which fetches client_persons
+    // independently on its own mount, always after this resolves) show the
+    // client's actual data the first time this page is opened, not just
+    // after their next document upload.
+    await catchUpRegistrySyncInBackground(clientId, rows)
+    setSuggestions(await api.listFieldSuggestions(clientId))
     setLoading(false)
   }, [clientId])
 

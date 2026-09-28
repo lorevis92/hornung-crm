@@ -17,7 +17,11 @@ export function describeSuggestion(s, t) {
   }
   if (s.target_table === 'client_children') {
     const payload = JSON.parse(s.suggested_value)
-    return t('specialist.suggestionChildText', { name: payload.full_name })
+    // No name to show yet — the personal-details document's child count
+    // exceeds what any other document could name (e.g. no childcare
+    // invoice at all). Still an actionable suggestion, just one the
+    // specialist fills in rather than confirms as-is.
+    return payload.full_name ? t('specialist.suggestionChildText', { name: payload.full_name }) : t('specialist.suggestionChildPendingText')
   }
   return t('specialist.suggestionText', { field: s.field_label || s.target_field, from: s.current_value, to: s.suggested_value })
 }

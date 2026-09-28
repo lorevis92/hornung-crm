@@ -220,10 +220,20 @@ export function buildPropertySuggestionPayload({ extractedFields, existingProper
 //   invoices) for this same client/year.
 // existingChildren: the client's current client_children rows.
 //
-// Returns an array of { full_name } proposals for names not already on
-// file — capped at childrenCount when it's known, so re-processing the same
-// invoice twice (or two invoices naming the same child) doesn't propose
-// more children than the personal-details document actually states.
+// Returns an array of { full_name, key } proposals — capped at childrenCount
+// when it's known, so re-processing the same invoice twice (or two invoices
+// naming the same child) doesn't propose more children than the
+// personal-details document actually states. `key` is what the caller uses
+// as the suggestion's dedup key (a name, lowercased, or a stable
+// "pending-N" for a placeholder — never blank, which would collide across
+// several placeholders on the same unique constraint).
+//
+// A named candidate fills a still-missing slot first; if childrenCount
+// says there are MORE missing children than any name could be
+// cross-referenced for (the common case — no childcare document at all
+// yet), the remaining slots still get a suggestion, just with an empty
+// name for the specialist to fill in when accepting it, rather than
+// silently producing nothing until a second document happens to name them.
 export function buildChildSuggestionCandidates({ childrenCount, candidateNames, existingChildren }) {
   const existingNames = new Set(
     (existingChildren || []).map((c) => (c.full_name || '').trim().toLowerCase()).filter(Boolean)
@@ -238,6 +248,15 @@ export function buildChildSuggestionCandidates({ childrenCount, candidateNames, 
     seen.add(key)
     unique.push(name)
   }
-  const capped = Number.isFinite(childrenCount) ? unique.slice(0, Math.max(0, childrenCount)) : unique
-  return capped.map((full_name) => ({ full_name }))
+
+  const existingCount = (existingChildren || []).length
+  const missingCount = Number.isFinite(childrenCount) ? Math.max(0, childrenCount - existingCount) : unique.length
+
+  const named = unique.slice(0, missingCount).map((full_name) => ({ full_name, key: full_name.toLowerCase() }))
+  const placeholderCount = Math.max(0, missingCount - named.length)
+  const placeholders = Array.from({ length: placeholderCount }, (_, i) => ({
+    full_name: '',
+    key: `pending-${i + 1}`
+  }))
+  return [...named, ...placeholders]
 }

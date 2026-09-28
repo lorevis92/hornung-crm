@@ -11,11 +11,14 @@ import { isMarriedHousehold } from './taxCalculation'
 //  - discrepancies: a document says something different from (or additional
 //    to) what the Questionnaire records. Where the field is one the
 //    extraction auto-fill already manages (marital status, a child's name,
-//    the client's own details), this is literally the SAME pending row
-//    already sitting in client_field_suggestions — surfaced here too rather
-//    than re-detected, so accepting it here uses the exact same mechanism.
-//    Children count is the one exception: there's no single target field a
-//    bare number could safely overwrite, so it's a plain informational note.
+//    the client's own details, a property), this is literally the SAME
+//    pending row already sitting in client_field_suggestions — surfaced
+//    here too rather than re-detected, so accepting it here uses the exact
+//    same mechanism, editable inline before confirming. A children-count
+//    mismatch with nothing pending yet (the sync hasn't caught up, e.g.
+//    right after a document lands) falls back to a plain informational
+//    note instead — there's no single target field a bare count could
+//    overwrite on its own.
 //  - missingDocuments: cautious, simple heuristics for a document category
 //    the Questionnaire's own declarations would lead you to expect but that
 //    isn't present at all. Only the clearest cases — never for something
@@ -40,11 +43,12 @@ export function computeQuestionnaireConsistency({
     discrepancies.push({ key: `suggestion:${s.id}`, kind: 'suggestion', suggestion: s })
   }
 
+  const hasPendingChildSuggestion = (pendingSuggestions || []).some((s) => s.target_table === 'client_children')
   const countField = (currentTaxSheetFields || []).find(
     (f) => f.field_key === 'children_count' && f.included_in_calculation !== false && f.field_value
   )
   const declaredCount = countField ? parseInt(countField.field_value, 10) : null
-  if (Number.isFinite(declaredCount) && declaredCount !== children.length) {
+  if (Number.isFinite(declaredCount) && declaredCount !== children.length && !hasPendingChildSuggestion) {
     discrepancies.push({
       key: 'children-count',
       kind: 'childrenCount',

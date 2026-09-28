@@ -357,6 +357,7 @@ export default {
     suggestionText: '{field} : « {from} » → « {to} »',
     suggestionPropertyText: 'Nouvelle propriété trouvée — {details}',
     suggestionChildText: 'Enfant trouvé : {name}',
+    suggestionChildPendingText: "Un document indique un enfant supplémentaire pas encore dans le questionnaire — nom encore à préciser.",
     acceptSuggestion: 'Mettre à jour',
     ignoreSuggestion: 'Ignorer',
     deleteClient: 'Supprimer le client',

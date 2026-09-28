@@ -62,10 +62,10 @@ export async function syncChildSuggestions(admin, clientId, taxYear) {
     document_id: null,
     target_table: 'client_children',
     target_person: 'none',
-    target_field: `child:${slugify(c.full_name)}`,
+    target_field: `child:${slugify(c.key)}`,
     field_label: 'Child',
     current_value: null,
-    suggested_value: JSON.stringify(c),
+    suggested_value: JSON.stringify({ full_name: c.full_name }),
     created_at: new Date().toISOString()
   }))
   const { error } = await admin

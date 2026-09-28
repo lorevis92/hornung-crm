@@ -60,3 +60,46 @@ export async function syncChildSuggestionsInBackground(clientId, taxYear) {
     return null
   }
 }
+
+// Catches up the registry sync for documents that were already extracted
+// before this pipeline existed (or before a required migration had been
+// run) — the sync functions above only ever fire as a side effect of a
+// FRESH extraction (api/extract-document.js), so an older document's data
+// can sit in extracted_document_fields forever without ever reaching
+// client_persons/clients/client_properties/client_children, leaving the
+// Questionnaire empty even though Tax Summary shows the same data just
+// fine (it reads extracted_document_fields directly, unaffected by any of
+// this). Called once when a specialist opens a client, across every tax
+// year they have a case for. Safe to call repeatedly: every sync function
+// it calls only fills in what's still empty or flags a genuine conflict
+// (see computePersonalDetailsSync) — never a blind overwrite.
+export async function catchUpRegistrySyncInBackground(clientId, cases) {
+  if (!clientId || !cases?.length) return
+  try {
+    const perYear = await Promise.all(
+      cases.map(async (c) => ({
+        taxYear: c.tax_year,
+        documents: await api.listClientDocuments(clientId, c.tax_year)
+      }))
+    )
+    const jobs = []
+    for (const { taxYear, documents } of perYear) {
+      let hasChildRelevantDoc = false
+      for (const doc of documents || []) {
+        if (doc.status !== 'extracted') continue
+        if (doc.category_code === 'current_tax_sheet') {
+          jobs.push(syncPersonalDetailsInBackground(doc.id))
+          hasChildRelevantDoc = true
+        } else if (doc.category_code === 'property_tax_value') {
+          jobs.push(syncPropertySuggestionInBackground(doc.id))
+        } else if (doc.category_code === 'childcare_costs') {
+          hasChildRelevantDoc = true
+        }
+      }
+      if (hasChildRelevantDoc) jobs.push(syncChildSuggestionsInBackground(clientId, taxYear))
+    }
+    await Promise.all(jobs)
+  } catch (error) {
+    console.error('[catchUpRegistrySyncInBackground]', error)
+  }
+}

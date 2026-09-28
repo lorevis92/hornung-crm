@@ -14,12 +14,12 @@ import AiPanel from '../components/AiPanel'
 import FeeEstimatePanel from '../components/FeeEstimatePanel'
 import CaseTimeline from '../components/CaseTimeline'
 import Modal from '../components/Modal'
-import { EmptyState, Field, PageLoader, Select, Spinner, Textarea } from '../components/ui'
+import { EmptyState, Field, PageLoader, Select, Spinner, Textarea, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
-import { CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES } from '../lib/constants'
+import { CANTONS, CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES, MARITAL_STATUSES } from '../lib/constants'
 import { fullName } from '../lib/format'
 import { recalculateInBackground } from '../lib/recalc'
 import { computeQuestionnaireConsistency } from '../lib/questionnaireConsistency'
@@ -149,6 +149,10 @@ export default function CasePage() {
     try {
       await api.resolveFieldSuggestion(suggestion, accept)
       setPendingSuggestions((list) => list.filter((s) => s.id !== suggestion.id))
+      setSuggestionEdits((edits) => {
+        const { [suggestion.id]: _discard, ...rest } = edits
+        return rest
+      })
       toast.success(t('common.saved'))
     } catch (error) {
       console.error(error)
@@ -156,6 +160,33 @@ export default function CasePage() {
     } finally {
       setResolvingSuggestionId(null)
     }
+  }
+
+  // Lets a specialist correct a proposed value before applying it, instead
+  // of only being able to accept it verbatim or ignore it outright —
+  // keyed by suggestion id since several can be open in the modal at once.
+  // client_children carries its proposal as a JSON payload (full_name is
+  // the only part worth editing inline; client_properties' richer payload
+  // stays edit-elsewhere for now), everything else is a plain scalar.
+  const [suggestionEdits, setSuggestionEdits] = useState({})
+
+  const suggestionEditValue = (s) => {
+    if (s.target_table === 'client_children') {
+      return suggestionEdits[s.id] ?? JSON.parse(s.suggested_value).full_name ?? ''
+    }
+    return suggestionEdits[s.id] ?? s.suggested_value ?? ''
+  }
+
+  const setSuggestionEditValue = (s, value) => {
+    setSuggestionEdits((edits) => ({ ...edits, [s.id]: value }))
+  }
+
+  const suggestionToApply = (s) => {
+    if (!(s.id in suggestionEdits)) return s
+    if (s.target_table === 'client_children') {
+      return { ...s, suggested_value: JSON.stringify({ ...JSON.parse(s.suggested_value), full_name: suggestionEdits[s.id] }) }
+    }
+    return { ...s, suggested_value: suggestionEdits[s.id] }
   }
 
   // A client can always upload (see the "documents: client upload" RLS
@@ -606,20 +637,77 @@ export default function CasePage() {
               <p className="text-[13px] font-semibold uppercase tracking-wide text-ink-400">
                 {t('case.consistencyDiscrepanciesTitle')}
               </p>
-              {consistency.discrepancies.map((d) => (
-                <div
-                  key={d.key}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
-                >
-                  {d.kind === 'suggestion' ? (
-                    <>
-                      <p>{describeSuggestion(d.suggestion, t)}</p>
-                      <div className="flex shrink-0 items-center gap-2">
+              {consistency.discrepancies.map((d) => {
+                if (d.kind !== 'suggestion') {
+                  return (
+                    <div
+                      key={d.key}
+                      className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
+                    >
+                      {t('case.consistencyChildrenCount', {
+                        documentValue: d.documentValue,
+                        questionnaireValue: d.questionnaireValue
+                      })}
+                    </div>
+                  )
+                }
+                const s = d.suggestion
+                const editable = s.target_table !== 'client_properties'
+                return (
+                  <div
+                    key={d.key}
+                    className="space-y-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
+                  >
+                    <p>{describeSuggestion(s, t)}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {editable ? (
+                        <div className="w-full max-w-xs sm:w-auto">
+                          {s.target_field === 'marital_status' ? (
+                            <Select
+                              value={suggestionEditValue(s)}
+                              onChange={(e) => setSuggestionEditValue(s, e.target.value)}
+                            >
+                              {MARITAL_STATUSES.map((status) => (
+                                <option key={status} value={status}>
+                                  {t(`marital.${status}`)}
+                                </option>
+                              ))}
+                            </Select>
+                          ) : s.target_field === 'canton' ? (
+                            <Select
+                              value={suggestionEditValue(s)}
+                              onChange={(e) => setSuggestionEditValue(s, e.target.value)}
+                            >
+                              <option value="">{t('common.none')}</option>
+                              {CANTONS.map((c) => (
+                                <option key={c} value={c}>
+                                  {t(`canton.${c}`)} ({c})
+                                </option>
+                              ))}
+                            </Select>
+                          ) : s.target_field === 'date_of_birth' ? (
+                            <TextInput
+                              type="date"
+                              value={suggestionEditValue(s)}
+                              onChange={(e) => setSuggestionEditValue(s, e.target.value)}
+                            />
+                          ) : (
+                            <TextInput
+                              value={suggestionEditValue(s)}
+                              onChange={(e) => setSuggestionEditValue(s, e.target.value)}
+                              placeholder={
+                                s.target_table === 'client_children' ? t('data.f.childName') : undefined
+                              }
+                            />
+                          )}
+                        </div>
+                      ) : null}
+                      <div className="ml-auto flex shrink-0 items-center gap-2">
                         <button
                           type="button"
                           className="btn-secondary btn-sm"
-                          onClick={() => resolveConsistencySuggestion(d.suggestion, false)}
-                          disabled={resolvingSuggestionId === d.suggestion.id}
+                          onClick={() => resolveConsistencySuggestion(s, false)}
+                          disabled={resolvingSuggestionId === s.id}
                         >
                           <X size={14} aria-hidden="true" />
                           {t('specialist.ignoreSuggestion')}
@@ -627,10 +715,13 @@ export default function CasePage() {
                         <button
                           type="button"
                           className="btn-primary btn-sm"
-                          onClick={() => resolveConsistencySuggestion(d.suggestion, true)}
-                          disabled={resolvingSuggestionId === d.suggestion.id}
+                          onClick={() => resolveConsistencySuggestion(suggestionToApply(s), true)}
+                          disabled={
+                            resolvingSuggestionId === s.id ||
+                            (s.target_table === 'client_children' && !suggestionEditValue(s).trim())
+                          }
                         >
-                          {resolvingSuggestionId === d.suggestion.id ? (
+                          {resolvingSuggestionId === s.id ? (
                             <Spinner size={14} />
                           ) : (
                             <Check size={14} aria-hidden="true" />
@@ -638,17 +729,10 @@ export default function CasePage() {
                           {t('specialist.acceptSuggestion')}
                         </button>
                       </div>
-                    </>
-                  ) : (
-                    <p>
-                      {t('case.consistencyChildrenCount', {
-                        documentValue: d.documentValue,
-                        questionnaireValue: d.questionnaireValue
-                      })}
-                    </p>
-                  )}
-                </div>
-              ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           ) : null}
 
