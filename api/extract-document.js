@@ -59,7 +59,7 @@ export async function runExtraction(
   admin,
   anthropic,
   documentId,
-  { fromStatuses = ['uploaded'], forcedCategoryCode = null } = {}
+  { fromStatuses = ['uploaded'], forcedCategoryCode = null, throwOnRecalcError = false } = {}
 ) {
   // Atomic claim: only proceed if this row is still in one of the expected
   // starting states. Prevents a duplicate webhook delivery (pg_net can
@@ -262,16 +262,25 @@ export async function runExtraction(
   // Extracted values feed the calculation as soon as they exist — no
   // specialist confirmation needed — so the aggregate is kept in sync right
   // here too, the same as an edit/exclude/delete already does from the
-  // browser. Best-effort: a failure here shouldn't mark the extraction
-  // itself (which did succeed) as failed — the manual "Recalculate" button
-  // remains a fallback. recalculateAndPersist() also re-syncs the client's
-  // registry (personal details, property, children) for every eligible
-  // document of this client/year as its own first step, not just this one
-  // — see api/_recalc.js — so nothing further is needed here for that.
+  // browser. Best-effort by default: a failure here shouldn't mark the
+  // extraction itself (which did succeed) as failed — the manual
+  // "Recalculate" button remains a fallback for the async webhook path.
+  // recalculateAndPersist() also re-syncs the client's registry (personal
+  // details, property, children) for every eligible document of this
+  // client/year as its own first step, not just this one — see
+  // api/_recalc.js — so nothing further is needed here for that.
+  //
+  // The synchronous "fill Questionnaire from a document/pasted text" action
+  // (api/extract-document-now.js) passes throwOnRecalcError instead: that
+  // registry sync IS the whole point of that action (there's no separate
+  // document to browse afterwards, only suggestions to review), so a
+  // failure there must reach the specialist as a real error rather than a
+  // silent 200 with nothing to show.
   try {
     await recalculateAndPersist(admin, claimed.client_id, claimed.tax_year)
   } catch (recalcError) {
     console.error(`[extract-document] recalculation failed for document ${documentId}:`, recalcError)
+    if (throwOnRecalcError) throw recalcError
   }
 }
 

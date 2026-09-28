@@ -39,7 +39,12 @@ export default async function handler(req, res) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     await runExtraction(admin, anthropic, documentId, {
       fromStatuses: [doc.status],
-      forcedCategoryCode: body.categoryCode || null
+      forcedCategoryCode: body.categoryCode || null,
+      // This action has no document browser for the specialist to fall back
+      // on — the registry sync (suggestions/autoFill) is the only visible
+      // outcome, so a failure there must surface as a real error instead of
+      // the usual "log it, keep the 200" leniency (see extract-document.js).
+      throwOnRecalcError: true
     })
     return res.status(200).json({ ok: true })
   } catch (error) {

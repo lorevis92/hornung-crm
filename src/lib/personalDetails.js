@@ -91,6 +91,36 @@ function normalizeMaritalStatus(raw) {
 const FORCE_APPLY_THRESHOLD = 0.75
 const FORCE_APPLY_FIELDS = new Set(['marital_status', 'first_name', 'last_name', 'date_of_birth', 'current_address'])
 
+function isValidCalendarDate(year, month, day) {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false
+  const d = new Date(Date.UTC(year, month - 1, day))
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day
+}
+
+// Swiss documents write dates as "18.06.1987" (day first) — client_persons.
+// date_of_birth is a Postgres `date` column, which rejects that literally
+// (throws "date/time field value out of range"). Converts to ISO when the
+// value parses to a real calendar date; otherwise drops it, same as any
+// other field this module refuses to guess at — better to leave a date of
+// birth blank than let one malformed string crash the entire bundled
+// client_persons upsert (which would silently take every other field in
+// the same patch down with it — see api/_personalDetails.js).
+function normalizeDate(raw) {
+  if (!raw) return null
+  const v = String(raw).trim()
+  const iso = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (iso) {
+    const [, y, m, d] = iso
+    return isValidCalendarDate(+y, +m, +d) ? `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}` : null
+  }
+  const dmy = v.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/)
+  if (dmy) {
+    const [, d, m, y] = dmy
+    return isValidCalendarDate(+y, +m, +d) ? `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}` : null
+  }
+  return null
+}
+
 export function computePersonalDetailsSync({ extractedFields, canton, primary, spouse }) {
   const byKey = Object.fromEntries((extractedFields || []).map((f) => [f.field_key, f.field_value]))
   const confidenceByKey = Object.fromEntries((extractedFields || []).map((f) => [f.field_key, f.confidence]))
@@ -133,7 +163,7 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
   }
   consider(
     'client_persons', 'primary', 'date_of_birth', 'Date of birth',
-    byKey.date_of_birth, primary?.date_of_birth, 'date_of_birth'
+    normalizeDate(byKey.date_of_birth), primary?.date_of_birth, 'date_of_birth'
   )
   // Combined into the single free-text address client_persons already
   // stores (e.g. "Bahnhofstrasse 12, 6300 Zug") — municipality/zip alone
@@ -165,7 +195,7 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
   }
   consider(
     'client_persons', 'spouse', 'date_of_birth', "Partner's date of birth",
-    byKey.partner_date_of_birth, spouse?.date_of_birth
+    normalizeDate(byKey.partner_date_of_birth), spouse?.date_of_birth
   )
   consider(
     'client_persons', 'spouse', 'religious_denomination', "Partner's religious denomination",
