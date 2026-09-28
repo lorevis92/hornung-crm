@@ -16,7 +16,6 @@
 // "Recalculate" button.
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
-import { runExtraction } from './extract-document.js'
 
 const RETRYABLE_STATUSES = ['uploaded', 'extracting', 'extraction_failed']
 
@@ -39,6 +38,15 @@ export default async function handler(req, res) {
     if (!RETRYABLE_STATUSES.includes(doc.status)) {
       throw httpError(409, 'NOT_RETRYABLE', `Document is "${doc.status}" — nothing to retry.`)
     }
+
+    // Dynamic, not a static top-level import: extract-document.js pulls in
+    // the calculation/registry-sync modules, which change often — a bad
+    // import anywhere in that graph fails module *resolution*, which a
+    // try/catch around a static import can never catch (it happens before
+    // this function's own code runs at all, surfacing as a bare platform
+    // 500 with no JSON body). A failed dynamic import is just a rejected
+    // promise, caught below like any other error.
+    const { runExtraction } = await import('./extract-document.js')
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     await runExtraction(admin, anthropic, documentId, { fromStatuses: [doc.status] })

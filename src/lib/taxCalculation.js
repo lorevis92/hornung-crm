@@ -3,7 +3,7 @@
 // data layer (in-memory data, browser), so the actual math is never
 // duplicated between the two. No import.meta.env / Vite-only syntax here —
 // this file is imported directly from a plain Node ESM serverless function.
-import { baseFieldKey, fieldSuffix } from './repeatableFields'
+import { baseFieldKey, fieldSuffix } from './repeatableFields.js'
 
 const CONTRIBUTION_TO_COMPONENT = {
   income_plus: 'income',

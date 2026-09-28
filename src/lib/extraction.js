@@ -1,5 +1,5 @@
 import { docTypeLabel } from './labels'
-import { baseFieldKey, occurrenceIndex } from './repeatableFields'
+import { baseFieldKey, occurrenceIndex } from './repeatableFields.js'
 
 // Shared between DocumentVerificationPanel (single document) and TaxSummary
 // (every document of a client/tax year): merges the field dictionary for a
