@@ -71,3 +71,21 @@ export function computeQuestionnaireConsistency({
 
   return { discrepancies, missingDocuments }
 }
+
+// Whether the Questionnaire has the essentials a case shouldn't be
+// considered ready without. Deliberately narrow, just marital status for
+// now — the one piece of data that silently produced a materially wrong
+// result (the wrong wealth exemption amount) for a real client, for
+// months, specifically because nothing ever flagged it as missing rather
+// than just "not yet declared". An empty children array is deliberately
+// NOT treated as incomplete on its own — that's often correct (a
+// childless client) — a genuine mismatch against what a document
+// declares is already caught above, as a discrepancy, once there's
+// something to compare against.
+export function computeQuestionnaireCompleteness(questionnaire) {
+  const primary = (questionnaire?.persons || []).find((p) => p.person_type === 'primary') || null
+  const missing = []
+  if (!primary) missing.push('primary')
+  else if (!primary.marital_status) missing.push('maritalStatus')
+  return { isComplete: missing.length === 0, missing }
+}

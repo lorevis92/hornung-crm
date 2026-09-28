@@ -22,7 +22,7 @@ import { api } from '../lib/data'
 import { CANTONS, CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES, MARITAL_STATUSES } from '../lib/constants'
 import { fullName } from '../lib/format'
 import { recalculateInBackground } from '../lib/recalc'
-import { computeQuestionnaireConsistency } from '../lib/questionnaireConsistency'
+import { computeQuestionnaireConsistency, computeQuestionnaireCompleteness } from '../lib/questionnaireConsistency'
 import { describeSuggestion } from '../lib/suggestions'
 
 export default function CasePage() {
@@ -150,6 +150,17 @@ export default function CasePage() {
     [isStaff, questionnaire, documents, currentTaxSheetFields, pendingSuggestions]
   )
   const consistencyIssueCount = consistency.discrepancies.length + consistency.missingDocuments.length
+
+  // Whether the Questionnaire itself has what a case can't be considered
+  // ready without — checked independently of any document (unlike the
+  // consistency check above, which only ever compares against one), so a
+  // brand new case with nothing uploaded yet still gets pointed at the
+  // Questionnaire as the explicit first step, not left to a background
+  // sync that may or may not have run.
+  const completeness = useMemo(
+    () => (isStaff && questionnaire ? computeQuestionnaireCompleteness(questionnaire) : { isComplete: true, missing: [] }),
+    [isStaff, questionnaire]
+  )
 
   useEffect(() => {
     if (openConsistencyOnLoad && consistencyIssueCount) setConsistencyOpen(true)
@@ -419,6 +430,22 @@ export default function CasePage() {
           </div>
         ) : null}
       </header>
+
+      {/* ---------------------------------- questionnaire completeness (staff) -- */}
+      {/* Deliberately not dismissible and not a document-comparison check
+          (that's the one below) — this is the explicit "is the case ready
+          to work on" gate the Questionnaire is meant to be, checked
+          regardless of whether any document has been uploaded/synced yet. */}
+      {isStaff && !completeness.isComplete ? (
+        <Link
+          to={`/clients/${caseRow.client_id}?tab=questionnaire`}
+          className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-[14.5px] text-red-900 transition hover:border-red-400"
+        >
+          <AlertTriangle size={18} className="shrink-0 text-red-700" aria-hidden="true" />
+          <span className="font-medium">{t('case.questionnaireIncomplete')}</span>
+          <span className="ml-auto shrink-0 text-[13px] text-red-700 underline">{t('case.questionnaireCompleteAction')}</span>
+        </Link>
+      ) : null}
 
       {/* ------------------------------------------ consistency check (staff) -- */}
       {isStaff && consistencyIssueCount ? (

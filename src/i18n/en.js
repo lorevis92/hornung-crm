@@ -212,6 +212,8 @@ export default {
       'The Questionnaire declares property ownership ({count}), but no property tax value document was found.',
     consistencyMissingSpouseSalary:
       'Both spouses appear to be employed, but fewer than two salary statements were found — the spouse’s may be missing.',
+    questionnaireIncomplete: 'Questionnaire incomplete — marital status not yet recorded. Complete it before this case is ready.',
+    questionnaireCompleteAction: 'Complete the Questionnaire',
     aiEmpty: 'No extracted data yet.',
     aiPhase2: 'Extraction module — phase 2',
     aiPhase2Help:

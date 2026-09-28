@@ -211,6 +211,8 @@ export default {
       'Il Questionario dichiara una proprietà immobiliare ({count}), ma non è stato trovato nessun documento con il valore fiscale.',
     consistencyMissingSpouseSalary:
       'Entrambi i coniugi risultano lavorare, ma sono stati trovati meno di due certificati di salario — potrebbe mancare quello del coniuge.',
+    questionnaireIncomplete: 'Questionario incompleto — stato civile non ancora registrato. Completalo prima di considerare pronto questo fascicolo.',
+    questionnaireCompleteAction: 'Completa il Questionario',
     aiEmpty: 'Nessun dato estratto.',
     aiPhase2: 'Modulo di estrazione — fase 2',
     aiPhase2Help:

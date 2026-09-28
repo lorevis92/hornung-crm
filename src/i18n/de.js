@@ -212,6 +212,8 @@ export default {
       'Der Fragebogen gibt Grundbesitz an ({count}), aber es wurde kein Steuerwert-Dokument gefunden.',
     consistencyMissingSpouseSalary:
       'Beide Ehepartner scheinen erwerbstätig zu sein, aber es wurden weniger als zwei Lohnausweise gefunden — der des Partners fehlt möglicherweise.',
+    questionnaireIncomplete: 'Fragebogen unvollständig — Zivilstand noch nicht erfasst. Vor Bearbeitung des Falls ergänzen.',
+    questionnaireCompleteAction: 'Fragebogen ergänzen',
     aiEmpty: 'Noch keine extrahierten Daten.',
     aiPhase2: 'Extraktionsmodul — Phase 2',
     aiPhase2Help:
