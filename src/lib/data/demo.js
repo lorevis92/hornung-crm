@@ -1011,6 +1011,7 @@ export const demoApi = {
       id: uid('aggcomp'),
       aggregate_id: aggregate.id,
       document_id: c.documentId,
+      field_key: c.fieldKey || null,
       component_type: c.componentType,
       section_key: c.sectionKey,
       amount: c.amount,

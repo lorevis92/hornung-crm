@@ -134,6 +134,7 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
         result.components.map((c) => ({
           aggregate_id: aggregate.id,
           document_id: c.documentId,
+          field_key: c.fieldKey || null,
           component_type: c.componentType,
           section_key: c.sectionKey,
           amount: c.amount,

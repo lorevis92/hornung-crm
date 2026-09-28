@@ -7,7 +7,7 @@ import {
 import CompactFieldRow from '../components/CompactFieldRow'
 import ExtractedFieldRow from '../components/ExtractedFieldRow'
 import Modal from '../components/Modal'
-import { EmptyState, PageLoader, Spinner, Stat } from '../components/ui'
+import { EmptyState, Field, PageLoader, Spinner, Stat, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
@@ -265,34 +265,50 @@ export default function TaxSummary() {
     }
   }
 
-  // Proactive "things to verify" index — three sources, all already
-  // computed elsewhere, never re-derived here:
-  //  - tax_parameters rows flagged "da confermare" that this calculation
-  //    actually used (src/lib/taxCalculation.js, persisted on the
-  //    aggregate as uncertain_parameters);
-  //  - fields excluded because no matching tax parameter was found
-  //    (needs_verification + the existing "missing tax parameter" note);
-  //  - items excluded as separately taxed or as unconverted foreign
-  //    currency (needs_verification + the existing note text).
+  // Proactive "things to verify" index — structured, not just descriptive
+  // strings, so the popup can offer the specific action that actually
+  // resolves each kind instead of only naming the problem:
+  //  - parameter: a tax_parameters row flagged "da confermare" that this
+  //    calculation actually used — not tied to one document/field, fixed
+  //    in Tax settings, so the action is a link there;
+  //  - missingParam: a field excluded because no matching tax parameter
+  //    was found for this canton/year — the specialist can confirm the
+  //    field as-is right here (same effect as confirming it in the
+  //    breakdown below);
+  //  - foreignCurrency: a foreign-currency field excluded because it was
+  //    never converted — enter a rate or the converted CHF amount right
+  //    here instead of going to find the field elsewhere;
+  //  - separate: separately-taxed or reference-only items (pension
+  //    withdrawals, inheritances, a vehicle's purchase price, ...) — not
+  //    really "wrong", nothing to fix, just point at the source document.
   const uncertainItems = useMemo(() => {
     if (!result) return []
-    const paramItems = result.aggregate?.uncertain_parameters || []
+    const paramItems = (result.aggregate?.uncertain_parameters || []).map((label) => ({
+      kind: 'parameter',
+      key: `param:${label}`,
+      label
+    }))
     const flagged = (result.components || []).filter((c) => c.needs_verification)
     const missingParamItems = flagged
       .filter((c) => (c.field_label || '').includes('missing tax parameter'))
-      .map((c) => c.field_label)
-    const separateOrForeignItems = flagged
-      .filter((c) => /separately taxed|foreign currency/.test(c.field_label || ''))
-      .map((c) => c.field_label)
-    return [...paramItems, ...missingParamItems, ...separateOrForeignItems]
+      .map((c) => ({ kind: 'missingParam', key: `missing:${c.document_id}:${c.field_key}`, label: c.field_label, component: c }))
+    const foreignCurrencyItems = flagged
+      .filter((c) => /foreign currency/.test(c.field_label || ''))
+      .map((c) => ({ kind: 'foreignCurrency', key: `fx:${c.document_id}:${c.field_key}`, label: c.field_label, component: c }))
+    const separateItems = flagged
+      .filter((c) => /separately taxed|no cantonal depreciation/.test(c.field_label || ''))
+      .map((c) => ({ kind: 'separate', key: `sep:${c.document_id}:${c.field_key}`, label: c.field_label, component: c }))
+    return [...paramItems, ...missingParamItems, ...foreignCurrencyItems, ...separateItems]
   }, [result])
 
   // Stable signature for "has the set of uncertain items changed since the
   // specialist last dismissed the popup for this exact calculation" — a
   // sorted join is enough, no real hashing needed for an equality check.
-  const uncertaintySignature = useMemo(() => uncertainItems.slice().sort().join('|'), [uncertainItems])
+  const uncertaintySignature = useMemo(() => uncertainItems.map((i) => i.key).sort().join('|'), [uncertainItems])
 
   const [uncertaintyModalOpen, setUncertaintyModalOpen] = useState(false)
+  const [fxEdits, setFxEdits] = useState({})
+  const [resolvingUncertainKey, setResolvingUncertainKey] = useState(null)
   const uncertaintySeenKey = caseRow ? `hornung.uncertaintySeen.${caseRow.client_id}.${caseRow.tax_year}` : null
 
   useEffect(() => {
@@ -318,6 +334,88 @@ export default function TaxSummary() {
       }
     }
     setUncertaintyModalOpen(false)
+  }
+
+  // Shared by every actionable uncertain-item kind below: save the field
+  // (with verified_by_specialist so taxCalculation.js trusts it) and
+  // refresh both `fields` and the calculation, exactly what confirming a
+  // field in the breakdown further down the page already does — reused
+  // here instead of duplicated, just aimed at whichever field an item in
+  // the popup points at.
+  const saveUncertainField = async (component, patch) => {
+    const original = fields.find((f) => f.document_id === component.document_id && f.field_key === component.field_key)
+    if (!original) return null
+    const saved = await api.saveExtractedFieldForDocument(component.document_id, {
+      field_key: component.field_key,
+      field_value: original.field_value,
+      confidence: original.confidence,
+      source_quote: original.source_quote,
+      source_page: original.source_page,
+      verified_by_specialist: true,
+      verified_at: new Date().toISOString(),
+      verified_by: profile?.id || null,
+      ...patch
+    })
+    setFields((list) =>
+      list.map((f) =>
+        f.document_id === component.document_id && f.field_key === component.field_key
+          ? { ...f, field_value: saved.field_value, verified_by_specialist: true, verified_at: saved.verified_at }
+          : f
+      )
+    )
+    const computed = await recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
+    if (computed) setResult(computed)
+    return saved
+  }
+
+  const uncertainFieldKey = (component) => `${component.document_id}:${component.field_key}`
+
+  const resolveForeignCurrencyItem = async (component) => {
+    const key = uncertainFieldKey(component)
+    const edit = fxEdits[key] || {}
+    const rate = parseFloat(edit.rate)
+    const amount = parseFloat(edit.amount)
+    const convertedAmount = Number.isFinite(amount)
+      ? amount
+      : Number.isFinite(rate)
+        ? component.amount * rate
+        : null
+    if (convertedAmount == null) return
+    setResolvingUncertainKey(key)
+    try {
+      await saveUncertainField(component, { field_value: String(Math.round(convertedAmount * 100) / 100) })
+      setFxEdits((edits) => {
+        const { [key]: _discard, ...rest } = edits
+        return rest
+      })
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setResolvingUncertainKey(null)
+    }
+  }
+
+  const confirmUncertainFieldAsIs = async (component) => {
+    const key = uncertainFieldKey(component)
+    setResolvingUncertainKey(key)
+    try {
+      await saveUncertainField(component, {})
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setResolvingUncertainKey(null)
+    }
+  }
+
+  const viewUncertainSource = (component) => {
+    const original = fields.find((f) => f.document_id === component.document_id && f.field_key === component.field_key)
+    if (!original) return
+    dismissUncertaintyModal()
+    viewSource(original)
   }
 
   // "Document data" reference — every verified field, grouped by document,
@@ -732,23 +830,144 @@ export default function TaxSummary() {
             onClose={dismissUncertaintyModal}
             title={t('summary.uncertaintyModalTitle')}
             description={t('summary.uncertaintyModalHelp')}
-            size="md"
+            size="lg"
             footer={
               <button type="button" className="btn-primary btn-sm" onClick={dismissUncertaintyModal}>
                 {t('summary.uncertaintyModalClose')}
               </button>
             }
           >
-            <ul className="space-y-2">
-              {uncertainItems.map((item, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-[13.5px] text-amber-900"
-                >
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                  <span>{item}</span>
-                </li>
-              ))}
+            <ul className="space-y-2.5">
+              {uncertainItems.map((item) => {
+                const original =
+                  item.component &&
+                  fields.find(
+                    (f) => f.document_id === item.component.document_id && f.field_key === item.component.field_key
+                  )
+                const busy = resolvingUncertainKey === item.key
+                return (
+                  <li key={item.key} className="rounded-lg bg-amber-50 px-3 py-2.5 text-[13.5px] text-amber-900">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                      <span className="flex-1">{item.label}</span>
+                    </div>
+
+                    {item.kind === 'parameter' ? (
+                      <div className="mt-1.5 pl-[22px]">
+                        <Link to="/tax-settings" className="text-[12.5px] font-medium underline">
+                          {t('summary.uncertaintyGoToTaxSettings')}
+                        </Link>
+                      </div>
+                    ) : null}
+
+                    {item.kind === 'foreignCurrency' ? (
+                      <div className="mt-2 space-y-2 pl-[22px]">
+                        {original ? (
+                          <>
+                            <div className="flex flex-wrap items-end gap-2">
+                              <Field label={t('summary.uncertaintyExchangeRate')} className="w-[160px]">
+                                <TextInput
+                                  type="number"
+                                  step="0.0001"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={fxEdits[uncertainFieldKey(item.component)]?.rate || ''}
+                                  onChange={(e) =>
+                                    setFxEdits((edits) => ({
+                                      ...edits,
+                                      [uncertainFieldKey(item.component)]: { rate: e.target.value, amount: '' }
+                                    }))
+                                  }
+                                />
+                              </Field>
+                              <span className="pb-2.5 text-[12.5px] text-amber-700">{t('summary.uncertaintyOr')}</span>
+                              <Field label={t('summary.uncertaintyChfAmount')} className="w-[160px]">
+                                <TextInput
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={fxEdits[uncertainFieldKey(item.component)]?.amount || ''}
+                                  onChange={(e) =>
+                                    setFxEdits((edits) => ({
+                                      ...edits,
+                                      [uncertainFieldKey(item.component)]: { rate: '', amount: e.target.value }
+                                    }))
+                                  }
+                                />
+                              </Field>
+                              <button
+                                type="button"
+                                className="btn-primary btn-sm"
+                                onClick={() => resolveForeignCurrencyItem(item.component)}
+                                disabled={busy}
+                              >
+                                {busy ? <Spinner size={14} /> : null}
+                                {t('common.save')}
+                              </button>
+                            </div>
+                            {fxEdits[uncertainFieldKey(item.component)]?.rate ? (
+                              <p className="text-[12px] text-amber-700">
+                                {t('summary.uncertaintyPreview', {
+                                  amount: formatChfSwiss(
+                                    Math.round(
+                                      item.component.amount * parseFloat(fxEdits[uncertainFieldKey(item.component)].rate || 0) * 100
+                                    ) / 100
+                                  )
+                                })}
+                              </p>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="text-[12.5px] font-medium underline"
+                              onClick={() => viewUncertainSource(item.component)}
+                            >
+                              {t('summary.uncertaintyViewSource')}
+                            </button>
+                          </>
+                        ) : (
+                          <p className="text-[12.5px] text-amber-700">{t('summary.uncertaintyRecalculateFirst')}</p>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {item.kind === 'missingParam' ? (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-[22px]">
+                        {original ? (
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={() => confirmUncertainFieldAsIs(item.component)}
+                            disabled={busy}
+                          >
+                            {busy ? <Spinner size={14} /> : null}
+                            {t('summary.uncertaintyConfirmAsIs')}
+                          </button>
+                        ) : (
+                          <p className="text-[12.5px] text-amber-700">{t('summary.uncertaintyRecalculateFirst')}</p>
+                        )}
+                        <Link to="/tax-settings" className="text-[12.5px] font-medium underline">
+                          {t('summary.uncertaintyGoToTaxSettings')}
+                        </Link>
+                      </div>
+                    ) : null}
+
+                    {item.kind === 'separate' ? (
+                      <div className="mt-1.5 pl-[22px]">
+                        {original ? (
+                          <button
+                            type="button"
+                            className="text-[12.5px] font-medium underline"
+                            onClick={() => viewUncertainSource(item.component)}
+                          >
+                            {t('summary.uncertaintyViewSource')}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </li>
+                )
+              })}
             </ul>
           </Modal>
 

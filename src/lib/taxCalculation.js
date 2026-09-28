@@ -387,11 +387,16 @@ export function computeTaxAggregate({
 
     // 5. Foreign currency — never summed as if it were CHF. A whole-document
     // flag (one "currency" field), not per-occurrence — a broker statement
-    // has one reporting currency for everything on it.
+    // has one reporting currency for everything on it. A specialist who
+    // has specifically edited/confirmed THIS field is trusted to have
+    // entered its already-converted CHF value — the shared currency field
+    // itself is deliberately left untouched by that (see the "things to
+    // verify" popup), so every other not-yet-converted field on the same
+    // document still correctly gets flagged.
     const currencyFieldKey = CURRENCY_FIELD_BY_CATEGORY[doc.category_code]
     const currencyValue = currencyFieldKey ? siblingValue(doc.id, currencyFieldKey) : null
     let currencyCode = null
-    if (!needsVerification && currencyValue && !isChfOrUnspecified(currencyValue)) {
+    if (!needsVerification && currencyValue && !isChfOrUnspecified(currencyValue) && !field.verified_by_specialist) {
       needsVerification = true
       currencyCode = currencyValue.trim().toUpperCase()
       note = `in foreign currency (${currencyCode}), not converted — manual verification needed`
@@ -804,6 +809,12 @@ export function computeTaxAggregate({
       : `${entry.fieldLabel} — ${entry.categoryLabel}${entry.note ? ` — ${entry.note}` : ''}`
     return {
       documentId: entry.documentId,
+      // The raw field_key this row came from (e.g. "dividend_income_2") —
+      // lets the UI match a "needs verification" row back to the exact
+      // extracted_document_fields row that produced it, to offer a direct
+      // fix (entering a converted CHF amount, confirming despite a missing
+      // cap parameter, ...) instead of only describing the problem.
+      fieldKey: entry.fieldKey,
       componentType: CONTRIBUTION_TO_COMPONENT[entry.contributionType],
       sectionKey: CONTRIBUTION_TO_SECTION[entry.contributionType] || null,
       // A needs-verification row shows the amount it WOULD contribute —
