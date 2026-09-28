@@ -25,6 +25,8 @@ export default {
     none: '—',
     error: 'Something went wrong',
     retry: 'Try again',
+    pageCrashedHelp: 'This page hit an unexpected error and could not display. Reloading usually fixes it — if it keeps happening, let us know.',
+    reloadPage: 'Reload page',
     download: 'Download',
     open: 'Open',
     upload: 'Upload',

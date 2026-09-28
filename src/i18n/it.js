@@ -25,6 +25,8 @@ export default {
     none: '—',
     error: 'Si è verificato un errore',
     retry: 'Riprova',
+    pageCrashedHelp: 'Questa pagina ha incontrato un errore imprevisto e non è stato possibile visualizzarla. Ricaricare di solito risolve il problema — se continua a verificarsi, segnalacelo.',
+    reloadPage: 'Ricarica pagina',
     download: 'Scarica',
     open: 'Apri',
     upload: 'Carica',

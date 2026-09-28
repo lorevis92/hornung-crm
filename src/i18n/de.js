@@ -25,6 +25,8 @@ export default {
     none: '—',
     error: 'Es ist ein Fehler aufgetreten',
     retry: 'Erneut versuchen',
+    pageCrashedHelp: 'Bei dieser Seite ist ein unerwarteter Fehler aufgetreten und sie konnte nicht angezeigt werden. Ein Neuladen behebt das meist — tritt es weiterhin auf, sagen Sie uns Bescheid.',
+    reloadPage: 'Seite neu laden',
     download: 'Herunterladen',
     open: 'Öffnen',
     upload: 'Hochladen',

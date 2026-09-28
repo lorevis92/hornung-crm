@@ -14,7 +14,7 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions, verifiedFieldsByDocument } from '../lib/extraction'
-import { formatAmountSwiss, formatChfSwiss, formatDateTime, fullName } from '../lib/format'
+import { formatAmountSwiss, formatChfSwiss, formatDate, formatDateTime, fullName } from '../lib/format'
 import {
   recalculateInBackground, syncChildSuggestionsInBackground, syncPersonalDetailsInBackground,
   syncPropertySuggestionInBackground

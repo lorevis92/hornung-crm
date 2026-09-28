@@ -25,6 +25,8 @@ export default {
     none: '—',
     error: "Une erreur s'est produite",
     retry: 'Réessayer',
+    pageCrashedHelp: "Cette page a rencontré une erreur inattendue et n'a pas pu s'afficher. Recharger résout généralement le problème — si cela persiste, merci de nous le signaler.",
+    reloadPage: 'Recharger la page',
     download: 'Télécharger',
     open: 'Ouvrir',
     upload: 'Téléverser',

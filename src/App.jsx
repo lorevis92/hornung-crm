@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Layout, { PlainLayout } from './components/Layout'
 import { PageLoader } from './components/ui'
 import NoAccessNotice from './components/NoAccessNotice'
+import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './context/AuthContext'
 import { useI18n } from './i18n'
 
@@ -53,6 +54,24 @@ function HomeRedirect() {
   return isStaff ? <Navigate to="/clients" replace /> : <ClientHome />
 }
 
+// Tax Summary is the densest page in the app (personal-details registry,
+// per-document breakdown, calculation totals, ...) and so the most likely
+// to break from a single bad assumption about the data — a missing import,
+// an unexpected null, one client whose data reaches a code path no other
+// client's ever has (see the "formatDate is not defined" incident: it only
+// ever crashed once a client actually had a date_of_birth to render, months
+// after the code shipped). Without this, that kind of error unmounts the
+// whole page with nothing but a blank screen — React 18 has no default
+// fallback for an uncaught render error.
+function TaxSummaryBoundary() {
+  const { t } = useI18n()
+  return (
+    <ErrorBoundary title={t('common.error')} description={t('common.pageCrashedHelp')} retryLabel={t('common.reloadPage')}>
+      <TaxSummary />
+    </ErrorBoundary>
+  )
+}
+
 export default function App() {
   return (
     <Routes>
@@ -80,7 +99,7 @@ export default function App() {
         path="/year/:caseId/summary"
         element={
           <Protected staffOnly>
-            <TaxSummary />
+            <TaxSummaryBoundary />
           </Protected>
         }
       />
