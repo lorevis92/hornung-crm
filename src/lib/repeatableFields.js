@@ -21,8 +21,17 @@ export const REPEATABLE_FIELD_KEYS = new Set([
   'donation_certificate:annual_amount',
   'donation_certificate:has_consideration',
   // bank_securities_crypto_statement — several dividend distributions
-  // and/or several year-end positions on the same statement.
+  // and/or several year-end positions on the same statement — and, just as
+  // often, several distinct ACCOUNTS bundled into one certificate (e.g. a
+  // bank issuing one combined statement covering the parents' joint account
+  // and a child's own savings account) — institution_name/account_type were
+  // originally missed, which meant a second account's own interest/balance
+  // had no institution/type to be identified by even once dividend_income
+  // and account_balance_31_12 themselves became repeatable.
+  'bank_securities_crypto_statement:institution_name',
+  'bank_securities_crypto_statement:account_type',
   'bank_securities_crypto_statement:dividend_income',
+  'bank_securities_crypto_statement:interest_income',
   'bank_securities_crypto_statement:account_balance_31_12',
   // pillar_3a_certificate — several separate payments in the year.
   'pillar_3a_certificate:annual_contribution',

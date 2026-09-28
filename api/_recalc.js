@@ -23,11 +23,23 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
   // even before it has a category_code, otherwise a batch that's still
   // mid-extraction would look "ready" simply because none of its documents
   // have reached the calculation input yet.
+  //
+  // Ordered by uploaded_at: the catch-up loop below re-syncs personal
+  // details from EVERY eligible document every time, and force-apply
+  // fields (name, marital status, address, ...) always take whichever
+  // document processed LAST — with no explicit order, that's whatever
+  // Postgres happens to return, not necessarily upload order. A client who
+  // uses "fill from pasted text" more than once (a genuinely repeatable,
+  // legitimate action — each use is its own permanent document, re-synced
+  // on every future recalculation) needs the newest one to reliably win
+  // over an older, possibly-superseded one, not whichever the database
+  // felt like returning first.
   const { data: allDocuments, error: docsError } = await admin
     .from('client_documents')
-    .select('id, category_code, file_name, status')
+    .select('id, category_code, file_name, status, uploaded_at')
     .eq('client_id', clientId)
     .eq('tax_year', taxYear)
+    .order('uploaded_at', { ascending: true })
   if (docsError) throw docsError
 
   // Registry catch-up, run on every recalculation rather than only as a

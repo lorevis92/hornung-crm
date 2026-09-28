@@ -35,29 +35,41 @@ export async function syncChildSuggestions(admin, clientId, taxYear) {
   const sheetDocIds = documents.filter((d) => d.category_code === 'current_tax_sheet').map((d) => d.id)
   const careDocIds = documents.filter((d) => d.category_code === 'childcare_costs').map((d) => d.id)
 
-  const [{ data: sheetFields, error: sheetError }, { data: careNameFields, error: careNameError }, { data: careDobFields, error: careDobError }] =
-    await Promise.all([
-      sheetDocIds.length
-        ? admin.from('extracted_document_fields').select('field_value').in('document_id', sheetDocIds).eq('field_key', 'children_count')
-        : Promise.resolve({ data: [], error: null }),
-      careDocIds.length
-        ? admin.from('extracted_document_fields').select('document_id, field_value').in('document_id', careDocIds).eq('field_key', 'child_name')
-        : Promise.resolve({ data: [], error: null }),
-      careDocIds.length
-        ? admin
-            .from('extracted_document_fields')
-            .select('document_id, field_value')
-            .in('document_id', careDocIds)
-            .eq('field_key', 'child_date_of_birth')
-        : Promise.resolve({ data: [], error: null })
-    ])
-  if (sheetError) throw sheetError
+  const [
+    { data: sheetCountFields, error: sheetCountError },
+    { data: sheetDobFields, error: sheetDobError },
+    { data: careNameFields, error: careNameError },
+    { data: careDobFields, error: careDobError }
+  ] = await Promise.all([
+    sheetDocIds.length
+      ? admin.from('extracted_document_fields').select('field_value').in('document_id', sheetDocIds).eq('field_key', 'children_count')
+      : Promise.resolve({ data: [], error: null }),
+    // The personal-details letter often states the child's date of birth
+    // itself (see migration 35) — only ever a single value, since
+    // current_tax_sheet has no per-child name field to attribute it to.
+    sheetDocIds.length
+      ? admin.from('extracted_document_fields').select('field_value').in('document_id', sheetDocIds).eq('field_key', 'child_date_of_birth')
+      : Promise.resolve({ data: [], error: null }),
+    careDocIds.length
+      ? admin.from('extracted_document_fields').select('document_id, field_value').in('document_id', careDocIds).eq('field_key', 'child_name')
+      : Promise.resolve({ data: [], error: null }),
+    careDocIds.length
+      ? admin
+          .from('extracted_document_fields')
+          .select('document_id, field_value')
+          .in('document_id', careDocIds)
+          .eq('field_key', 'child_date_of_birth')
+      : Promise.resolve({ data: [], error: null })
+  ])
+  if (sheetCountError) throw sheetCountError
+  if (sheetDobError) throw sheetDobError
   if (careNameError) throw careNameError
   if (careDobError) throw careDobError
 
-  const childrenCount = (sheetFields || [])
+  const childrenCount = (sheetCountFields || [])
     .map((f) => parseInt(f.field_value, 10))
     .find((n) => Number.isFinite(n))
+  const sheetDateOfBirth = (sheetDobFields || []).map((f) => f.field_value).find(Boolean) || null
   // One child_name per childcare_costs document — its own
   // child_date_of_birth, if the same document states one, travels with it
   // by document_id rather than by position.
@@ -69,7 +81,8 @@ export async function syncChildSuggestions(admin, clientId, taxYear) {
   const candidates = buildChildSuggestionCandidates({
     childrenCount,
     candidates: nameCandidates,
-    existingChildren: existingChildren || []
+    existingChildren: existingChildren || [],
+    fallbackDateOfBirth: sheetDateOfBirth
   })
   if (!candidates.length) return { suggested: 0 }
 

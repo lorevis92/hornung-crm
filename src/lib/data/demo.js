@@ -815,6 +815,13 @@ export const demoApi = {
       .filter((f) => sheetDocIds.has(f.document_id) && f.field_key === 'children_count')
       .map((f) => parseInt(f.field_value, 10))
       .find((n) => Number.isFinite(n))
+    // The personal-details letter often states the child's date of birth
+    // itself (see migration 35) — only ever a single value, since
+    // current_tax_sheet has no per-child name field to attribute it to.
+    const sheetDateOfBirth = s.extractedDocumentFields
+      .filter((f) => sheetDocIds.has(f.document_id) && f.field_key === 'child_date_of_birth')
+      .map((f) => f.field_value)
+      .find(Boolean)
     const dobByDocId = Object.fromEntries(
       s.extractedDocumentFields
         .filter((f) => careDocIds.has(f.document_id) && f.field_key === 'child_date_of_birth')
@@ -825,7 +832,12 @@ export const demoApi = {
       .map((f) => ({ name: f.field_value, dateOfBirth: dobByDocId[f.document_id] || null }))
     const existingChildren = s.children.filter((c) => c.client_id === clientId)
 
-    const candidates = buildChildSuggestionCandidates({ childrenCount, candidates: nameCandidates, existingChildren })
+    const candidates = buildChildSuggestionCandidates({
+      childrenCount,
+      candidates: nameCandidates,
+      existingChildren,
+      fallbackDateOfBirth: sheetDateOfBirth || null
+    })
     if (!candidates.length) return wait({ suggested: 0 })
 
     for (const c of candidates) {
@@ -989,7 +1001,12 @@ export const demoApi = {
     const caseIds = new Set(
       s.cases.filter((c) => c.client_id === clientId && c.tax_year === year).map((c) => c.id)
     )
-    const allDocuments = s.documents.filter((d) => caseIds.has(d.case_id))
+    // Sorted by creation order — see api/_recalc.js's own uploaded_at
+    // ordering for why the catch-up loop below needs a deterministic
+    // oldest-first order, not just whatever s.documents happens to be in.
+    const allDocuments = s.documents
+      .filter((d) => caseIds.has(d.case_id))
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     const documents = allDocuments.filter((d) => d.category_code)
     const documentIds = new Set(documents.map((d) => d.id))
     const extractedFields = s.extractedDocumentFields.filter((f) => documentIds.has(f.document_id))

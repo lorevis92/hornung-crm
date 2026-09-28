@@ -67,6 +67,19 @@ const HALVE_CAP_IF_TRUTHY = {
 const ALIMONY_CHILD_CUTOFF_KEYS = new Set(['alimony_paid:annual_amount', 'alimony_received:annual_amount'])
 const CHILD_BENEFICIARY_VALUES = new Set(['child', 'children', 'figlio', 'figli', 'kind', 'kinder', 'enfant', 'enfants'])
 
+// A document that itemizes both fields legitimately can still leave the
+// extraction unsure which one a single line item actually belongs to
+// (nothing about the document forces a choice) — the same amount landing
+// under BOTH is the tell that one real expense was read twice, not that two
+// real deductions exist. Neither field is trusted to be "the right one"
+// automatically: both are flagged for the specialist to resolve by picking
+// the one the document actually supports, rather than silently
+// double-counting or silently guessing which single field to keep.
+const MUTUALLY_EXCLUSIVE_IF_EQUAL = {
+  'property_tax_value:maintenance_costs': 'administration_costs',
+  'property_tax_value:administration_costs': 'maintenance_costs'
+}
+
 // See step 7 in the main loop below — a voluntary pension buy-in flagged
 // for manual double-deduction verification against the salary statement.
 const PENSION_BUYBACK_RULE_KEY = 'pension_buyback:annual_amount'
@@ -432,6 +445,21 @@ export function computeTaxAggregate({
         note =
           'possible double deduction — the salary certificate already shows pension fund contributions ' +
           'that may include this buy-in; confirm the field once checked against the two documents'
+      }
+    }
+
+    // 8. The same amount also sitting under a mutually exclusive sibling
+    // field on this document (e.g. maintenance_costs and
+    // administration_costs both reading the same figure) — almost
+    // certainly one real expense captured twice, not two real deductions.
+    if (!needsVerification) {
+      const exclusiveSiblingKey = MUTUALLY_EXCLUSIVE_IF_EQUAL[ruleKey]
+      if (exclusiveSiblingKey) {
+        const siblingRaw = parseAmount(siblingValueFor(exclusiveSiblingKey))
+        if (siblingRaw != null && siblingRaw === rawAmount) {
+          needsVerification = true
+          note = 'same amount also appears under a mutually exclusive field on this document — confirm which one actually applies'
+        }
       }
     }
 

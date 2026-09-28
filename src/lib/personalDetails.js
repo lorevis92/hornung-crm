@@ -355,7 +355,14 @@ export function buildPropertySuggestionPayload({ extractedFields, existingProper
 // yet), the remaining slots still get a suggestion, just with an empty
 // name for the specialist to fill in when accepting it, rather than
 // silently producing nothing until a second document happens to name them.
-export function buildChildSuggestionCandidates({ childrenCount, candidates, existingChildren }) {
+// fallbackDateOfBirth: a date of birth found on the current_tax_sheet
+//   document itself (current_tax_sheet.child_date_of_birth) rather than on
+//   a childcare invoice — that document only ever tracks children_count as
+//   a single number, never a per-child name, so a date found there can't be
+//   attributed to a SPECIFIC child when there's more than one; only applied
+//   when childrenCount is exactly 1 and there's exactly one resulting
+//   candidate to attach it to, so this never guesses whose date it is.
+export function buildChildSuggestionCandidates({ childrenCount, candidates, existingChildren, fallbackDateOfBirth }) {
   const existingNames = new Set(
     (existingChildren || []).map((c) => (c.full_name || '').trim().toLowerCase()).filter(Boolean)
   )
@@ -384,5 +391,11 @@ export function buildChildSuggestionCandidates({ childrenCount, candidates, exis
     date_of_birth: null,
     key: `pending-${i + 1}`
   }))
-  return [...named, ...placeholders]
+  const result = [...named, ...placeholders]
+
+  const normalizedFallback = normalizeDate(fallbackDateOfBirth)
+  if (normalizedFallback && childrenCount === 1 && result.length === 1 && !result[0].date_of_birth) {
+    result[0] = { ...result[0], date_of_birth: normalizedFallback }
+  }
+  return result
 }
