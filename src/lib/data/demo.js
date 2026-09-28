@@ -815,13 +815,17 @@ export const demoApi = {
       .filter((f) => sheetDocIds.has(f.document_id) && f.field_key === 'children_count')
       .map((f) => parseInt(f.field_value, 10))
       .find((n) => Number.isFinite(n))
-    const candidateNames = s.extractedDocumentFields
-      .filter((f) => careDocIds.has(f.document_id) && f.field_key === 'child_name')
-      .map((f) => f.field_value)
-      .filter(Boolean)
+    const dobByDocId = Object.fromEntries(
+      s.extractedDocumentFields
+        .filter((f) => careDocIds.has(f.document_id) && f.field_key === 'child_date_of_birth')
+        .map((f) => [f.document_id, f.field_value])
+    )
+    const nameCandidates = s.extractedDocumentFields
+      .filter((f) => careDocIds.has(f.document_id) && f.field_key === 'child_name' && f.field_value)
+      .map((f) => ({ name: f.field_value, dateOfBirth: dobByDocId[f.document_id] || null }))
     const existingChildren = s.children.filter((c) => c.client_id === clientId)
 
-    const candidates = buildChildSuggestionCandidates({ childrenCount, candidateNames, existingChildren })
+    const candidates = buildChildSuggestionCandidates({ childrenCount, candidates: nameCandidates, existingChildren })
     if (!candidates.length) return wait({ suggested: 0 })
 
     for (const c of candidates) {
@@ -838,7 +842,9 @@ export const demoApi = {
         target_field: targetField,
         field_label: 'Child',
         current_value: null,
-        suggested_value: JSON.stringify({ full_name: c.full_name }),
+        suggested_value: JSON.stringify(
+          c.date_of_birth ? { full_name: c.full_name, date_of_birth: c.date_of_birth } : { full_name: c.full_name }
+        ),
         created_at: iso(Date.now())
       }
       if (existing) Object.assign(existing, row)
@@ -1035,10 +1041,13 @@ export const demoApi = {
       lang
     })
 
-    // Never "ready for simulation" while a document is still mid-pipeline —
-    // see api/_recalc.js for the same check on the real backend.
+    // Never "ready for simulation" while a document is still mid-pipeline,
+    // nor while a component with a real, nonzero amount is still "needs
+    // verification" — see api/_recalc.js for the same check on the real
+    // backend.
     const documentsStillProcessing = allDocuments.some((d) => ['uploaded', 'extracting'].includes(d.status))
-    const aggregateStatus = documentsStillProcessing ? 'draft' : 'ready_for_simulation'
+    const hasUnresolvedVerification = result.components.some((c) => c.needsVerification && c.amount)
+    const aggregateStatus = documentsStillProcessing || hasUnresolvedVerification ? 'draft' : 'ready_for_simulation'
 
     let aggregate = s.taxAggregates.find((a) => a.client_id === clientId && a.tax_year === year)
     const now = iso(Date.now())

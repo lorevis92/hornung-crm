@@ -31,7 +31,15 @@ export const REPEATABLE_FIELD_KEYS = new Set([
   // listing each person's own insurer and premium), not one combined
   // policy with a single premium.
   'health_insurance_policy:insurer_name',
-  'health_insurance_policy:annual_premium'
+  'health_insurance_policy:annual_premium',
+  // debt_certificate — one mortgage/loan statement can cover more than one
+  // distinct debt (e.g. a Sion mortgage and a Martigny mortgage on the same
+  // bank certificate), each with its own creditor, balance and interest.
+  'debt_certificate:creditor_name',
+  'debt_certificate:debt_type',
+  'debt_certificate:debt_balance',
+  'debt_certificate:annual_interest_paid',
+  'debt_certificate:annual_amortization'
 ])
 
 const SUFFIX_PATTERN = /^(.*)_(\d+)$/

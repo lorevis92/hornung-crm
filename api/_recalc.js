@@ -140,7 +140,15 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
   // (the completeness banner already surfaces that separately) but never
   // while one is genuinely still in flight.
   const documentsStillProcessing = (allDocuments || []).some((d) => ['uploaded', 'extracting'].includes(d.status))
-  const aggregateStatus = documentsStillProcessing ? 'draft' : 'ready_for_simulation'
+  // Nor while a component with a REAL, nonzero amount is still sitting in
+  // "needs verification" (a foreign-currency broker balance not yet
+  // converted, a missing cap parameter, ...) — every document may well have
+  // finished extracting, but the total above doesn't actually include that
+  // money yet, so calling it "ready" would tell the specialist a figure is
+  // final when a known, sized gap is still open. A needs-verification row
+  // with amount 0 (nothing to actually add) doesn't block readiness.
+  const hasUnresolvedVerification = result.components.some((c) => c.needsVerification && c.amount)
+  const aggregateStatus = documentsStillProcessing || hasUnresolvedVerification ? 'draft' : 'ready_for_simulation'
 
   const { data: aggregate, error: aggregateError } = await admin
     .from('tax_aggregates')

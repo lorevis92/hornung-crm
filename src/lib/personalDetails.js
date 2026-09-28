@@ -16,6 +16,69 @@ function splitFullName(fullName = '') {
   return { first: parts[0] || '', last: parts.slice(1).join(' ') }
 }
 
+// clients.canton, and every cantonal tax_parameters row's own canton_code,
+// are the short code (src/lib/constants.js's CANTONS list — "VS", "GE", ...)
+// — but a document's own text names the canton out in whatever language it's
+// written in ("Vallese"/"Wallis"/"Valais"), and nothing about the extraction
+// constrains the AI to the short form. Writing that name straight into
+// clients.canton (autoFill did exactly this, since canton isn't in
+// FORCE_APPLY_FIELDS and the field was empty) silently breaks EVERY cantonal
+// parameter lookup for that client from then on — findParam() in
+// src/lib/taxCalculation.js matches canton_code exactly, and a family with no
+// federal fallback (the wealth-exempt amount; Switzerland has no federal
+// wealth tax) doesn't fall back to a wrong-but-plausible number, it just
+// vanishes from the calculation entirely with no error. Names as this app's
+// own i18n canton blocks spell them (src/i18n/{en,de,fr,it}.js) — matched
+// case-insensitively, accents stripped, so "Genève"/"GENEVE"/"geneve" all
+// resolve the same way; an already-valid code passes through unchanged.
+const CANTON_CODES = new Set([
+  'AG', 'AI', 'AR', 'BE', 'BL', 'BS', 'FR', 'GE', 'GL', 'GR', 'JU', 'LU', 'NE', 'NW', 'OW',
+  'SG', 'SH', 'SO', 'SZ', 'TG', 'TI', 'UR', 'VD', 'VS', 'ZG', 'ZH'
+])
+const CANTON_NAME_TO_CODE = {
+  aargau: 'AG', argovie: 'AG', argovia: 'AG',
+  'appenzell innerrhoden': 'AI', 'appenzell rhodes-interieures': 'AI', 'appenzello interno': 'AI',
+  'appenzell ausserrhoden': 'AR', 'appenzell rhodes-exterieures': 'AR', 'appenzello esterno': 'AR',
+  bern: 'BE', berne: 'BE', berna: 'BE',
+  'basel-landschaft': 'BL', 'bale-campagne': 'BL', 'basilea campagna': 'BL',
+  'basel-stadt': 'BS', 'bale-ville': 'BS', 'basilea citta': 'BS',
+  fribourg: 'FR', freiburg: 'FR', friburgo: 'FR',
+  geneva: 'GE', genf: 'GE', geneve: 'GE', ginevra: 'GE',
+  glarus: 'GL', glaris: 'GL', glarona: 'GL',
+  graubunden: 'GR', grisons: 'GR', grigioni: 'GR',
+  jura: 'JU', giura: 'JU',
+  lucerne: 'LU', luzern: 'LU', lucerna: 'LU',
+  neuchatel: 'NE', neuenburg: 'NE',
+  nidwalden: 'NW', nidwald: 'NW', nidvaldo: 'NW',
+  obwalden: 'OW', obwald: 'OW', obvaldo: 'OW',
+  'st. gallen': 'SG', 'st gallen': 'SG', 'saint-gall': 'SG', 'san gallo': 'SG', 'sankt gallen': 'SG',
+  schaffhausen: 'SH', schaffhouse: 'SH', sciaffusa: 'SH',
+  solothurn: 'SO', soleure: 'SO', soletta: 'SO',
+  schwyz: 'SZ', schwytz: 'SZ', svitto: 'SZ',
+  thurgau: 'TG', thurgovie: 'TG', turgovia: 'TG',
+  ticino: 'TI', tessin: 'TI',
+  uri: 'UR',
+  vaud: 'VD', waadt: 'VD',
+  valais: 'VS', wallis: 'VS', vallese: 'VS',
+  zug: 'ZG', zoug: 'ZG', zugo: 'ZG',
+  zurich: 'ZH', zuerich: 'ZH', zurigo: 'ZH'
+}
+
+function normalizeCanton(raw) {
+  if (!raw) return null
+  const trimmed = String(raw).trim()
+  if (!trimmed) return null
+  const upper = trimmed.toUpperCase()
+  if (CANTON_CODES.has(upper)) return upper
+  const key = trimmed
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+  return CANTON_NAME_TO_CODE[key] || null
+}
+
 // Italian (and to a lesser extent French) marital-status adjectives agree in
 // number — a real Swiss tax document describing a couple jointly reads
 // "Coniugati dal 2016", not the singular "coniugato" this list originally
@@ -154,7 +217,7 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
     }
   }
 
-  consider('clients', 'none', 'canton', 'Canton', byKey.canton, canton, 'canton')
+  consider('clients', 'none', 'canton', 'Canton', normalizeCanton(byKey.canton), canton, 'canton')
 
   if (byKey.full_name) {
     const { first, last } = splitFullName(byKey.full_name)
@@ -265,22 +328,24 @@ export function buildPropertySuggestionPayload({ extractedFields, existingProper
 }
 
 // Cross-references the child count from a "current_tax_sheet" document with
-// any child name found elsewhere (e.g. "child_name" on a childcare_costs
-// document) so the pending suggestion arrives pre-filled with a name
-// instead of an empty row — still a suggestion, never auto-applied (a date
-// of birth still has to come from the specialist).
+// any child name (and, when the same document states it, date of birth)
+// found elsewhere (e.g. "child_name"/"child_date_of_birth" on a
+// childcare_costs document) so the pending suggestion arrives pre-filled
+// instead of an empty row — still a suggestion, never auto-applied.
 //
 // childrenCount: parsed current_tax_sheet children_count, or null/undefined
 //   if not extracted.
-// candidateNames: child names found on OTHER documents (e.g. childcare
-//   invoices) for this same client/year.
+// candidates: [{ name, dateOfBirth }] found on OTHER documents (e.g.
+//   childcare invoices) for this same client/year — dateOfBirth is
+//   whatever raw string the document had (any of the formats normalizeDate
+//   above accepts), or null/undefined if that document didn't state one.
 // existingChildren: the client's current client_children rows.
 //
-// Returns an array of { full_name, key } proposals — capped at childrenCount
-// when it's known, so re-processing the same invoice twice (or two invoices
-// naming the same child) doesn't propose more children than the
-// personal-details document actually states. `key` is what the caller uses
-// as the suggestion's dedup key (a name, lowercased, or a stable
+// Returns an array of { full_name, date_of_birth, key } proposals — capped
+// at childrenCount when it's known, so re-processing the same invoice twice
+// (or two invoices naming the same child) doesn't propose more children
+// than the personal-details document actually states. `key` is what the
+// caller uses as the suggestion's dedup key (a name, lowercased, or a stable
 // "pending-N" for a placeholder — never blank, which would collide across
 // several placeholders on the same unique constraint).
 //
@@ -290,28 +355,33 @@ export function buildPropertySuggestionPayload({ extractedFields, existingProper
 // yet), the remaining slots still get a suggestion, just with an empty
 // name for the specialist to fill in when accepting it, rather than
 // silently producing nothing until a second document happens to name them.
-export function buildChildSuggestionCandidates({ childrenCount, candidateNames, existingChildren }) {
+export function buildChildSuggestionCandidates({ childrenCount, candidates, existingChildren }) {
   const existingNames = new Set(
     (existingChildren || []).map((c) => (c.full_name || '').trim().toLowerCase()).filter(Boolean)
   )
   const seen = new Set()
   const unique = []
-  for (const raw of candidateNames || []) {
-    const name = (raw || '').trim()
+  for (const candidate of candidates || []) {
+    const name = (candidate?.name || '').trim()
     if (!name) continue
     const key = name.toLowerCase()
     if (existingNames.has(key) || seen.has(key)) continue
     seen.add(key)
-    unique.push(name)
+    unique.push({ name, dateOfBirth: normalizeDate(candidate?.dateOfBirth) })
   }
 
   const existingCount = (existingChildren || []).length
   const missingCount = Number.isFinite(childrenCount) ? Math.max(0, childrenCount - existingCount) : unique.length
 
-  const named = unique.slice(0, missingCount).map((full_name) => ({ full_name, key: full_name.toLowerCase() }))
+  const named = unique.slice(0, missingCount).map((c) => ({
+    full_name: c.name,
+    date_of_birth: c.dateOfBirth || null,
+    key: c.name.toLowerCase()
+  }))
   const placeholderCount = Math.max(0, missingCount - named.length)
   const placeholders = Array.from({ length: placeholderCount }, (_, i) => ({
     full_name: '',
+    date_of_birth: null,
     key: `pending-${i + 1}`
   }))
   return [...named, ...placeholders]
