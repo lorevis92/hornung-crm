@@ -249,6 +249,15 @@ export default {
     addProperty: 'Liegenschaft hinzufügen',
     savedOk: 'Ihre Daten wurden gespeichert.',
     readOnly: 'Nur Lesen',
+    autoFillTitle: 'Aus Dokument oder eingefügtem Text ausfüllen',
+    autoFillHelp:
+      'Laden Sie ein vom Kunden gesendetes Dokument hoch oder fügen Sie den Text seiner E-Mail ein — die KI schlägt daraus die unten stehenden Personendaten zur Bestätigung vor.',
+    autoFillNeedsCase: 'Zuerst ein Steuerjahr eröffnen — der Upload braucht eines, um zugeordnet zu werden.',
+    autoFillFromFile: 'Aus Dokument ausfüllen',
+    autoFillFromText: 'Aus eingefügtem Text ausfüllen',
+    autoFillPastePlaceholder: 'E-Mail oder Nachricht des Kunden hier einfügen…',
+    autoFillSubmitText: 'Aus diesem Text extrahieren',
+    autoFillDone: 'Erledigt — Vorschläge unten prüfen.',
     f: {
       inCHSince: 'In der Schweiz seit',
       ageOnArrival: 'Alter bei Ankunft',

@@ -55,7 +55,12 @@ function textOf(message) {
   return (message.content || []).find((block) => block.type === 'text')?.text || ''
 }
 
-export async function runExtraction(admin, anthropic, documentId, { fromStatuses = ['uploaded'] } = {}) {
+export async function runExtraction(
+  admin,
+  anthropic,
+  documentId,
+  { fromStatuses = ['uploaded'], forcedCategoryCode = null } = {}
+) {
   // Atomic claim: only proceed if this row is still in one of the expected
   // starting states. Prevents a duplicate webhook delivery (pg_net can
   // retry) from processing it twice; api/retry-extraction.js passes
@@ -72,7 +77,8 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
   const mimeType = claimed.mime_type || ''
   const isPdf = mimeType === 'application/pdf'
   const isImage = SUPPORTED_IMAGE_TYPES.has(mimeType)
-  if (!isPdf && !isImage) {
+  const isText = mimeType === 'text/plain'
+  if (!isPdf && !isImage && !isText) {
     throw new Error(`Unsupported mime type for AI extraction: "${mimeType}"`)
   }
 
@@ -80,50 +86,64 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
     .from(STORAGE_BUCKET)
     .download(claimed.storage_path)
   if (downloadError) throw downloadError
-  const base64 = Buffer.from(await fileBlob.arrayBuffer()).toString('base64')
 
+  // Plain text (a specialist pasting a client's email into the
+  // Questionnaire's "fill from pasted text" action — see
+  // fillQuestionnaireFromText in src/lib/data/supabaseData.js and
+  // api/extract-document-now.js) goes to Claude as a text block, not
+  // base64 file data; there's no classification ambiguity for it either
+  // (forcedCategoryCode is always set for this path), so fileBlock is
+  // only ever built for the classification call below, which text never
+  // reaches.
+  const base64 = isText ? null : Buffer.from(await fileBlob.arrayBuffer()).toString('base64')
   const fileBlock = isPdf
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-    : { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } }
+    : isImage
+      ? { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } }
+      : { type: 'text', text: await fileBlob.text() }
 
-  // ------------------------------------------------ Phase 1: classify ------
-  const { data: categories, error: categoriesError } = await admin
-    .from('document_categories')
-    .select('code, label_en, label_de, label_fr, label_it')
-    .eq('active', true)
-    .order('sort_order', { ascending: true })
-  if (categoriesError) throw categoriesError
-  if (!categories?.length) throw new Error('No active document_categories to classify against.')
+  let categoryCode = forcedCategoryCode
+  if (!categoryCode) {
+    // ---------------------------------------------- Phase 1: classify ------
+    const { data: categories, error: categoriesError } = await admin
+      .from('document_categories')
+      .select('code, label_en, label_de, label_fr, label_it')
+      .eq('active', true)
+      .order('sort_order', { ascending: true })
+    if (categoriesError) throw categoriesError
+    if (!categories?.length) throw new Error('No active document_categories to classify against.')
 
-  const categoryList = categories
-    .map((c) => `- ${c.code}: ${c.label_en} / ${c.label_de} / ${c.label_fr} / ${c.label_it}`)
-    .join('\n')
+    const categoryList = categories
+      .map((c) => `- ${c.code}: ${c.label_en} / ${c.label_de} / ${c.label_fr} / ${c.label_it}`)
+      .join('\n')
 
-  const classifyMessage = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 200,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          fileBlock,
-          {
-            type: 'text',
-            text:
-              'This is a document uploaded for a Swiss tax declaration. Choose the single most ' +
-              'likely category from the list below (the document may be in English, German, ' +
-              `French or Italian):\n\n${categoryList}\n\n` +
-              'Respond with ONLY a JSON object, no other text: {"category_code": "<one of the codes above>"}'
-          }
-        ]
-      }
-    ]
-  })
+    const classifyMessage = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 200,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            fileBlock,
+            {
+              type: 'text',
+              text:
+                'This is a document uploaded for a Swiss tax declaration. Choose the single most ' +
+                'likely category from the list below (the document may be in English, German, ' +
+                `French or Italian):\n\n${categoryList}\n\n` +
+                'Respond with ONLY a JSON object, no other text: {"category_code": "<one of the codes above>"}'
+            }
+          ]
+        }
+      ]
+    })
 
-  const validCodes = new Set(categories.map((c) => c.code))
-  const categoryCode = parseJsonFromText(textOf(classifyMessage))?.category_code
-  if (!categoryCode || !validCodes.has(categoryCode)) {
-    throw new Error(`Classification did not return a known category_code (got: ${JSON.stringify(categoryCode)})`)
+    const validCodes = new Set(categories.map((c) => c.code))
+    const classified = parseJsonFromText(textOf(classifyMessage))?.category_code
+    if (!classified || !validCodes.has(classified)) {
+      throw new Error(`Classification did not return a known category_code (got: ${JSON.stringify(classified)})`)
+    }
+    categoryCode = classified
   }
 
   const { error: categoryUpdateError } = await admin
@@ -180,7 +200,7 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
                 'document). ' +
                 (isPdf
                   ? 'Also give the page number (starting at 1) that quote appears on.'
-                  : 'This is a single image with no page numbers — leave source_page null.') +
+                  : 'This has no page numbers — leave source_page null.') +
                 ' If you cannot pin down an exact quote (or, for a PDF, its page) for a field, leave ' +
                 'source_quote/source_page empty for that field rather than guessing — an empty value ' +
                 'is fine, an invented one is not.\n\n' +

@@ -250,6 +250,15 @@ export default {
     addProperty: 'Ajouter un immeuble',
     savedOk: 'Vos données ont été enregistrées.',
     readOnly: 'Lecture seule',
+    autoFillTitle: 'Remplir à partir d\'un document ou d\'un texte collé',
+    autoFillHelp:
+      'Téléchargez un document envoyé par le client, ou collez le texte de son e-mail, et laissez l\'IA proposer les données personnelles ci-dessous comme suggestions à confirmer.',
+    autoFillNeedsCase: 'Ouvrez d\'abord une année fiscale — le téléchargement doit y être rattaché.',
+    autoFillFromFile: 'Remplir à partir d\'un document',
+    autoFillFromText: 'Remplir à partir d\'un texte collé',
+    autoFillPastePlaceholder: 'Collez ici l\'e-mail ou le message du client…',
+    autoFillSubmitText: 'Extraire de ce texte',
+    autoFillDone: 'Terminé — vérifiez les suggestions ci-dessous.',
     f: {
       inCHSince: 'En Suisse depuis',
       ageOnArrival: "Âge à l'arrivée",

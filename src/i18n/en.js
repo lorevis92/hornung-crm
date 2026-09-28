@@ -250,6 +250,15 @@ export default {
     addProperty: 'Add a property',
     savedOk: 'Your data has been saved.',
     readOnly: 'Read only',
+    autoFillTitle: 'Fill from a document or pasted text',
+    autoFillHelp:
+      'Upload a file the client sent, or paste the text of their email, and let the AI propose the personal details below as suggestions to confirm.',
+    autoFillNeedsCase: 'Open a tax year first — this needs one to file the upload under.',
+    autoFillFromFile: 'Fill from a document',
+    autoFillFromText: 'Fill from pasted text',
+    autoFillPastePlaceholder: "Paste the client's email or message here…",
+    autoFillSubmitText: 'Extract from this text',
+    autoFillDone: 'Done — check the suggestions below.',
     f: {
       inCHSince: 'In Switzerland since',
       ageOnArrival: 'Age on arrival',

@@ -492,6 +492,30 @@ export const supabaseApi = {
     return callApi('/api/reprocess-client-year', { clientId, taxYear: Number(taxYear) })
   },
 
+  // Questionnaire "fill from a document/pasted text" action: routes through
+  // the same upload + extraction pipeline as any other document (so the
+  // result lands as client_field_suggestions to confirm, not a direct
+  // write), but forces category_code so there's no classification ambiguity
+  // and triggers extraction synchronously instead of waiting for the async
+  // pg_net webhook (see api/extract-document-now.js).
+  async fillQuestionnaireFromDocument(caseId, file, meta = {}) {
+    const caseDoc = await this.uploadDocument(caseId, file, { ...meta, direction: 'client_upload' })
+    const clientDoc = unwrap(
+      await supabase
+        .from('client_documents')
+        .select('id')
+        .eq('source_case_document_id', caseDoc.id)
+        .maybeSingle()
+    )
+    if (!clientDoc) throw new Error('MIRROR_NOT_READY')
+    return callApi('/api/extract-document-now', { documentId: clientDoc.id, categoryCode: 'current_tax_sheet' })
+  },
+
+  async fillQuestionnaireFromText(caseId, text, meta = {}) {
+    const file = new File([text], `pasted-text-${Date.now()}.txt`, { type: 'text/plain' })
+    return this.fillQuestionnaireFromDocument(caseId, file, meta)
+  },
+
   async getTaxAggregate(clientId, taxYear) {
     const { data: aggregate, error } = await supabase
       .from('tax_aggregates')

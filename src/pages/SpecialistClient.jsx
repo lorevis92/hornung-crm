@@ -7,6 +7,7 @@ import {
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
 import QuestionnaireForm from '../components/QuestionnaireForm'
+import QuestionnaireAutoFill from '../components/QuestionnaireAutoFill'
 import { EmptyState, Field, PageLoader, Select, Spinner, TextInput, Textarea } from '../components/ui'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
@@ -388,8 +389,17 @@ export default function SpecialistClient() {
       ) : null}
 
       {tab === 'questionnaire' ? (
-        <section>
-          <p className="section-sub mb-4">{t('specialist.questionnaireHelp')}</p>
+        <section className="space-y-4">
+          <p className="section-sub">{t('specialist.questionnaireHelp')}</p>
+          <QuestionnaireAutoFill
+            caseId={cases[0]?.id}
+            clientId={clientId}
+            taxYear={cases[0]?.tax_year}
+            onDone={async () => {
+              setSuggestions(await api.listFieldSuggestions(clientId))
+              setQuestionnaireRefreshToken((n) => n + 1)
+            }}
+          />
           <QuestionnaireForm key={questionnaireRefreshToken} clientId={clientId} client={client} />
         </section>
       ) : null}

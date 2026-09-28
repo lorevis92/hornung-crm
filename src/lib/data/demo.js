@@ -574,6 +574,32 @@ export const demoApi = {
     return wait(doc)
   },
 
+  // Demo mode has no real AI to read a document or pasted email text with —
+  // unlike the other demo extraction shortcuts above, there are no
+  // pre-seeded fields to fall back on here, since this is meant to be a
+  // brand-new upload. So this honestly does the only truthful thing it can:
+  // files the document under current_tax_sheet and marks it 'extracted'
+  // with zero fields, which is a known, visible demo-mode limitation rather
+  // than a silent one (syncPersonalDetails below is a no-op without fields).
+  async fillQuestionnaireFromDocument(caseId, file, meta = {}) {
+    const doc = await this.uploadDocument(caseId, file, { ...meta, direction: 'client_upload' })
+    const s = store()
+    const stored = s.documents.find((d) => d.id === doc.id)
+    if (stored) {
+      stored.category_code = 'current_tax_sheet'
+      stored.status = 'extracted'
+      stored.processed_at = iso(Date.now())
+    }
+    commit()
+    await this.syncPersonalDetails(doc.id)
+    return wait({ ok: true })
+  },
+
+  async fillQuestionnaireFromText(caseId, text, meta = {}) {
+    const file = new File([text], `pasted-text-${Date.now()}.txt`, { type: 'text/plain' })
+    return this.fillQuestionnaireFromDocument(caseId, file, meta)
+  },
+
   async deleteDocument(doc) {
     const s = store()
     s.documents = s.documents.filter((d) => d.id !== doc.id)

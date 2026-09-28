@@ -248,6 +248,15 @@ export default {
     addProperty: 'Aggiungi un immobile',
     savedOk: 'I tuoi dati sono stati salvati.',
     readOnly: 'Sola lettura',
+    autoFillTitle: 'Compila da un documento o da testo incollato',
+    autoFillHelp:
+      'Carica un documento inviato dal cliente, oppure incolla il testo della sua email, e lascia che l\'AI proponga i dati anagrafici qui sotto come suggerimenti da confermare.',
+    autoFillNeedsCase: 'Apri prima un anno fiscale — il caricamento deve essere associato a uno.',
+    autoFillFromFile: 'Compila da un documento',
+    autoFillFromText: 'Compila da testo incollato',
+    autoFillPastePlaceholder: "Incolla qui l'email o il messaggio del cliente…",
+    autoFillSubmitText: 'Estrai da questo testo',
+    autoFillDone: 'Fatto — controlla i suggerimenti qui sotto.',
     f: {
       inCHSince: 'In Svizzera dal',
       ageOnArrival: "Età all'arrivo",
