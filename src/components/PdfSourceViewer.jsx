@@ -156,11 +156,14 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
     await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
 
     let rects = []
+    console.log('[PdfSourceViewer DEBUG]', { quote, clamped, page, willTry: quote && clamped === (page || 1) })
     if (quote && clamped === (page || 1)) {
       const textContent = await pdfPage.getTextContent()
       const strings = textContent.items.map((i) => i.str)
       const matchedIdx = findQuoteItemIndexes(strings, quote)
+      console.log('[PdfSourceViewer DEBUG] matchedIdx', matchedIdx, 'itemCount', strings.length)
       rects = matchedIdx.map((idx) => itemRect(textContent.items[idx], viewport))
+      console.log('[PdfSourceViewer DEBUG] rects', rects)
     }
     setHighlights(rects)
     if (rects.length) {
