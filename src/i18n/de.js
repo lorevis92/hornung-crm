@@ -334,7 +334,10 @@ export default {
     unarchive: 'Wiederherstellen',
     archived: 'Archiviert',
     editClient: 'Daten bearbeiten',
-    editClientTitle: 'Kundendaten bearbeiten',
+    editClientTitle: 'Kontoeinstellungen bearbeiten',
+    editClientHelp:
+      'Telefon, Kanton und Korrespondenzsprache. Für Name, Geburtsdatum, Zivilstand, Adresse, Nationalität, Bewilligung usw. den Tab "Fragebogen" verwenden.',
+    editClientGoToQuestionnaire: 'Fragebogen öffnen',
     suggestionsTitle: 'Vorschläge aus einem Dokument',
     suggestionText: '{field}: „{from}“ → „{to}“',
     suggestionPropertyText: 'Neue Liegenschaft gefunden — {details}',

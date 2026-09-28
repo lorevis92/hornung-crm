@@ -149,7 +149,7 @@ function RowCard({ children, onRemove, disabled, label }) {
   )
 }
 
-export default function QuestionnaireForm({ clientId, readOnly = false, onSaved }) {
+export default function QuestionnaireForm({ clientId, client, readOnly = false, onSaved }) {
   const { t } = useI18n()
   const toast = useToast()
   const [loading, setLoading] = useState(true)
@@ -168,7 +168,19 @@ export default function QuestionnaireForm({ clientId, readOnly = false, onSaved 
     api.getQuestionnaire(clientId).then((data) => {
       if (!active) return
       setDetails(data.details || {})
-      setPrimary(data.persons.find((p) => p.person_type === 'primary') || emptyPerson('primary'))
+      // A client's name lives on `clients` from the moment they're invited,
+      // but the questionnaire's own primary-person row only exists once
+      // someone has saved this form at least once. Seed the name from the
+      // client record so the taxpayer section never shows blank where the
+      // header just showed a real name — and so saving here (which mirrors
+      // primary's name back onto `clients`) doesn't quietly blank it out.
+      setPrimary(
+        data.persons.find((p) => p.person_type === 'primary') || {
+          ...emptyPerson('primary'),
+          first_name: client?.first_name || '',
+          last_name: client?.last_name || ''
+        }
+      )
       setSpouse(data.persons.find((p) => p.person_type === 'spouse') || null)
       setChildren(data.children || [])
       setVehicles(data.vehicles || [])

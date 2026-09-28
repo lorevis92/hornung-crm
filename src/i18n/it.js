@@ -333,7 +333,10 @@ export default {
     unarchive: 'Ripristina',
     archived: 'Archiviato',
     editClient: 'Modifica dati',
-    editClientTitle: 'Modifica dati cliente',
+    editClientTitle: 'Modifica impostazioni account',
+    editClientHelp:
+      'Telefono, cantone e lingua di corrispondenza. Per nome, data di nascita, stato civile, indirizzo, nazionalità, permesso ecc. usa la scheda Questionario.',
+    editClientGoToQuestionnaire: 'Apri questionario',
     suggestionsTitle: 'Aggiornamenti suggeriti da un documento',
     suggestionText: '{field}: "{from}" → "{to}"',
     suggestionPropertyText: 'Nuova proprietà trovata — {details}',

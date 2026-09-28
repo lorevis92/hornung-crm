@@ -154,15 +154,26 @@ export default function SpecialistClient() {
     }
   }
 
+  // Name, date of birth, marital status, address, nationality, permit, etc.
+  // all live on the questionnaire's "primary" person and its details record —
+  // the same set the extraction auto-fill writes to — so this popup only
+  // covers the account-level fields that have no home there (phone, canton,
+  // correspondence language). Editing name here used to write straight to
+  // `clients` without touching the questionnaire's primary row, which could
+  // leave the two silently out of sync; the Questionnaire tab is now the
+  // single place for the taxpayer's own identity.
   const openEdit = () => {
     setEditForm({
-      first_name: client.first_name || '',
-      last_name: client.last_name || '',
       phone: client.phone || '',
       canton: client.canton || '',
       preferred_language: client.preferred_language || 'en'
     })
     setEditingClient(true)
+  }
+
+  const goToQuestionnaire = () => {
+    setEditingClient(false)
+    setTab('questionnaire')
   }
 
   const saveEdit = async (e) => {
@@ -373,7 +384,7 @@ export default function SpecialistClient() {
       {tab === 'questionnaire' ? (
         <section>
           <p className="section-sub mb-4">{t('specialist.questionnaireHelp')}</p>
-          <QuestionnaireForm clientId={clientId} />
+          <QuestionnaireForm clientId={clientId} client={client} />
         </section>
       ) : null}
 
@@ -424,9 +435,13 @@ export default function SpecialistClient() {
         open={editingClient}
         onClose={() => (savingEdit ? null : setEditingClient(false))}
         title={t('specialist.editClientTitle')}
+        description={t('specialist.editClientHelp')}
         size="sm"
         footer={
           <>
+            <button type="button" className="btn-secondary btn-sm" onClick={goToQuestionnaire}>
+              {t('specialist.editClientGoToQuestionnaire')}
+            </button>
             <button
               type="button"
               className="btn-secondary btn-sm"
@@ -444,22 +459,6 @@ export default function SpecialistClient() {
       >
         {editForm ? (
           <form id="edit-client" onSubmit={saveEdit} className="grid gap-4 sm:grid-cols-2">
-            <Field label={t('specialist.firstName')} htmlFor="e-first" required>
-              <TextInput
-                id="e-first"
-                required
-                value={editForm.first_name}
-                onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-              />
-            </Field>
-            <Field label={t('specialist.lastName')} htmlFor="e-last" required>
-              <TextInput
-                id="e-last"
-                required
-                value={editForm.last_name}
-                onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-              />
-            </Field>
             <Field label={t('specialist.phone')} htmlFor="e-phone" className="sm:col-span-2">
               <TextInput
                 id="e-phone"

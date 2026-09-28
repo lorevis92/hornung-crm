@@ -335,7 +335,10 @@ export default {
     unarchive: 'Restore',
     archived: 'Archived',
     editClient: 'Edit info',
-    editClientTitle: 'Edit client information',
+    editClientTitle: 'Edit account settings',
+    editClientHelp:
+      'Phone, canton and correspondence language. For name, date of birth, marital status, address, nationality, permit, etc., use the Questionnaire tab.',
+    editClientGoToQuestionnaire: 'Open Questionnaire',
     suggestionsTitle: 'Suggested updates from a document',
     suggestionText: '{field}: "{from}" → "{to}"',
     suggestionPropertyText: 'New property found — {details}',

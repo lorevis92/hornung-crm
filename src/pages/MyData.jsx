@@ -66,7 +66,7 @@ export default function MyData() {
         </form>
       </section>
 
-      <QuestionnaireForm clientId={client.id} onSaved={refreshClient} />
+      <QuestionnaireForm clientId={client.id} client={client} onSaved={refreshClient} />
     </div>
   )
 }
