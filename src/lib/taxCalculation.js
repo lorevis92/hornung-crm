@@ -670,22 +670,28 @@ export function computeTaxAggregate({
   // Wealth exempt amount (cantonal only — no federal wealth tax exists) —
   // base amount by marital status, plus a per-child increment for the
   // cantons that have one, using the same qualifying-children list as the
-  // income-side child deduction above.
-  const wealthExemptParam = useParam(isMarried ? 'wealth_exempt_married' : 'wealth_exempt_single')
-  const wealthExemptChildParam = qualifyingChildren.length ? useParam('wealth_exempt_child') : null
-  const wealthExemptChildTotal = (wealthExemptChildParam?.value_numeric || 0) * qualifyingChildren.length
-  const wealthExemptTotal = (wealthExemptParam?.value_numeric || 0) + wealthExemptChildTotal
-  if (wealthExemptTotal) {
-    entries.push(
-      makeSyntheticEntry({
-        contributionType: 'wealth_minus',
-        rawAmount: wealthExemptTotal,
-        categoryLabel: 'Wealth exemption',
-        fieldLabel: isMarried ? 'Net wealth exempt amount (married)' : 'Net wealth exempt amount (single)',
-        note: wealthExemptChildTotal ? `includes CHF ${wealthExemptChildTotal.toLocaleString('de-CH')} for ${qualifyingChildren.length} child(ren)` : null,
-        groupKey: 'wealth'
-      })
-    )
+  // income-side child deduction above. Only applies against actual wealth:
+  // with no wealth_plus entry at all (e.g. every document was deleted), the
+  // client has nothing for this exemption to exempt, so skip it rather than
+  // manufacture a negative taxable wealth out of a deduction with no base.
+  const hasWealthData = entries.some((e) => e.contributionType === 'wealth_plus')
+  if (hasWealthData) {
+    const wealthExemptParam = useParam(isMarried ? 'wealth_exempt_married' : 'wealth_exempt_single')
+    const wealthExemptChildParam = qualifyingChildren.length ? useParam('wealth_exempt_child') : null
+    const wealthExemptChildTotal = (wealthExemptChildParam?.value_numeric || 0) * qualifyingChildren.length
+    const wealthExemptTotal = (wealthExemptParam?.value_numeric || 0) + wealthExemptChildTotal
+    if (wealthExemptTotal) {
+      entries.push(
+        makeSyntheticEntry({
+          contributionType: 'wealth_minus',
+          rawAmount: wealthExemptTotal,
+          categoryLabel: 'Wealth exemption',
+          fieldLabel: isMarried ? 'Net wealth exempt amount (married)' : 'Net wealth exempt amount (single)',
+          note: wealthExemptChildTotal ? `includes CHF ${wealthExemptChildTotal.toLocaleString('de-CH')} for ${qualifyingChildren.length} child(ren)` : null,
+          groupKey: 'wealth'
+        })
+      )
+    }
   }
 
   // Round every contributing amount to whole CHF now, once — capping/
@@ -700,9 +706,19 @@ export function computeTaxAggregate({
     entry.effective = entry.needsVerification ? 0 : Math.round(entry.effective)
   }
 
-  const taxableIncomeCantonal =
+  // Structural floor at zero: taxable income/wealth is never negative in
+  // Swiss tax law (a loss carries forward, it doesn't produce a negative
+  // bill), regardless of how the deductions/exemptions above combined —
+  // the same backstop already applied per-deduction to the medical and
+  // donation caps. This can make the headline total not equal the sum of
+  // the rows in `components` in the pathological case (deductions alone
+  // exceeding a near-empty base, e.g. right after every document was
+  // deleted); that's an intentional last resort, not the normal path.
+  const taxableIncomeCantonal = Math.max(
+    0,
     entries.filter((e) => e.contributionType === 'income_plus').reduce((sum, e) => sum + e.effective, 0) -
-    entries.filter((e) => e.contributionType === 'income_minus').reduce((sum, e) => sum + e.effective, 0)
+      entries.filter((e) => e.contributionType === 'income_minus').reduce((sum, e) => sum + e.effective, 0)
+  )
 
   const wealthPlus = entries
     .filter((e) => e.contributionType === 'wealth_plus')
@@ -710,7 +726,7 @@ export function computeTaxAggregate({
   const wealthMinus = entries
     .filter((e) => e.contributionType === 'wealth_minus')
     .reduce((sum, e) => sum + e.effective, 0)
-  const taxableWealthCantonal = wealthPlus - wealthMinus
+  const taxableWealthCantonal = Math.max(0, wealthPlus - wealthMinus)
 
   // Federal income isn't computed separately yet — treated as equal to the
   // cantonal figure until federal-specific rules are mapped. There is no
