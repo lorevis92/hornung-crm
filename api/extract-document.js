@@ -18,9 +18,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, serviceClient } from './_lib.js'
 import { recalculateAndPersist } from './_recalc.js'
-import { syncPersonalDetails } from './_personalDetails.js'
-import { syncPropertySuggestion } from './_propertySuggestion.js'
-import { syncChildSuggestions } from './_childSuggestion.js'
 import { baseFieldKey, REPEATABLE_FIELD_KEYS } from '../src/lib/repeatableFields.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
@@ -247,47 +244,14 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
   // here too, the same as an edit/exclude/delete already does from the
   // browser. Best-effort: a failure here shouldn't mark the extraction
   // itself (which did succeed) as failed — the manual "Recalculate" button
-  // remains a fallback.
+  // remains a fallback. recalculateAndPersist() also re-syncs the client's
+  // registry (personal details, property, children) for every eligible
+  // document of this client/year as its own first step, not just this one
+  // — see api/_recalc.js — so nothing further is needed here for that.
   try {
     await recalculateAndPersist(admin, claimed.client_id, claimed.tax_year)
   } catch (recalcError) {
     console.error(`[extract-document] recalculation failed for document ${documentId}:`, recalcError)
-  }
-
-  // "Personal details" (current_tax_sheet) documents feed the client's
-  // registry directly — empty fields are filled in, fields that already
-  // hold a different value become a pending suggestion instead. Same
-  // best-effort reasoning as the recalculation above: this document was
-  // still extracted successfully either way.
-  if (categoryCode === 'current_tax_sheet') {
-    try {
-      await syncPersonalDetails(admin, documentId)
-    } catch (syncError) {
-      console.error(`[extract-document] personal-details sync failed for document ${documentId}:`, syncError)
-    }
-  }
-
-  // "Property tax value" documents propose a client_properties row —
-  // address + tax value + rental income, deduplicated per source document
-  // so re-extracting the same one updates the proposal instead of
-  // duplicating it.
-  if (categoryCode === 'property_tax_value') {
-    try {
-      await syncPropertySuggestion(admin, documentId)
-    } catch (syncError) {
-      console.error(`[extract-document] property suggestion failed for document ${documentId}:`, syncError)
-    }
-  }
-
-  // A child's name can come from either document — re-run whenever either
-  // one lands, so whichever arrives second is the one that actually
-  // produces a useful (name-filled) suggestion.
-  if (categoryCode === 'current_tax_sheet' || categoryCode === 'childcare_costs') {
-    try {
-      await syncChildSuggestions(admin, claimed.client_id, claimed.tax_year)
-    } catch (syncError) {
-      console.error(`[extract-document] child suggestion sync failed for document ${documentId}:`, syncError)
-    }
   }
 }
 

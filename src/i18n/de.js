@@ -605,6 +605,7 @@ export default {
     uncertaintyViewSource: 'Im Dokument ansehen',
     uncertaintyConfirmAsIs: 'So bestätigen',
     uncertaintyRecalculateFirst: 'Neu berechnen, um hier direkt zu korrigieren.',
+    uncertaintyReloadFromDocuments: 'Zum Fall wechseln und alles aus den Dokumenten neu laden',
     taxableIncomeCantonal: 'Steuerbares Einkommen (kantonal)',
     taxableWealthCantonal: 'Steuerbares Vermögen (kantonal)',
     taxableIncomeFederal: 'Steuerbares Einkommen (Bund)',

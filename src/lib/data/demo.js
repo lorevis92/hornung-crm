@@ -957,6 +957,19 @@ export const demoApi = {
       }
     }
 
+    // Registry catch-up on every recalculation — see api/_recalc.js for
+    // the real-backend equivalent and why this can't be left to only run
+    // as a side effect of a fresh extraction or of a specialist happening
+    // to open a page that also triggers it.
+    for (const doc of allDocuments) {
+      if (doc.status !== 'extracted') continue
+      if (doc.category_code === 'current_tax_sheet') await this.syncPersonalDetails(doc.id)
+      else if (doc.category_code === 'property_tax_value') await this.syncPropertySuggestion(doc.id)
+    }
+    if (allDocuments.some((d) => d.status === 'extracted' && ['current_tax_sheet', 'childcare_costs'].includes(d.category_code))) {
+      await this.syncChildSuggestions(clientId, year)
+    }
+
     const primaryPerson = s.persons.find((p) => p.client_id === clientId && p.person_type === 'primary') || null
     const spousePerson = s.persons.find((p) => p.client_id === clientId && p.person_type === 'spouse') || null
     const children = s.children.filter((c) => c.client_id === clientId)

@@ -5,6 +5,9 @@
 // computeTaxAggregate, and persists the result to tax_aggregates /
 // tax_aggregate_components.
 import { computeTaxAggregate } from '../src/lib/taxCalculation.js'
+import { syncPersonalDetails } from './_personalDetails.js'
+import { syncPropertySuggestion } from './_propertySuggestion.js'
+import { syncChildSuggestions } from './_childSuggestion.js'
 
 export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en') {
   const { data: client, error: clientError } = await admin
@@ -14,16 +17,6 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
     .maybeSingle()
   if (clientError) throw clientError
   if (!client) throw new Error('CLIENT_NOT_FOUND')
-
-  const [personsRes, childrenRes] = await Promise.all([
-    admin.from('client_persons').select('*').eq('client_id', clientId),
-    admin.from('client_children').select('*').eq('client_id', clientId)
-  ])
-  if (personsRes.error) throw personsRes.error
-  if (childrenRes.error) throw childrenRes.error
-  const primaryPerson = (personsRes.data || []).find((p) => p.person_type === 'primary') || null
-  const spousePerson = (personsRes.data || []).find((p) => p.person_type === 'spouse') || null
-  const children = childrenRes.data || []
 
   // Every document for this client/year, not just the categorized ones —
   // readiness needs to see a document still stuck at 'uploaded'/'extracting'
@@ -36,6 +29,56 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
     .eq('client_id', clientId)
     .eq('tax_year', taxYear)
   if (docsError) throw docsError
+
+  // Registry catch-up, run on every recalculation rather than only as a
+  // side effect of a fresh extraction (api/extract-document.js) or of a
+  // specialist happening to open a page that also triggers it
+  // (SpecialistClient.jsx's own catch-up on mount). Neither of those two
+  // is guaranteed to ever run for a given client — an older document
+  // extracted before this sync existed, or one nobody has revisited the
+  // client's own page for since, is exactly what left client_persons
+  // (and so the Questionnaire and the marital-status-driven wealth
+  // exemption) empty for a client with data sitting right there in
+  // extracted_document_fields. Recalculation itself, by contrast, runs
+  // constantly — on every extraction, edit, suggestion accept, and the
+  // "reload everything" action — so anchoring the catch-up here instead
+  // reaches every client, not just the ones whose specialist happens to
+  // click through a specific page. Run BEFORE reading client_persons/
+  // client_children below, so this same call already computes the
+  // correct total instead of only fixing the registry for next time.
+  for (const doc of allDocuments || []) {
+    if (doc.status !== 'extracted') continue
+    if (doc.category_code === 'current_tax_sheet') {
+      try {
+        await syncPersonalDetails(admin, doc.id)
+      } catch (error) {
+        console.error(`[recalculateAndPersist] personal-details catch-up failed for document ${doc.id}:`, error)
+      }
+    } else if (doc.category_code === 'property_tax_value') {
+      try {
+        await syncPropertySuggestion(admin, doc.id)
+      } catch (error) {
+        console.error(`[recalculateAndPersist] property-suggestion catch-up failed for document ${doc.id}:`, error)
+      }
+    }
+  }
+  if ((allDocuments || []).some((d) => d.status === 'extracted' && ['current_tax_sheet', 'childcare_costs'].includes(d.category_code))) {
+    try {
+      await syncChildSuggestions(admin, clientId, taxYear)
+    } catch (error) {
+      console.error(`[recalculateAndPersist] child-suggestion catch-up failed for client ${clientId}/${taxYear}:`, error)
+    }
+  }
+
+  const [personsRes, childrenRes] = await Promise.all([
+    admin.from('client_persons').select('*').eq('client_id', clientId),
+    admin.from('client_children').select('*').eq('client_id', clientId)
+  ])
+  if (personsRes.error) throw personsRes.error
+  if (childrenRes.error) throw childrenRes.error
+  const primaryPerson = (personsRes.data || []).find((p) => p.person_type === 'primary') || null
+  const spousePerson = (personsRes.data || []).find((p) => p.person_type === 'spouse') || null
+  const children = childrenRes.data || []
 
   const documents = (allDocuments || []).filter((d) => d.category_code)
   const documentIds = documents.map((d) => d.id)

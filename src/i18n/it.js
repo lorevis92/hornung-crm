@@ -604,6 +604,7 @@ export default {
     uncertaintyViewSource: 'Vedi nel documento',
     uncertaintyConfirmAsIs: 'Conferma così com\'è',
     uncertaintyRecalculateFirst: 'Ricalcola per abilitare una correzione diretta qui.',
+    uncertaintyReloadFromDocuments: 'Vai al fascicolo e ricarica tutto dai documenti',
     taxableIncomeCantonal: 'Reddito imponibile (cantonale)',
     taxableWealthCantonal: 'Patrimonio imponibile (cantonale)',
     taxableIncomeFederal: 'Reddito imponibile (federale)',

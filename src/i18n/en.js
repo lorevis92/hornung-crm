@@ -606,6 +606,7 @@ export default {
     uncertaintyViewSource: 'View in document',
     uncertaintyConfirmAsIs: 'Confirm as-is',
     uncertaintyRecalculateFirst: 'Recalculate to enable a direct fix here.',
+    uncertaintyReloadFromDocuments: 'Go to the case and reload everything from the documents',
     taxableIncomeCantonal: 'Taxable income (cantonal)',
     taxableWealthCantonal: 'Taxable wealth (cantonal)',
     taxableIncomeFederal: 'Taxable income (federal)',

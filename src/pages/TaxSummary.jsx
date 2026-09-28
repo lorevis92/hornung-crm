@@ -280,7 +280,11 @@ export default function TaxSummary() {
   //    here instead of going to find the field elsewhere;
   //  - separate: separately-taxed or reference-only items (pension
   //    withdrawals, inheritances, a vehicle's purchase price, ...) — not
-  //    really "wrong", nothing to fix, just point at the source document.
+  //    really "wrong", nothing to fix, just point at the source document;
+  //  - missingRegistry: client_persons has no data at all for this client
+  //    yet (the sync never having reached them) — not a document-level
+  //    fix, so the action is a link to the case page's "Reload everything
+  //    from the documents" action instead.
   const uncertainItems = useMemo(() => {
     if (!result) return []
     const paramItems = (result.aggregate?.uncertain_parameters || []).map((label) => ({
@@ -295,10 +299,13 @@ export default function TaxSummary() {
     const foreignCurrencyItems = flagged
       .filter((c) => /foreign currency/.test(c.field_label || ''))
       .map((c) => ({ kind: 'foreignCurrency', key: `fx:${c.document_id}:${c.field_key}`, label: c.field_label, component: c }))
+    const missingRegistryItems = flagged
+      .filter((c) => /marital status unknown/.test(c.field_label || ''))
+      .map((c) => ({ kind: 'missingRegistry', key: `registry:${c.document_id}:${c.field_key}`, label: c.field_label }))
     const separateItems = flagged
       .filter((c) => /separately taxed|no cantonal depreciation/.test(c.field_label || ''))
       .map((c) => ({ kind: 'separate', key: `sep:${c.document_id}:${c.field_key}`, label: c.field_label, component: c }))
-    return [...paramItems, ...missingParamItems, ...foreignCurrencyItems, ...separateItems]
+    return [...paramItems, ...missingParamItems, ...foreignCurrencyItems, ...missingRegistryItems, ...separateItems]
   }, [result])
 
   // Stable signature for "has the set of uncertain items changed since the
@@ -963,6 +970,14 @@ export default function TaxSummary() {
                             {t('summary.uncertaintyViewSource')}
                           </button>
                         ) : null}
+                      </div>
+                    ) : null}
+
+                    {item.kind === 'missingRegistry' ? (
+                      <div className="mt-1.5 pl-[22px]">
+                        <Link to={`/year/${caseId}`} className="text-[12.5px] font-medium underline">
+                          {t('summary.uncertaintyReloadFromDocuments')}
+                        </Link>
                       </div>
                     ) : null}
                   </li>

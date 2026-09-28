@@ -108,11 +108,14 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
     // share the same field names (first_name, date_of_birth, ...) but stay
     // suggestion-only regardless, since accepting one there creates/renames
     // a person's identity rather than correcting the client's own record.
+    // That includes the empty case: a spouse row that doesn't exist yet is
+    // itself an identity to confirm, the same as a name/DOB conflict on an
+    // existing one — never auto-created behind the specialist's back.
     const forceApply =
       person === 'primary' &&
       FORCE_APPLY_FIELDS.has(field) &&
       (confidence == null || confidence >= FORCE_APPLY_THRESHOLD)
-    if (!current || (forceApply && current !== value)) {
+    if (person !== 'spouse' && (!current || (forceApply && current !== value))) {
       autoFill.push({ table, person, field, value })
     } else if (current !== value) {
       suggestions.push({ table, person, field, fieldLabel, currentValue: current, suggestedValue: value })

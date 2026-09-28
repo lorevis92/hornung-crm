@@ -742,21 +742,46 @@ export function computeTaxAggregate({
   // manufacture a negative taxable wealth out of a deduction with no base.
   const hasWealthData = entries.some((e) => e.contributionType === 'wealth_plus')
   if (hasWealthData) {
-    const wealthExemptParam = useParam(isMarried ? 'wealth_exempt_married' : 'wealth_exempt_single')
-    const wealthExemptChildParam = qualifyingChildren.length ? useParam('wealth_exempt_child') : null
-    const wealthExemptChildTotal = (wealthExemptChildParam?.value_numeric || 0) * qualifyingChildren.length
-    const wealthExemptTotal = (wealthExemptParam?.value_numeric || 0) + wealthExemptChildTotal
-    if (wealthExemptTotal) {
+    // Married vs. single picks between CHF 45'000 and CHF 90'000 (Weber's
+    // exact case) — a real difference, not a rounding nuance. primaryPerson
+    // being entirely absent (no client_persons row at all, e.g. the
+    // registry sync never having reached this client yet — see
+    // api/_recalc.js) means marital status is genuinely UNKNOWN, not
+    // "known to be single". isMarriedHousehold() can't tell those apart
+    // (it just sees a falsy marital_status either way), so that
+    // distinction has to be made here instead of silently defaulting to
+    // the single amount.
+    if (!primaryPerson) {
       entries.push(
         makeSyntheticEntry({
           contributionType: 'wealth_minus',
-          rawAmount: wealthExemptTotal,
+          rawAmount: 0,
           categoryLabel: 'Wealth exemption',
-          fieldLabel: isMarried ? 'Net wealth exempt amount (married)' : 'Net wealth exempt amount (single)',
-          note: wealthExemptChildTotal ? `includes CHF ${wealthExemptChildTotal.toLocaleString('de-CH')} for ${qualifyingChildren.length} child(ren)` : null,
+          fieldLabel: 'Net wealth exempt amount — marital status unknown',
+          note:
+            'no registry data for this client yet (client_persons is empty) — marital status unknown, ' +
+            'exemption not applied; sync the client\'s personal details and recalculate',
+          needsVerification: true,
           groupKey: 'wealth'
         })
       )
+    } else {
+      const wealthExemptParam = useParam(isMarried ? 'wealth_exempt_married' : 'wealth_exempt_single')
+      const wealthExemptChildParam = qualifyingChildren.length ? useParam('wealth_exempt_child') : null
+      const wealthExemptChildTotal = (wealthExemptChildParam?.value_numeric || 0) * qualifyingChildren.length
+      const wealthExemptTotal = (wealthExemptParam?.value_numeric || 0) + wealthExemptChildTotal
+      if (wealthExemptTotal) {
+        entries.push(
+          makeSyntheticEntry({
+            contributionType: 'wealth_minus',
+            rawAmount: wealthExemptTotal,
+            categoryLabel: 'Wealth exemption',
+            fieldLabel: isMarried ? 'Net wealth exempt amount (married)' : 'Net wealth exempt amount (single)',
+            note: wealthExemptChildTotal ? `includes CHF ${wealthExemptChildTotal.toLocaleString('de-CH')} for ${qualifyingChildren.length} child(ren)` : null,
+            groupKey: 'wealth'
+          })
+        )
+      }
     }
   }
 
