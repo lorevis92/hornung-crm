@@ -19,19 +19,46 @@ function itemRect(item, viewport) {
   return { left: tx[4], top: tx[5] - fontHeight, width, height: fontHeight * 1.3 }
 }
 
+// Case-insensitive substring search with the same progressive-shortening
+// fallback as findQuoteItemIndexes (src/lib/pdfHighlight.js) — a pasted
+// email's exact wording can drift slightly from the AI's own quote, so an
+// exact match is tried first, then shorter prefixes of it, rather than
+// giving up and showing no highlight at all. Kept on the original
+// (un-normalized) string, not lowercased/whitespace-collapsed like the PDF
+// version, so the returned index maps directly back into `text` for
+// splitting into before/match/after spans.
+function findTextMatch(text, quote) {
+  if (!text || !quote) return null
+  const lowerText = text.toLowerCase()
+  const trimmedQuote = quote.trim()
+  const candidates = [trimmedQuote, trimmedQuote.slice(0, 60), trimmedQuote.slice(0, 30), trimmedQuote.slice(0, 15)]
+  const tried = new Set()
+  for (const candidate of candidates) {
+    const lowerCandidate = candidate.toLowerCase()
+    if (candidate.length < 6 || tried.has(lowerCandidate)) continue
+    tried.add(lowerCandidate)
+    const at = lowerText.indexOf(lowerCandidate)
+    if (at !== -1) return { start: at, end: at + candidate.length }
+  }
+  return null
+}
+
 // Renders a single PDF page to a canvas and, if a matching quote is found on
 // it, draws approximate highlight rectangles over it. Falls back to a plain
-// <img> for image uploads (no page/highlight concept there).
-export default function PdfSourceViewer({ fileUrl, isPdf, fileName, page, quote, onBack }) {
+// <img> for image uploads, or plain text (highlighted inline) for a pasted-
+// text upload — no page/highlight-overlay concept for either of those.
+export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page, quote, onBack }) {
   const { t } = useI18n()
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
   const pdfRef = useRef(null)
+  const markRef = useRef(null)
   const [pageNum, setPageNum] = useState(page || 1)
   const [numPages, setNumPages] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [highlights, setHighlights] = useState([])
+  const [plainText, setPlainText] = useState(null)
 
   useEffect(() => {
     if (!isPdf || !fileUrl) {
@@ -67,6 +94,44 @@ export default function PdfSourceViewer({ fileUrl, isPdf, fileName, page, quote,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageNum])
 
+  // A pasted-text upload (see fillQuestionnaireFromText in
+  // src/lib/data/supabaseData.js) has no pages or canvas to render — just
+  // its own text, fetched once and highlighted the same way a PDF quote is,
+  // via a plain case-insensitive substring search instead of pdf.js's
+  // text-item matching.
+  useEffect(() => {
+    if (!isText || !fileUrl) {
+      setLoading(false)
+      return undefined
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(false)
+    ;(async () => {
+      try {
+        const res = await fetch(fileUrl)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const text = await res.text()
+        if (!cancelled) setPlainText(text)
+      } catch (err) {
+        console.error('[PdfSourceViewer]', err)
+        if (!cancelled) setError(true)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [fileUrl, isText])
+
+  useEffect(() => {
+    if (plainText == null) return
+    requestAnimationFrame(() => {
+      markRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+  }, [plainText])
+
   async function renderPage(pdf, num) {
     const clamped = Math.min(Math.max(1, num), pdf.numPages)
     setPageNum(clamped)
@@ -100,6 +165,41 @@ export default function PdfSourceViewer({ fileUrl, isPdf, fileName, page, quote,
         })
       })
     }
+  }
+
+  if (isText) {
+    const match = plainText != null ? findTextMatch(plainText, quote) : null
+    return (
+      <div className="space-y-3">
+        <button type="button" className="btn-secondary btn-sm" onClick={onBack}>
+          <ArrowLeft size={16} aria-hidden="true" />
+          {t('extraction.backToVerification')}
+        </button>
+        <div className="max-h-[65vh] overflow-auto rounded-xl border border-line bg-sand/40 p-4">
+          {loading ? (
+            <div className="flex min-h-[30vh] items-center justify-center">
+              <Spinner size={22} />
+            </div>
+          ) : error ? (
+            <p className="p-6 text-center text-[14px] text-ink-500">{t('common.error')}</p>
+          ) : (
+            <pre className="whitespace-pre-wrap break-words font-sans text-[13.5px] text-ink-800">
+              {match ? (
+                <>
+                  {plainText.slice(0, match.start)}
+                  <mark ref={markRef} className="rounded-sm bg-gold-400/40 ring-2 ring-gold-500/70">
+                    {plainText.slice(match.start, match.end)}
+                  </mark>
+                  {plainText.slice(match.end)}
+                </>
+              ) : (
+                plainText
+              )}
+            </pre>
+          )}
+        </div>
+      </div>
+    )
   }
 
   if (!isPdf) {

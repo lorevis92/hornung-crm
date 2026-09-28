@@ -31,7 +31,8 @@ export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
     included_in_calculation: e?.included_in_calculation !== false,
     document_id: doc?.id ?? null,
     file_name: doc?.file_name ?? null,
-    isPdf: doc?.mime_type === 'application/pdf'
+    isPdf: doc?.mime_type === 'application/pdf',
+    isText: doc?.mime_type === 'text/plain'
   })
 
   const rows = []

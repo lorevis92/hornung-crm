@@ -733,6 +733,7 @@ export default function TaxSummary() {
           <PdfSourceViewer
             fileUrl={fileUrls[sourceField?.document_id] || null}
             isPdf={sourceField?.isPdf}
+            isText={sourceField?.isText}
             fileName={sourceField?.file_name}
             page={sourceField?.source_page}
             quote={sourceField?.source_quote}

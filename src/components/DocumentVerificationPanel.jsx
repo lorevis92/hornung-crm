@@ -181,6 +181,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
           <PdfSourceViewer
             fileUrl={fileUrl}
             isPdf={sourceField?.isPdf}
+            isText={sourceField?.isText}
             fileName={doc.file_name}
             page={sourceField?.source_page}
             quote={sourceField?.source_quote}
