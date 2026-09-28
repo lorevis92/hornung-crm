@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Link, useParams } from 'react-router-dom'
 import {
-  AlertTriangle, AlignJustify, ArrowLeft, Calculator, FileDown, FolderOpen, Info, Landmark, List, PiggyBank, Receipt
+  AlertTriangle, AlignJustify, ArrowLeft, Calculator, Eye, FileDown, FolderOpen, Info, Landmark, List, PiggyBank, Receipt
 } from 'lucide-react'
 import CompactFieldRow from '../components/CompactFieldRow'
 import ExtractedFieldRow from '../components/ExtractedFieldRow'
@@ -437,11 +437,24 @@ export default function TaxSummary() {
     }
   }
 
-  const viewUncertainSource = (component) => {
+  // Shared by every place a calculation component (a row in the main "how
+  // this was calculated" breakdown, or in the "needs verification" table)
+  // needs to jump to the exact document/page/quote it came from — every
+  // tax_aggregate_components row already carries its own document_id/
+  // field_key (see api/_recalc.js's insert), so this is just matching it
+  // back to the extracted_document_fields row that actually has the
+  // page/quote to show. A synthetic entry (a flat deduction, the wealth
+  // exemption, ...) has no document_id at all — nothing to jump to, so
+  // callers check for one before ever offering this.
+  const viewComponentSource = (component) => {
     const original = fields.find((f) => f.document_id === component.document_id && f.field_key === component.field_key)
     if (!original) return
-    dismissUncertaintyModal()
     viewSource(original)
+  }
+
+  const viewUncertainSource = (component) => {
+    dismissUncertaintyModal()
+    viewComponentSource(component)
   }
 
   // "Document data" reference — every verified field, grouped by document,
@@ -1142,22 +1155,52 @@ export default function TaxSummary() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-line bg-white">
-                        {section.components.map((c) => (
-                          <tr key={c.id}>
-                            <td className="px-4 py-2.5 text-ink-800">{c.field_label || c.label}</td>
-                            <td
-                              className={clsx(
-                                'px-4 py-2.5 text-right font-medium tabular-nums',
-                                c.component_type === 'income' || c.component_type === 'wealth'
-                                  ? 'text-emerald-700'
-                                  : 'text-red-700'
-                              )}
+                        {section.components.map((c) => {
+                          const hasSource = Boolean(c.document_id)
+                          const loadingSource = viewingKey === fieldKey(c)
+                          return (
+                            <tr
+                              key={c.id}
+                              className={clsx(hasSource && 'cursor-pointer hover:bg-sand/50')}
+                              onClick={hasSource ? () => viewComponentSource(c) : undefined}
+                              onKeyDown={
+                                hasSource
+                                  ? (e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault()
+                                        viewComponentSource(c)
+                                      }
+                                    }
+                                  : undefined
+                              }
+                              tabIndex={hasSource ? 0 : undefined}
+                              role={hasSource ? 'button' : undefined}
+                              title={hasSource ? t('extraction.viewSource') : undefined}
                             >
-                              {c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}
-                              {formatChfSwiss(Math.abs(c.amount))}
-                            </td>
-                          </tr>
-                        ))}
+                              <td className="px-4 py-2.5 text-ink-800">
+                                {c.field_label || c.label}
+                                {hasSource ? (
+                                  loadingSource ? (
+                                    <Spinner size={13} className="ml-1.5 inline align-[-2px]" />
+                                  ) : (
+                                    <Eye size={13} aria-hidden="true" className="ml-1.5 inline align-[-2px] text-ink-300" />
+                                  )
+                                ) : null}
+                              </td>
+                              <td
+                                className={clsx(
+                                  'px-4 py-2.5 text-right font-medium tabular-nums',
+                                  c.component_type === 'income' || c.component_type === 'wealth'
+                                    ? 'text-emerald-700'
+                                    : 'text-red-700'
+                                )}
+                              >
+                                {c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}
+                                {formatChfSwiss(Math.abs(c.amount))}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1179,21 +1222,49 @@ export default function TaxSummary() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-100 bg-amber-50/40">
-                    {needsVerificationComponents.map((c) => (
-                      <tr key={c.id}>
-                        <td className="px-4 py-2.5 text-amber-900">
-                          <span className="flex items-center gap-1.5">
-                            <AlertTriangle size={13} className="shrink-0" aria-hidden="true" />
-                            {c.field_label || c.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-medium tabular-nums text-amber-900">
-                          {c.currency_code
-                            ? formatAmountSwiss(Math.abs(c.amount), c.currency_code)
-                            : formatChfSwiss(Math.abs(c.amount))}
-                        </td>
-                      </tr>
-                    ))}
+                    {needsVerificationComponents.map((c) => {
+                      const hasSource = Boolean(c.document_id)
+                      const loadingSource = viewingKey === fieldKey(c)
+                      return (
+                        <tr
+                          key={c.id}
+                          className={clsx(hasSource && 'cursor-pointer hover:bg-amber-100/60')}
+                          onClick={hasSource ? () => viewComponentSource(c) : undefined}
+                          onKeyDown={
+                            hasSource
+                              ? (e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault()
+                                    viewComponentSource(c)
+                                  }
+                                }
+                              : undefined
+                          }
+                          tabIndex={hasSource ? 0 : undefined}
+                          role={hasSource ? 'button' : undefined}
+                          title={hasSource ? t('extraction.viewSource') : undefined}
+                        >
+                          <td className="px-4 py-2.5 text-amber-900">
+                            <span className="flex items-center gap-1.5">
+                              <AlertTriangle size={13} className="shrink-0" aria-hidden="true" />
+                              {c.field_label || c.label}
+                              {hasSource ? (
+                                loadingSource ? (
+                                  <Spinner size={13} className="inline align-[-2px]" />
+                                ) : (
+                                  <Eye size={13} aria-hidden="true" className="inline align-[-2px] text-amber-400" />
+                                )
+                              ) : null}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums text-amber-900">
+                            {c.currency_code
+                              ? formatAmountSwiss(Math.abs(c.amount), c.currency_code)
+                              : formatChfSwiss(Math.abs(c.amount))}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
