@@ -567,10 +567,7 @@ export default function TaxSummary() {
                 <span>
                   {t('summary.incompleteChildrenMismatch', { extracted: extractedChildrenCount, registered: childrenCount })}
                 </span>
-                <Link
-                  to={`/clients/${caseRow.client_id}?tab=questionnaire#questionnaire-children`}
-                  className="btn-secondary btn-sm shrink-0"
-                >
+                <Link to={`/year/${caseId}?fix=consistency`} className="btn-secondary btn-sm shrink-0">
                   {t('summary.fixChildren')}
                 </Link>
               </li>

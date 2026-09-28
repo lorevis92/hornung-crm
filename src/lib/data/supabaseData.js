@@ -484,6 +484,13 @@ export const supabaseApi = {
     return callApi('/api/retry-extraction', { documentId })
   },
 
+  // The "reload everything" safety net — re-extracts every document of a
+  // client/year in one action instead of one at a time (see
+  // api/reprocess-client-year.js).
+  async reprocessClientYear(clientId, taxYear) {
+    return callApi('/api/reprocess-client-year', { clientId, taxYear: Number(taxYear) })
+  },
+
   async getTaxAggregate(clientId, taxYear) {
     const { data: aggregate, error } = await supabase
       .from('tax_aggregates')

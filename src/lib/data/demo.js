@@ -1040,6 +1040,40 @@ export const demoApi = {
     return wait({ ok: true })
   },
 
+  // The "reload everything" safety net (see api/reprocess-client-year.js
+  // for the real-backend equivalent) — no actual AI call in demo mode
+  // (documents are pre-seeded with their extracted fields already), so
+  // this just re-runs the same side effects a fresh extraction would:
+  // marks every document 'extracted', then recalculates and re-syncs the
+  // registry for all of them, in one action instead of one at a time.
+  async reprocessClientYear(clientId, taxYear) {
+    const s = store()
+    const year = Number(taxYear)
+    const caseIds = new Set(
+      s.cases.filter((c) => c.client_id === clientId && c.tax_year === year).map((c) => c.id)
+    )
+    const docs = s.documents.filter((d) => caseIds.has(d.case_id))
+    const now = iso(Date.now())
+    for (const doc of docs) {
+      doc.status = 'extracted'
+      doc.extraction_error = null
+      doc.processed_at = now
+    }
+    commit()
+
+    await this.calculateAggregates(clientId, year)
+    for (const doc of docs.filter((d) => d.category_code === 'current_tax_sheet')) {
+      await this.syncPersonalDetails(doc.id)
+    }
+    for (const doc of docs.filter((d) => d.category_code === 'property_tax_value')) {
+      await this.syncPropertySuggestion(doc.id)
+    }
+    if (docs.some((d) => d.category_code === 'current_tax_sheet' || d.category_code === 'childcare_costs')) {
+      await this.syncChildSuggestions(clientId, year)
+    }
+    return wait({ processed: docs.length, failed: 0, errors: [] })
+  },
+
   async getTaxAggregate(clientId, taxYear) {
     const s = store()
     const year = Number(taxYear)

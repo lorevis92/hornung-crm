@@ -135,6 +135,12 @@ export default {
   case: {
     title: 'Tax declaration {year}',
     taxSummary: 'Tax summary',
+    reprocessAll: 'Reload everything from the documents',
+    reprocessConfirmTitle: 'Reload everything from the documents?',
+    reprocessConfirmBody:
+      'Re-runs extraction on every document for this year — including already-processed ones — and refreshes the Questionnaire, suggestions and calculation from what they actually say. This calls the AI again for each document and can take a while.',
+    reprocessDone: '{processed} document(s) reprocessed.',
+    reprocessPartial: '{processed} document(s) reprocessed, {failed} failed — check them individually.',
     yourDocuments: 'Your documents',
     yourDocumentsHelp: 'Upload the documents agreed during our call.',
     checklist: 'Agreed document list',
@@ -586,7 +592,7 @@ export default {
     incompleteProcessingDoc: '"{name}" is still being processed — its data isn\'t in the totals below yet.',
     incompleteChildrenMismatch: 'The personal details document states {extracted} child(ren), but only {registered} are on the client’s record.',
     retryExtraction: 'Retry extraction',
-    fixChildren: 'Fix on client record',
+    fixChildren: 'Review & apply',
     incompleteOrphanedDoc: '"{name}" was extracted but none of its data appears in the calculation below — verify it manually.',
     uncertaintyBadge: '{count} to verify',
     uncertaintyModalTitle: 'Before relying on this calculation, check these points',

@@ -11,7 +11,8 @@
   ],
   "functions": {
     "api/extract-document.js": { "maxDuration": 300 },
-    "api/retry-extraction.js": { "maxDuration": 300 }
+    "api/retry-extraction.js": { "maxDuration": 300 },
+    "api/reprocess-client-year.js": { "maxDuration": 300 }
   },
   "headers": [
     {

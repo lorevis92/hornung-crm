@@ -266,16 +266,29 @@ export function computeTaxAggregate({
   // *_name/*_organization field found for it (e.g. an employer or
   // institution name), falling back to the file name. Generic on purpose:
   // no per-category hardcoding of which field is the "interesting" one.
+  //
+  // Keyed by occurrence suffix too, not just document id: a repeatable
+  // document (several donations, each with its own recipient_organization/
+  // recipient_organization_2/...) has a DIFFERENT identifier per entry —
+  // using whichever name field happened to be found first for the whole
+  // document, regardless of which donation it actually named, is exactly
+  // what mismatched a donation's amount to another donation's organization
+  // the first time repeated entries shipped.
   const identifierByDocId = {}
   for (const doc of documents || []) {
-    const nameField = (extractedFields || []).find(
+    const nameFields = (extractedFields || []).filter(
       (f) =>
         f.document_id === doc.id &&
         f.included_in_calculation !== false &&
-        /_(name|organization)$/.test(baseFieldKey(f.field_key)) &&
+        /_(name|organization)$/.test(baseFieldKey(doc.category_code, f.field_key)) &&
         f.field_value
     )
-    identifierByDocId[doc.id] = nameField ? nameField.field_value : null
+    const bySuffix = {}
+    for (const nf of nameFields) {
+      const key = fieldSuffix(doc.category_code, nf.field_key)
+      if (!(key in bySuffix)) bySuffix[key] = nf.field_value
+    }
+    identifierByDocId[doc.id] = bySuffix
   }
 
   // For the sibling-field lookups below (net-of-reimbursement, voided-by,
@@ -320,8 +333,8 @@ export function computeTaxAggregate({
     // the same suffix, looked up via siblingValueFor() below instead of
     // siblingValue() directly wherever a sibling lookup depends on which
     // occurrence this is.
-    const baseKey = baseFieldKey(field.field_key)
-    const suffix = fieldSuffix(field.field_key)
+    const baseKey = baseFieldKey(doc.category_code, field.field_key)
+    const suffix = fieldSuffix(doc.category_code, field.field_key)
     const siblingValueFor = (fieldKey) => siblingValue(doc.id, fieldKey + suffix)
     const rule = ruleByKey[`${doc.category_code}:${baseKey}`]
     if (!rule || rule.contribution_type === 'none') continue
@@ -405,7 +418,7 @@ export function computeTaxAggregate({
       const hasSalaryPensionContribution = (extractedFields || []).some(
         (f) =>
           documentById[f.document_id]?.category_code === 'salary_statement' &&
-          baseFieldKey(f.field_key) === 'pension_fund_contributions' &&
+          baseFieldKey('salary_statement', f.field_key) === 'pension_fund_contributions' &&
           f.field_value &&
           f.included_in_calculation !== false
       )
@@ -782,7 +795,9 @@ export function computeTaxAggregate({
   const taxableIncomeFederal = taxableIncomeCantonal
 
   const components = entries.map((entry) => {
-    const identifier = entry.documentId ? identifierByDocId[entry.documentId] : null
+    const entryOccurrence = fieldSuffix(entry.categoryCode, entry.fieldKey)
+    const perDocIdentifiers = entry.documentId ? identifierByDocId[entry.documentId] : null
+    const identifier = perDocIdentifiers ? perDocIdentifiers[entryOccurrence] ?? perDocIdentifiers[''] ?? null : null
     const suffix = identifier || entry.fileName || null
     const label = suffix
       ? `${entry.fieldLabel} — ${entry.categoryLabel} ${identifier ? identifier : `(${entry.fileName})`}${entry.note ? ` — ${entry.note}` : ''}`

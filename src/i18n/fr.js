@@ -136,6 +136,12 @@ export default {
   case: {
     title: 'Déclaration fiscale {year}',
     taxSummary: 'Résumé fiscal',
+    reprocessAll: 'Tout recharger depuis les documents',
+    reprocessConfirmTitle: 'Tout recharger depuis les documents ?',
+    reprocessConfirmBody:
+      "Relance l'extraction pour chaque document de cette année — y compris ceux déjà traités — et actualise le questionnaire, les suggestions et le calcul en conséquence. Fait de nouveau appel à l'IA pour chaque document et peut prendre un moment.",
+    reprocessDone: '{processed} document(s) retraité(s).',
+    reprocessPartial: '{processed} document(s) retraité(s), {failed} en échec — à vérifier individuellement.',
     yourDocuments: 'Vos documents',
     yourDocumentsHelp: 'Téléversez les documents convenus lors de notre entretien.',
     checklist: 'Liste de documents convenue',
@@ -586,7 +592,7 @@ export default {
     incompleteProcessingDoc: '« {name} » est encore en cours de traitement — ses données ne sont pas encore dans les totaux ci-dessous.',
     incompleteChildrenMismatch: 'Le document de données personnelles indique {extracted} enfant(s), mais seuls {registered} sont enregistrés sur la fiche du client.',
     retryExtraction: "Réessayer l'extraction",
-    fixChildren: 'Corriger sur la fiche client',
+    fixChildren: 'Vérifier et appliquer',
     incompleteOrphanedDoc: '« {name} » a été extrait mais aucune de ses données n’apparaît dans le calcul ci-dessous — vérifiez manuellement.',
     uncertaintyBadge: '{count} à vérifier',
     uncertaintyModalTitle: 'Avant de vous fier à ce calcul, vérifiez ces points',

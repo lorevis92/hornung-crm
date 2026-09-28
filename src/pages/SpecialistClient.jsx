@@ -15,7 +15,7 @@ import { currentTaxYear, IS_DEMO } from '../lib/config'
 import { CANTONS, LANGUAGES } from '../lib/constants'
 import { formatDate, fullName } from '../lib/format'
 import { describeSuggestion } from '../lib/suggestions'
-import { catchUpRegistrySyncInBackground } from '../lib/recalc'
+import { catchUpRegistrySyncInBackground, recalculateInBackground } from '../lib/recalc'
 
 export default function SpecialistClient() {
   const { clientId } = useParams()
@@ -45,6 +45,7 @@ export default function SpecialistClient() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [suggestions, setSuggestions] = useState([])
   const [resolvingId, setResolvingId] = useState(null)
+  const [questionnaireRefreshToken, setQuestionnaireRefreshToken] = useState(0)
 
   const load = useCallback(async () => {
     const [row, rows] = await Promise.all([api.getClient(clientId), api.listCases(clientId)])
@@ -129,9 +130,26 @@ export default function SpecialistClient() {
       await api.resolveFieldSuggestion(suggestion, accept)
       setSuggestions((list) => list.filter((s) => s.id !== suggestion.id))
       if (accept) {
-        // The client_persons/clients row this suggestion targeted may have
-        // just changed — refresh the header (canton shows there).
+        // The client_persons/clients/client_children row this suggestion
+        // targeted may have just changed — refresh the header (canton
+        // shows there) AND force the Questionnaire tab to refetch. It
+        // loads client_persons/children once on its own mount and has no
+        // other way to know this just changed underneath it — remounting
+        // via the key below is what actually makes it pick the new data
+        // up instead of silently sitting on what it loaded before.
         setClient(await api.getClient(clientId))
+        setQuestionnaireRefreshToken((n) => n + 1)
+        // The suggestion mechanism only ever wrote the corrected value —
+        // nothing re-ran the tax calculation afterward, so a client-level
+        // fix (marital status, in particular — it directly gates the
+        // wealth exemption amount) left every tax_aggregates row exactly
+        // as stale as before the fix until someone happened to click
+        // "Recalculate" again. Marital status/canton/etc. aren't scoped to
+        // one year, so every year this client has a case for gets
+        // refreshed, not just whichever one was open.
+        for (const c of cases) {
+          recalculateInBackground(clientId, c.tax_year, lang)
+        }
       }
       toast.success(t('common.saved'))
     } catch (error) {
@@ -372,7 +390,7 @@ export default function SpecialistClient() {
       {tab === 'questionnaire' ? (
         <section>
           <p className="section-sub mb-4">{t('specialist.questionnaireHelp')}</p>
-          <QuestionnaireForm clientId={clientId} client={client} />
+          <QuestionnaireForm key={questionnaireRefreshToken} clientId={clientId} client={client} />
         </section>
       ) : null}
 

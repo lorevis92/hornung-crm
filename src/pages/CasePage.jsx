@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, FileCheck2, FolderOpen, Info,
-  Mail, MessageSquare, Save, ShieldCheck, Upload, X
+  Mail, MessageSquare, RefreshCw, Save, ShieldCheck, Upload, X
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import StatusStepper from '../components/StatusStepper'
@@ -31,6 +31,11 @@ export default function CasePage() {
   const { t, lang } = useI18n()
   const toast = useToast()
   const { isStaff, profile, client: myClient } = useAuth()
+  // A link from elsewhere (e.g. Tax Summary's children-count mismatch
+  // banner) can ask this page to open the consistency review directly,
+  // instead of sending the specialist to type the fix in by hand.
+  const [searchParams] = useSearchParams()
+  const openConsistencyOnLoad = searchParams.get('fix') === 'consistency'
 
   const [loading, setLoading] = useState(true)
   const [caseRow, setCaseRow] = useState(null)
@@ -47,6 +52,8 @@ export default function CasePage() {
   const [currentTaxSheetFields, setCurrentTaxSheetFields] = useState([])
   const [consistencyOpen, setConsistencyOpen] = useState(false)
   const [resolvingSuggestionId, setResolvingSuggestionId] = useState(null)
+  const [confirmingReprocess, setConfirmingReprocess] = useState(false)
+  const [reprocessing, setReprocessing] = useState(false)
   const [statusDraft, setStatusDraft] = useState('opened')
   const [messageDraft, setMessageDraft] = useState('')
   const [notesDraft, setNotesDraft] = useState('')
@@ -144,6 +151,10 @@ export default function CasePage() {
   )
   const consistencyIssueCount = consistency.discrepancies.length + consistency.missingDocuments.length
 
+  useEffect(() => {
+    if (openConsistencyOnLoad && consistencyIssueCount) setConsistencyOpen(true)
+  }, [openConsistencyOnLoad, consistencyIssueCount])
+
   const resolveConsistencySuggestion = async (suggestion, accept) => {
     setResolvingSuggestionId(suggestion.id)
     try {
@@ -153,6 +164,21 @@ export default function CasePage() {
         const { [suggestion.id]: _discard, ...rest } = edits
         return rest
       })
+      if (accept) {
+        // The client_persons/client_children/clients row this targeted may
+        // have just changed — the consistency check above is computed from
+        // this same `questionnaire` state, so it has to be refetched or the
+        // banner would keep citing a gap this exact action just closed.
+        setQuestionnaire(await api.getQuestionnaire(caseRow.client_id))
+        // Same reasoning as the recalculation already triggered elsewhere
+        // in this file after a document delete/category change: the
+        // suggestion mechanism only ever wrote the corrected value, it
+        // never re-ran the tax calculation — a marital-status fix in
+        // particular directly gates the wealth exemption amount, so
+        // leaving the aggregate stale here is exactly what made that look
+        // unfixed even after accepting the correction.
+        recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
+      }
       toast.success(t('common.saved'))
     } catch (error) {
       console.error(error)
@@ -283,6 +309,32 @@ export default function CasePage() {
     setCaseRow((current) => ({ ...current, ...row }))
   }
 
+  // "Reload everything from what's actually written in the documents" —
+  // one action instead of retrying documents one at a time and hoping the
+  // Questionnaire/suggestions/calculation catch up on their own. Re-runs
+  // full extraction for every document of this year (even already-
+  // extracted ones, so a schema change made after they were first
+  // processed actually gets picked up), which re-syncs everything derived
+  // from them as a side effect — see api/reprocess-client-year.js.
+  const reprocessAll = async () => {
+    setConfirmingReprocess(false)
+    setReprocessing(true)
+    try {
+      const result = await api.reprocessClientYear(caseRow.client_id, caseRow.tax_year)
+      if (result.failed) {
+        toast.error(t('case.reprocessPartial', { processed: result.processed, failed: result.failed }))
+      } else {
+        toast.success(t('case.reprocessDone', { processed: result.processed }))
+      }
+      await load()
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setReprocessing(false)
+    }
+  }
+
   if (loading) return <PageLoader label={t('common.loading')} />
   if (!caseRow) {
     return (
@@ -325,10 +377,21 @@ export default function CasePage() {
           </div>
           <div className="flex items-center gap-2">
             {isStaff ? (
-              <Link to={`/year/${caseId}/summary`} className="btn-secondary btn-sm">
-                <ClipboardList size={15} aria-hidden="true" />
-                {t('case.taxSummary')}
-              </Link>
+              <>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => setConfirmingReprocess(true)}
+                  disabled={reprocessing}
+                >
+                  {reprocessing ? <Spinner size={15} /> : <RefreshCw size={15} aria-hidden="true" />}
+                  {t('case.reprocessAll')}
+                </button>
+                <Link to={`/year/${caseId}/summary`} className="btn-secondary btn-sm">
+                  <ClipboardList size={15} aria-hidden="true" />
+                  {t('case.taxSummary')}
+                </Link>
+              </>
             ) : null}
             <StatusBadge status={caseRow.status} />
           </div>
@@ -623,6 +686,30 @@ export default function CasePage() {
           <AiPanel fields={extracted} />
         </section>
       ) : null}
+
+      <Modal
+        open={confirmingReprocess}
+        onClose={() => (reprocessing ? null : setConfirmingReprocess(false))}
+        title={t('case.reprocessConfirmTitle')}
+        description={t('case.reprocessConfirmBody')}
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => setConfirmingReprocess(false)}
+              disabled={reprocessing}
+            >
+              {t('common.cancel')}
+            </button>
+            <button type="button" className="btn-primary btn-sm" onClick={reprocessAll} disabled={reprocessing}>
+              {reprocessing ? <Spinner size={16} /> : <RefreshCw size={16} aria-hidden="true" />}
+              {t('case.reprocessAll')}
+            </button>
+          </>
+        }
+      />
 
       <Modal
         open={consistencyOpen}

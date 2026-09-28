@@ -11,9 +11,10 @@ import { baseFieldKey, occurrenceIndex } from './repeatableFields.js'
 // row (labelled "#2", "#3", ...) instead of only the first ever being
 // visible to review.
 export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
+  const categoryCode = doc?.category_code
   const occurrencesByBaseKey = {}
   for (const e of extractedFields || []) {
-    const base = baseFieldKey(e.field_key)
+    const base = baseFieldKey(categoryCode, e.field_key)
     ;(occurrencesByBaseKey[base] ||= []).push(e)
   }
 
@@ -37,7 +38,7 @@ export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
   for (const def of [...(fieldDefs || [])].sort((a, b) => a.sort_order - b.sort_order)) {
     const label = def.field_label || def.field_key
     const matches = (occurrencesByBaseKey[def.field_key] || []).sort(
-      (a, b) => occurrenceIndex(a.field_key) - occurrenceIndex(b.field_key)
+      (a, b) => occurrenceIndex(categoryCode, a.field_key) - occurrenceIndex(categoryCode, b.field_key)
     )
     if (!matches.length) {
       rows.push(makeRow(def, null, label))

@@ -136,6 +136,12 @@ export default {
   case: {
     title: 'Steuererklärung {year}',
     taxSummary: 'Steuerübersicht',
+    reprocessAll: 'Alles aus den Dokumenten neu laden',
+    reprocessConfirmTitle: 'Alles aus den Dokumenten neu laden?',
+    reprocessConfirmBody:
+      'Führt die Extraktion für jedes Dokument dieses Jahres erneut aus — auch bereits verarbeitete — und aktualisiert Fragebogen, Vorschläge und Berechnung entsprechend. Ruft die KI für jedes Dokument erneut auf und kann eine Weile dauern.',
+    reprocessDone: '{processed} Dokument(e) neu verarbeitet.',
+    reprocessPartial: '{processed} Dokument(e) neu verarbeitet, {failed} fehlgeschlagen — bitte einzeln prüfen.',
     yourDocuments: 'Ihre Dokumente',
     yourDocumentsHelp: 'Laden Sie die im Gespräch vereinbarten Dokumente hoch.',
     checklist: 'Vereinbarte Dokumentenliste',
@@ -585,7 +591,7 @@ export default {
     incompleteProcessingDoc: '„{name}“ wird noch verarbeitet — dessen Daten sind noch nicht in den Summen unten enthalten.',
     incompleteChildrenMismatch: 'Das Dokument mit den persönlichen Daten nennt {extracted} Kind(er), aber nur {registered} sind beim Kunden erfasst.',
     retryExtraction: 'Extraktion erneut versuchen',
-    fixChildren: 'Auf der Kundenkarte korrigieren',
+    fixChildren: 'Prüfen & übernehmen',
     incompleteOrphanedDoc: '„{name}“ wurde extrahiert, aber keine seiner Daten erscheint in der Berechnung unten — bitte manuell prüfen.',
     uncertaintyBadge: '{count} zu prüfen',
     uncertaintyModalTitle: 'Vor Verwendung dieser Berechnung diese Punkte prüfen',

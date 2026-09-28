@@ -135,6 +135,12 @@ export default {
   case: {
     title: 'Dichiarazione fiscale {year}',
     taxSummary: 'Riepilogo fiscale',
+    reprocessAll: 'Ricarica tutto dai documenti',
+    reprocessConfirmTitle: 'Ricaricare tutto dai documenti?',
+    reprocessConfirmBody:
+      "Rilancia l'estrazione su ogni documento di quest'anno — inclusi quelli già elaborati — e aggiorna Questionario, suggerimenti e calcolo in base a quanto scritto nei documenti. Richiama l'AI per ogni documento e può richiedere qualche minuto.",
+    reprocessDone: '{processed} documento/i rielaborato/i.',
+    reprocessPartial: '{processed} documento/i rielaborato/i, {failed} falliti — verifica singolarmente.',
     yourDocuments: 'I tuoi documenti',
     yourDocumentsHelp: 'Carica i documenti concordati durante la chiamata.',
     checklist: 'Elenco documenti concordato',
@@ -584,7 +590,7 @@ export default {
     incompleteProcessingDoc: '"{name}" è ancora in elaborazione — i suoi dati non sono ancora nei totali qui sotto.',
     incompleteChildrenMismatch: 'Il documento dei dati personali indica {extracted} figlio/i, ma solo {registered} risultano registrati sulla scheda del cliente.',
     retryExtraction: 'Riprova estrazione',
-    fixChildren: 'Correggi sulla scheda cliente',
+    fixChildren: 'Verifica e applica',
     incompleteOrphanedDoc: '"{name}" è stato estratto ma nessuno dei suoi dati compare nel calcolo qui sotto — verifica manualmente.',
     uncertaintyBadge: '{count} da verificare',
     uncertaintyModalTitle: 'Prima di affidarti a questo calcolo, verifica questi punti',

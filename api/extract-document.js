@@ -147,7 +147,9 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
     const fieldList = fieldDefs
       .map((f) => `- ${f.field_key} (${f.value_type}): ${f.field_label || f.field_key}`)
       .join('\n')
-    const repeatableKeys = fieldDefs.map((f) => f.field_key).filter((k) => REPEATABLE_FIELD_KEYS.has(k))
+    const repeatableKeys = fieldDefs
+      .map((f) => f.field_key)
+      .filter((k) => REPEATABLE_FIELD_KEYS.has(`${categoryCode}:${k}`))
     const repeatableInstruction = repeatableKeys.length
       ? '\n\nSome fields can legitimately appear more than once on the same document — ' +
         `${repeatableKeys.join(', ')} — e.g. several separate donations, several dividend ` +
@@ -197,8 +199,14 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
 
     const extracted = parseJsonFromText(textOf(extractMessage))
     const definedKeys = new Set(fieldDefs.map((f) => f.field_key))
-    const validKeys = { has: (key) => definedKeys.has(key) || (REPEATABLE_FIELD_KEYS.has(baseFieldKey(key)) && definedKeys.has(baseFieldKey(key))) }
-    const rows = (Array.isArray(extracted) ? extracted : [])
+    const validKeys = {
+      has: (key) => {
+        if (definedKeys.has(key)) return true
+        const base = baseFieldKey(categoryCode, key)
+        return base !== key && definedKeys.has(base)
+      }
+    }
+    const parsedRows = (Array.isArray(extracted) ? extracted : [])
       .filter((row) => row && validKeys.has(row.field_key) && row.field_value !== null && row.field_value !== '')
       .map((row) => {
         const page = Number(row.source_page)
@@ -212,6 +220,13 @@ export async function runExtraction(admin, anthropic, documentId, { fromStatuses
           verified_by_specialist: false
         }
       })
+    // Deduped by field_key, last one wins: the model occasionally repeats
+    // the same field_key verbatim (rather than with the "_2" suffix asked
+    // for) when it's unsure whether two mentions are really distinct
+    // entries — two rows sharing a field_key in one upsert statement is a
+    // Postgres error (ON CONFLICT DO UPDATE cannot affect the same row
+    // twice in one statement), not just a harmless overwrite.
+    const rows = Array.from(new Map(parsedRows.map((r) => [r.field_key, r])).values())
 
     if (rows.length) {
       const { error: upsertError } = await admin

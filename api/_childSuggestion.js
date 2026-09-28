@@ -57,17 +57,29 @@ export async function syncChildSuggestions(admin, clientId, taxYear) {
   })
   if (!candidates.length) return { suggested: 0 }
 
-  const rows = candidates.map((c) => ({
-    client_id: clientId,
-    document_id: null,
-    target_table: 'client_children',
-    target_person: 'none',
-    target_field: `child:${slugify(c.key)}`,
-    field_label: 'Child',
-    current_value: null,
-    suggested_value: JSON.stringify({ full_name: c.full_name }),
-    created_at: new Date().toISOString()
-  }))
+  // Deduped by target_field before the upsert: two distinct candidate keys
+  // can still slugify to the identical string (e.g. "Anne-Sophie" and
+  // "Anne Sophie" both collapse to "anne-sophie") — a single upsert
+  // statement containing two rows for the same conflict key is a Postgres
+  // error ("ON CONFLICT DO UPDATE command cannot affect row a second
+  // time"), not just a silent overwrite, so this has to be prevented
+  // before the row list is built rather than left to the database.
+  const rowsByTargetField = new Map()
+  for (const c of candidates) {
+    const target_field = `child:${slugify(c.key)}`
+    rowsByTargetField.set(target_field, {
+      client_id: clientId,
+      document_id: null,
+      target_table: 'client_children',
+      target_person: 'none',
+      target_field,
+      field_label: 'Child',
+      current_value: null,
+      suggested_value: JSON.stringify({ full_name: c.full_name }),
+      created_at: new Date().toISOString()
+    })
+  }
+  const rows = Array.from(rowsByTargetField.values())
   const { error } = await admin
     .from('client_field_suggestions')
     .upsert(rows, { onConflict: 'client_id,target_table,target_person,target_field' })

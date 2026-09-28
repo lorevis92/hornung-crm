@@ -8,33 +8,37 @@
 // — the first occurrence keeps the plain key so an ordinary, single-entry
 // document behaves exactly as before.
 //
-// Only field keys explicitly listed here are ever treated this way: a
-// completely unrelated field that happens to end in a number of its own
-// (e.g. bank_securities_crypto_statement's "account_balance_31_12") is
-// never mistaken for a repeated occurrence.
+// Keyed by "category_code:field_key", NOT by field_key alone — generic
+// names like "annual_amount" are reused by many unrelated categories
+// (alimony, childcare, pension buy-in, training costs, ...), and only
+// donation_certificate's own annual_amount is ever actually repeatable.
+// Whitelisting the bare name treated EVERY category using that name as
+// repeatable too, which is what silently doubled a childcare document's
+// single invoice line the first time this shipped.
 export const REPEATABLE_FIELD_KEYS = new Set([
   // donation_certificate — several distinct gifts on the same receipts PDF.
-  'recipient_organization',
-  'annual_amount',
-  'has_consideration',
+  'donation_certificate:recipient_organization',
+  'donation_certificate:annual_amount',
+  'donation_certificate:has_consideration',
   // bank_securities_crypto_statement — several dividend distributions
   // and/or several year-end positions on the same statement.
-  'dividend_income',
-  'account_balance_31_12',
+  'bank_securities_crypto_statement:dividend_income',
+  'bank_securities_crypto_statement:account_balance_31_12',
   // pillar_3a_certificate — several separate payments in the year.
-  'annual_contribution'
+  'pillar_3a_certificate:annual_contribution'
 ])
 
 const SUFFIX_PATTERN = /^(.*)_(\d+)$/
 
 // The field this one is a repeated occurrence of — itself, if it isn't one
-// (no suffix, or a suffix that isn't actually a registered repeatable key,
-// e.g. "account_balance_31_12" is left untouched even though it ends in a
-// number).
-export function baseFieldKey(fieldKey) {
+// (no suffix, or a suffix on a field_key/category_code pair that isn't
+// actually registered as repeatable, e.g. childcare_costs' own
+// "annual_amount", or bank_securities_crypto_statement's
+// "account_balance_31_12" which just happens to end in a number already).
+export function baseFieldKey(categoryCode, fieldKey) {
   const key = fieldKey || ''
   const match = SUFFIX_PATTERN.exec(key)
-  if (match && REPEATABLE_FIELD_KEYS.has(match[1])) return match[1]
+  if (match && REPEATABLE_FIELD_KEYS.has(`${categoryCode}:${match[1]}`)) return match[1]
   return key
 }
 
@@ -43,14 +47,14 @@ export function baseFieldKey(fieldKey) {
 // field's own base key to find the matching occurrence of THAT field
 // rather than always its first one (e.g. donation #2's own
 // has_consideration, not donation #1's).
-export function fieldSuffix(fieldKey) {
-  const base = baseFieldKey(fieldKey)
+export function fieldSuffix(categoryCode, fieldKey) {
+  const base = baseFieldKey(categoryCode, fieldKey)
   return (fieldKey || '').slice(base.length)
 }
 
 // 1 for the first/plain occurrence, 2/3/... for a suffixed one — used to
 // sort a field's occurrences back into the order they were found in.
-export function occurrenceIndex(fieldKey) {
-  const suffix = fieldSuffix(fieldKey)
+export function occurrenceIndex(categoryCode, fieldKey) {
+  const suffix = fieldSuffix(categoryCode, fieldKey)
   return suffix ? parseInt(suffix.slice(1), 10) : 1
 }
