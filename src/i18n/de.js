@@ -192,6 +192,20 @@ export default {
     total: 'Total',
     aiPanel: 'Extrahierte Daten (KI)',
     aiPanelHelp: 'Aus den hochgeladenen Dokumenten gelesene Daten, mit Quelle.',
+    consistencyDiscrepancies: '{count} Abweichungen vom Fragebogen gefunden',
+    consistencyMissingDocs: '{count} Dokumente fehlen wahrscheinlich gegenüber dem angegebenen Profil',
+    consistencyReview: 'Prüfen',
+    consistencyTitle: 'Fragebogen vs. Dokumente',
+    consistencyHelp:
+      'Was die hochgeladenen Dokumente zeigen, verglichen mit den Angaben des Kunden im Fragebogen.',
+    consistencyDiscrepanciesTitle: 'Abweichungen',
+    consistencyMissingDocsTitle: 'Möglicherweise fehlende Dokumente',
+    consistencyChildrenCount:
+      'Ein Dokument nennt {documentValue} Kind(er), der Fragebogen enthält aber {questionnaireValue}.',
+    consistencyMissingProperty:
+      'Der Fragebogen gibt Grundbesitz an ({count}), aber es wurde kein Steuerwert-Dokument gefunden.',
+    consistencyMissingSpouseSalary:
+      'Beide Ehepartner scheinen erwerbstätig zu sein, aber es wurden weniger als zwei Lohnausweise gefunden — der des Partners fehlt möglicherweise.',
     aiEmpty: 'Noch keine extrahierten Daten.',
     aiPhase2: 'Extraktionsmodul — Phase 2',
     aiPhase2Help:

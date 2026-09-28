@@ -192,6 +192,20 @@ export default {
     total: 'Total',
     aiPanel: 'Extracted data (AI)',
     aiPanelHelp: 'Clean data read from the uploaded documents, with their source.',
+    consistencyDiscrepancies: '{count} discrepancies found vs. the Questionnaire',
+    consistencyMissingDocs: '{count} documents likely missing vs. the declared profile',
+    consistencyReview: 'Review',
+    consistencyTitle: 'Questionnaire vs. documents',
+    consistencyHelp:
+      'What the uploaded documents show, compared with what the client declared in the Questionnaire.',
+    consistencyDiscrepanciesTitle: 'Discrepancies',
+    consistencyMissingDocsTitle: 'Possibly missing documents',
+    consistencyChildrenCount:
+      'A document states {documentValue} child(ren), but the Questionnaire has {questionnaireValue}.',
+    consistencyMissingProperty:
+      'The Questionnaire declares property ownership ({count}), but no property tax value document was found.',
+    consistencyMissingSpouseSalary:
+      'Both spouses appear to be employed, but fewer than two salary statements were found — the spouse’s may be missing.',
     aiEmpty: 'No extracted data yet.',
     aiPhase2: 'Extraction module — phase 2',
     aiPhase2Help:

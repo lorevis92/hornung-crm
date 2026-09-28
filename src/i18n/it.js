@@ -191,6 +191,20 @@ export default {
     total: 'Totale',
     aiPanel: 'Dati estratti (AI)',
     aiPanelHelp: 'Dati puliti letti dai documenti caricati, con la fonte.',
+    consistencyDiscrepancies: '{count} informazioni che non coincidono con il questionario',
+    consistencyMissingDocs: '{count} documenti probabilmente mancanti rispetto al profilo dichiarato',
+    consistencyReview: 'Controlla',
+    consistencyTitle: 'Questionario vs. documenti',
+    consistencyHelp:
+      'Quello che mostrano i documenti caricati, confrontato con quanto dichiarato dal cliente nel Questionario.',
+    consistencyDiscrepanciesTitle: 'Discrepanze',
+    consistencyMissingDocsTitle: 'Documenti probabilmente mancanti',
+    consistencyChildrenCount:
+      'Un documento indica {documentValue} figlio/i, ma il Questionario ne ha {questionnaireValue}.',
+    consistencyMissingProperty:
+      'Il Questionario dichiara una proprietà immobiliare ({count}), ma non è stato trovato nessun documento con il valore fiscale.',
+    consistencyMissingSpouseSalary:
+      'Entrambi i coniugi risultano lavorare, ma sono stati trovati meno di due certificati di salario — potrebbe mancare quello del coniuge.',
     aiEmpty: 'Nessun dato estratto.',
     aiPhase2: 'Modulo di estrazione — fase 2',
     aiPhase2Help:

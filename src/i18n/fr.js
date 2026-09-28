@@ -192,6 +192,20 @@ export default {
     total: 'Total',
     aiPanel: 'Données extraites (IA)',
     aiPanelHelp: 'Données lues dans les documents téléversés, avec leur source.',
+    consistencyDiscrepancies: '{count} incohérences trouvées avec le questionnaire',
+    consistencyMissingDocs: '{count} documents probablement manquants par rapport au profil déclaré',
+    consistencyReview: 'Vérifier',
+    consistencyTitle: 'Questionnaire vs. documents',
+    consistencyHelp:
+      'Ce que montrent les documents téléversés, comparé à ce que le client a déclaré dans le questionnaire.',
+    consistencyDiscrepanciesTitle: 'Incohérences',
+    consistencyMissingDocsTitle: 'Documents peut-être manquants',
+    consistencyChildrenCount:
+      'Un document indique {documentValue} enfant(s), mais le questionnaire en contient {questionnaireValue}.',
+    consistencyMissingProperty:
+      'Le questionnaire déclare la propriété d’un bien immobilier ({count}), mais aucun document de valeur fiscale n’a été trouvé.',
+    consistencyMissingSpouseSalary:
+      "Les deux conjoints semblent être employés, mais moins de deux certificats de salaire ont été trouvés — celui du conjoint est peut-être manquant.",
     aiEmpty: 'Aucune donnée extraite.',
     aiPhase2: "Module d'extraction — phase 2",
     aiPhase2Help:

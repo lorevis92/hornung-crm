@@ -138,7 +138,7 @@ function findParam(parameters, family, cantonCode) {
   return parameters.find((p) => p.parameter_family === family && p.scope === 'federal') || null
 }
 
-function isMarriedHousehold(primaryPerson, spousePerson) {
+export function isMarriedHousehold(primaryPerson, spousePerson) {
   const hasSpouse = Boolean(
     spousePerson && (spousePerson.first_name || spousePerson.last_name || spousePerson.date_of_birth)
   )

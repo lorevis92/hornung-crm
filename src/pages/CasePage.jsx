@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, ChevronDown, ChevronUp, ClipboardList, FileCheck2, FolderOpen, Info, Mail, MessageSquare,
-  Save, ShieldCheck, Upload
+  AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, FileCheck2, FolderOpen, Info,
+  Mail, MessageSquare, Save, ShieldCheck, Upload, X
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import StatusStepper from '../components/StatusStepper'
@@ -13,7 +13,8 @@ import ChecklistPanel from '../components/ChecklistPanel'
 import AiPanel from '../components/AiPanel'
 import FeeEstimatePanel from '../components/FeeEstimatePanel'
 import CaseTimeline from '../components/CaseTimeline'
-import { EmptyState, Field, PageLoader, Select, Textarea } from '../components/ui'
+import Modal from '../components/Modal'
+import { EmptyState, Field, PageLoader, Select, Spinner, Textarea } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
@@ -21,6 +22,8 @@ import { api } from '../lib/data'
 import { CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES } from '../lib/constants'
 import { fullName } from '../lib/format'
 import { recalculateInBackground } from '../lib/recalc'
+import { computeQuestionnaireConsistency } from '../lib/questionnaireConsistency'
+import { describeSuggestion } from '../lib/suggestions'
 
 export default function CasePage() {
   const { caseId } = useParams()
@@ -40,6 +43,10 @@ export default function CasePage() {
   const [pricing, setPricing] = useState([])
   const [questionnaire, setQuestionnaire] = useState(null)
   const [extracted, setExtracted] = useState([])
+  const [pendingSuggestions, setPendingSuggestions] = useState([])
+  const [currentTaxSheetFields, setCurrentTaxSheetFields] = useState([])
+  const [consistencyOpen, setConsistencyOpen] = useState(false)
+  const [resolvingSuggestionId, setResolvingSuggestionId] = useState(null)
   const [statusDraft, setStatusDraft] = useState('opened')
   const [messageDraft, setMessageDraft] = useState('')
   const [notesDraft, setNotesDraft] = useState('')
@@ -86,16 +93,25 @@ export default function CasePage() {
 
     if (isStaff) {
       const clientId = row.client_id
-      const [prices, quest, ext, cats] = await Promise.all([
+      const [prices, quest, ext, cats, suggestions] = await Promise.all([
         api.listPricing(),
         api.getQuestionnaire(clientId),
         api.listExtracted(caseId),
-        api.listDocumentCategories()
+        api.listDocumentCategories(),
+        api.listFieldSuggestions(clientId)
       ])
       setPricing(prices)
       setQuestionnaire(quest)
       setExtracted(ext)
       setDocumentCategories(cats)
+      setPendingSuggestions(suggestions)
+
+      // Only ever one "current tax sheet" document per case in practice —
+      // its children_count is the one Questionnaire-vs-documents check that
+      // isn't already covered by a client_field_suggestions row (there's no
+      // single target field a bare count could safely overwrite).
+      const sheetDoc = docs.find((d) => d.category_code === 'current_tax_sheet')
+      setCurrentTaxSheetFields(sheetDoc ? await api.listExtractedFields(sheetDoc.id) : [])
     }
     setLoading(false)
   }, [caseId, isStaff])
@@ -113,6 +129,34 @@ export default function CasePage() {
     () => documents.filter((d) => d.direction === 'specialist_upload'),
     [documents]
   )
+
+  const consistency = useMemo(
+    () =>
+      isStaff && questionnaire
+        ? computeQuestionnaireConsistency({
+            questionnaire,
+            documents,
+            currentTaxSheetFields,
+            pendingSuggestions
+          })
+        : { discrepancies: [], missingDocuments: [] },
+    [isStaff, questionnaire, documents, currentTaxSheetFields, pendingSuggestions]
+  )
+  const consistencyIssueCount = consistency.discrepancies.length + consistency.missingDocuments.length
+
+  const resolveConsistencySuggestion = async (suggestion, accept) => {
+    setResolvingSuggestionId(suggestion.id)
+    try {
+      await api.resolveFieldSuggestion(suggestion, accept)
+      setPendingSuggestions((list) => list.filter((s) => s.id !== suggestion.id))
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setResolvingSuggestionId(null)
+    }
+  }
 
   // A client can always upload (see the "documents: client upload" RLS
   // policy) — this only gates deleting their own documents, matching
@@ -281,6 +325,29 @@ export default function CasePage() {
           </div>
         ) : null}
       </header>
+
+      {/* ------------------------------------------ consistency check (staff) -- */}
+      {isStaff && consistencyIssueCount ? (
+        <button
+          type="button"
+          onClick={() => setConsistencyOpen(true)}
+          className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-[14.5px] text-amber-900 transition hover:border-amber-300"
+        >
+          <AlertTriangle size={18} className="shrink-0 text-amber-700" aria-hidden="true" />
+          {consistency.discrepancies.length ? (
+            <span className="font-medium">
+              {t('case.consistencyDiscrepancies', { count: consistency.discrepancies.length })}
+            </span>
+          ) : null}
+          {consistency.discrepancies.length && consistency.missingDocuments.length ? <span>·</span> : null}
+          {consistency.missingDocuments.length ? (
+            <span className="font-medium">
+              {t('case.consistencyMissingDocs', { count: consistency.missingDocuments.length })}
+            </span>
+          ) : null}
+          <span className="ml-auto text-[13px] text-amber-700 underline">{t('case.consistencyReview')}</span>
+        </button>
+      ) : null}
 
       {/* ------------------------------------------------ client documents -- */}
       {/* This is the client's own upload zone — primary/prominent for them,
@@ -525,6 +592,85 @@ export default function CasePage() {
           <AiPanel fields={extracted} />
         </section>
       ) : null}
+
+      <Modal
+        open={consistencyOpen}
+        onClose={() => setConsistencyOpen(false)}
+        title={t('case.consistencyTitle')}
+        description={t('case.consistencyHelp')}
+        size="lg"
+      >
+        <div className="space-y-5">
+          {consistency.discrepancies.length ? (
+            <div className="space-y-2">
+              <p className="text-[13px] font-semibold uppercase tracking-wide text-ink-400">
+                {t('case.consistencyDiscrepanciesTitle')}
+              </p>
+              {consistency.discrepancies.map((d) => (
+                <div
+                  key={d.key}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
+                >
+                  {d.kind === 'suggestion' ? (
+                    <>
+                      <p>{describeSuggestion(d.suggestion, t)}</p>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => resolveConsistencySuggestion(d.suggestion, false)}
+                          disabled={resolvingSuggestionId === d.suggestion.id}
+                        >
+                          <X size={14} aria-hidden="true" />
+                          {t('specialist.ignoreSuggestion')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={() => resolveConsistencySuggestion(d.suggestion, true)}
+                          disabled={resolvingSuggestionId === d.suggestion.id}
+                        >
+                          {resolvingSuggestionId === d.suggestion.id ? (
+                            <Spinner size={14} />
+                          ) : (
+                            <Check size={14} aria-hidden="true" />
+                          )}
+                          {t('specialist.acceptSuggestion')}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p>
+                      {t('case.consistencyChildrenCount', {
+                        documentValue: d.documentValue,
+                        questionnaireValue: d.questionnaireValue
+                      })}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {consistency.missingDocuments.length ? (
+            <div className="space-y-2">
+              <p className="text-[13px] font-semibold uppercase tracking-wide text-ink-400">
+                {t('case.consistencyMissingDocsTitle')}
+              </p>
+              {consistency.missingDocuments.map((m) => (
+                <div
+                  key={m.key}
+                  className="rounded-xl border border-line bg-sand/50 px-4 py-3 text-[14px] text-ink-700"
+                >
+                  {m.kind === 'missingProperty'
+                    ? t('case.consistencyMissingProperty', { count: m.count })
+                    : t('case.consistencyMissingSpouseSalary')}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </Modal>
     </div>
   )
 }
