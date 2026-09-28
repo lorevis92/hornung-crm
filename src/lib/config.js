@@ -25,8 +25,47 @@ function resolveSupabaseUrl() {
   return RAW_SUPABASE_URL.replace(/\/$/, '')
 }
 
+// A key meant for the browser must never be able to bypass Row Level
+// Security — this is the exact check that would have caught the incident
+// where VITE_SUPABASE_ANON_KEY was set to the service_role key in Vercel's
+// dashboard, shipping full DB access to every visitor's browser in the
+// public bundle. Legacy Supabase JWT keys encode their role in the
+// (unencrypted, base64) payload; the newer key format encodes it in the
+// prefix instead (`sb_publishable_...` / `sb_secret_...`). Reject either
+// privileged shape outright rather than trust whichever env var happens to
+// hold it.
+function isPrivilegedSupabaseKey(key) {
+  if (!key) return false
+  if (key.startsWith('sb_secret_')) return true
+  const parts = key.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload?.role === 'service_role'
+  } catch {
+    // Not a JWT we can parse — not our concern here, some other check
+    // (e.g. the URL validation above) is responsible for a malformed value.
+    return false
+  }
+}
+
+const RAW_SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
+
+function resolveSupabaseAnonKey() {
+  if (!RAW_SUPABASE_ANON_KEY) return ''
+  if (isPrivilegedSupabaseKey(RAW_SUPABASE_ANON_KEY)) {
+    console.error(
+      '[config] VITE_SUPABASE_ANON_KEY looks like a privileged Supabase key (service_role/secret), not the ' +
+        'public anon/publishable key. Refusing to use it in the browser — falling back to demo mode until ' +
+        'this is fixed on Vercel (Settings → Environment Variables).'
+    )
+    return ''
+  }
+  return RAW_SUPABASE_ANON_KEY
+}
+
 export const SUPABASE_URL = resolveSupabaseUrl()
-export const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
+export const SUPABASE_ANON_KEY = resolveSupabaseAnonKey()
 
 export const APP_ID = import.meta.env.VITE_APP_ID || 'hornung_crm'
 
