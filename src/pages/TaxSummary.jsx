@@ -92,6 +92,15 @@ export default function TaxSummary() {
   const [exportingPdf, setExportingPdf] = useState(false)
   const [allDocuments, setAllDocuments] = useState([])
   const [childrenCount, setChildrenCount] = useState(0)
+  // The canonical anagraphic record (client_persons/client_children/
+  // client_properties) — same source Questionnaire and the calculation
+  // engine read. Kept in full, not just children.length, so the "Personal
+  // details" section below can show what's ACTUALLY on file instead of
+  // only what a specific document's own extraction happened to say —
+  // those two silently disagreeing (this client's registry sync never
+  // having run) is exactly what made this section look right while
+  // Questionnaire and the calculation stayed empty/wrong.
+  const [questionnaire, setQuestionnaire] = useState(null)
   const [retryingDocId, setRetryingDocId] = useState(null)
 
   useEffect(() => {
@@ -119,6 +128,7 @@ export default function TaxSummary() {
       setCategories(cats)
       setResult(existingAggregate)
       setChildrenCount((questionnaire?.children || []).length)
+      setQuestionnaire(questionnaire)
 
       const extractedByDoc = await Promise.all(
         categorized.map((d) => api.listExtractedFieldsForDocument(d.id))
@@ -215,6 +225,15 @@ export default function TaxSummary() {
     return Number.isFinite(n) ? n : null
   }, [fields])
   const childrenMismatch = extractedChildrenCount != null && extractedChildrenCount !== childrenCount
+
+  const registryPrimary = useMemo(
+    () => (questionnaire?.persons || []).find((p) => p.person_type === 'primary') || null,
+    [questionnaire]
+  )
+  const registrySpouse = useMemo(
+    () => (questionnaire?.persons || []).find((p) => p.person_type === 'spouse') || null,
+    [questionnaire]
+  )
 
   // A document extracted successfully, categorized under a group that
   // normally produces income/wealth (not just reference data), with at
@@ -709,6 +728,96 @@ export default function TaxSummary() {
         </Suspense>
       ) : sections.length ? (
         <div className="space-y-8">
+          {/* The canonical record — client_persons/client_children/
+              client_properties, the same source Questionnaire and the
+              calculation engine read. Shown first and separately from the
+              per-document extraction cards below, which are the SOURCE
+              that feeds this via sync, never an alternate reading of the
+              client's actual anagraphic data. */}
+          {questionnaire ? (
+            <section className="card card-pad space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="section-title text-xl">{t('summary.registryTitle')}</h2>
+                  <p className="section-sub">{t('summary.registryHelp')}</p>
+                </div>
+                <Link to={`/clients/${caseRow.client_id}?tab=questionnaire`} className="btn-secondary btn-sm shrink-0">
+                  {t('summary.registryEdit')}
+                </Link>
+              </div>
+
+              {!registryPrimary ? (
+                <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-[13.5px] text-red-800">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  {t('summary.registryEmpty')}
+                </p>
+              ) : null}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.taxpayer')}</p>
+                  {registryPrimary ? (
+                    <div className="mt-1 space-y-0.5 text-[14.5px] text-ink-800">
+                      <p className="font-medium">{fullName(registryPrimary) || t('summary.registryUnnamed')}</p>
+                      {registryPrimary.date_of_birth ? (
+                        <p className="text-ink-500">{formatDate(registryPrimary.date_of_birth, lang)}</p>
+                      ) : null}
+                      <p className="text-ink-500">
+                        {registryPrimary.marital_status ? t(`marital.${registryPrimary.marital_status}`) : t('summary.registryUnknown')}
+                      </p>
+                      {registryPrimary.current_address ? <p className="text-ink-500">{registryPrimary.current_address}</p> : null}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[13.5px] text-ink-400">{t('common.notProvided')}</p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.spouse')}</p>
+                  {registrySpouse ? (
+                    <div className="mt-1 space-y-0.5 text-[14.5px] text-ink-800">
+                      <p className="font-medium">{fullName(registrySpouse) || t('summary.registryUnnamed')}</p>
+                      {registrySpouse.date_of_birth ? (
+                        <p className="text-ink-500">{formatDate(registrySpouse.date_of_birth, lang)}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[13.5px] text-ink-400">{t('common.notProvided')}</p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.children')}</p>
+                  {questionnaire.children?.length ? (
+                    <ul className="mt-1 space-y-0.5 text-[14.5px] text-ink-800">
+                      {questionnaire.children.map((c, i) => (
+                        <li key={i}>
+                          {c.full_name || t('summary.registryUnnamed')}
+                          {c.date_of_birth ? ` — ${formatDate(c.date_of_birth, lang)}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-[13.5px] text-ink-400">{t('common.notProvided')}</p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.properties')}</p>
+                  {questionnaire.properties?.length ? (
+                    <ul className="mt-1 space-y-0.5 text-[14.5px] text-ink-800">
+                      {questionnaire.properties.map((p, i) => (
+                        <li key={i}>{p.address}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-[13.5px] text-ink-400">{t('common.notProvided')}</p>
+                  )}
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           <div className="flex items-center justify-end gap-1" role="group" aria-label={t('summary.fieldViewToggle')}>
             <button
               type="button"
@@ -733,7 +842,10 @@ export default function TaxSummary() {
           </div>
           {sections.map((section) => (
             <section key={section.key} className="space-y-4">
-              <h2 className="section-title text-xl">{t(section.titleKey)}</h2>
+              <div>
+                <h2 className="section-title text-xl">{t(section.titleKey)}</h2>
+                {section.key === 'base' ? <p className="section-sub">{t('summary.sectionBaseHelp')}</p> : null}
+              </div>
               <div className="space-y-5">
                 {section.categories.map(({ category, documents: catDocuments }) => (
                   <div key={category.code} className="space-y-3">
