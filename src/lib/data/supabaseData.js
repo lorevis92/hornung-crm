@@ -533,6 +533,33 @@ export const supabaseApi = {
     return { aggregate, components: components || [] }
   },
 
+  // A specialist's include/exclude call on one flagged field — see
+  // api/save-field-decision.js. The caller re-runs calculateAggregates
+  // afterward (same pattern as every other field mutation on Tax Summary),
+  // not this call itself, so the new decision is reflected immediately.
+  async saveFieldDecision(payload) {
+    return callApi('/api/save-field-decision', payload)
+  },
+
+  async listManualAggregateEntries(clientId, taxYear) {
+    return unwrap(
+      await supabase
+        .from('tax_manual_aggregate_entries')
+        .select('*')
+        .eq('client_id', clientId)
+        .eq('tax_year', Number(taxYear))
+        .order('created_at', { ascending: true })
+    )
+  },
+
+  async saveManualAggregateEntry(payload) {
+    return callApi('/api/save-manual-entry', payload)
+  },
+
+  async deleteManualAggregateEntry(id) {
+    return callApi('/api/delete-manual-entry', { id })
+  },
+
   // "Personal details" (current_tax_sheet) -> registry sync — same
   // service-role pattern as calculateAggregates: the AI-extraction path
   // (api/extract-document.js) triggers this on its own; this call is for

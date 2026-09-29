@@ -233,7 +233,9 @@ function seed() {
     calculationRules: JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES)),
     taxAggregates: [],
     taxAggregateComponents: [],
-    fieldSuggestions: []
+    fieldSuggestions: [],
+    fieldDecisions: [],
+    manualAggregateEntries: []
   }
 }
 
@@ -259,6 +261,10 @@ function load() {
       // Same for sessions started before the personal-details auto-fill
       // feature existed.
       parsed.fieldSuggestions ||= []
+      // Same for sessions started before per-field specialist decisions and
+      // manual "how this was calculated" entries existed.
+      parsed.fieldDecisions ||= []
+      parsed.manualAggregateEntries ||= []
       return parsed
     }
   } catch {
@@ -1042,6 +1048,8 @@ export const demoApi = {
     const primaryPerson = s.persons.find((p) => p.client_id === clientId && p.person_type === 'primary') || null
     const spousePerson = s.persons.find((p) => p.client_id === clientId && p.person_type === 'spouse') || null
     const children = s.children.filter((c) => c.client_id === clientId)
+    const fieldDecisions = s.fieldDecisions.filter((d) => d.client_id === clientId && d.tax_year === year)
+    const manualEntries = s.manualAggregateEntries.filter((m) => m.client_id === clientId && m.tax_year === year)
 
     const result = computeTaxAggregate({
       canton,
@@ -1055,6 +1063,8 @@ export const demoApi = {
       primaryPerson,
       spousePerson,
       children,
+      fieldDecisions,
+      manualEntries,
       lang
     })
 
@@ -1100,6 +1110,9 @@ export const demoApi = {
       section_key: c.sectionKey,
       amount: c.amount,
       needs_verification: c.needsVerification || false,
+      decision: c.decision || null,
+      is_manual: c.isManual || false,
+      manual_entry_id: c.manualEntryId || null,
       currency_code: c.currencyCode || null,
       label: c.label,
       field_label: c.fieldLabel,
@@ -1205,6 +1218,90 @@ export const demoApi = {
     if (!aggregate) return wait(null)
     const components = s.taxAggregateComponents.filter((c) => c.aggregate_id === aggregate.id)
     return wait({ aggregate, components })
+  },
+
+  // A specialist's include/exclude call on one flagged field — persists
+  // independently of tax_aggregate_components (which is wiped and rebuilt
+  // on every recalculation), keyed by (document_id, field_key) so a second
+  // decision on the same field replaces the first rather than piling up.
+  // decidedAmount is the raw extracted amount at decision time; a later
+  // recalculation ignores the decision once that no longer matches (see
+  // src/lib/taxCalculation.js).
+  async saveFieldDecision({ clientId, taxYear, documentId, fieldKey, decision, decidedAmount, note }) {
+    const s = store()
+    const year = Number(taxYear)
+    let row = s.fieldDecisions.find((d) => d.document_id === documentId && d.field_key === fieldKey)
+    const now = iso(Date.now())
+    if (row) {
+      Object.assign(row, { decision, decided_amount: decidedAmount, note: note || null, decided_at: now, updated_at: now })
+    } else {
+      row = {
+        id: uid('decision'),
+        client_id: clientId,
+        tax_year: year,
+        document_id: documentId,
+        field_key: fieldKey,
+        decision,
+        decided_amount: decidedAmount,
+        note: note || null,
+        decided_at: now,
+        created_at: now,
+        updated_at: now
+      }
+      s.fieldDecisions.push(row)
+    }
+    commit()
+    return wait(row)
+  },
+
+  async listManualAggregateEntries(clientId, taxYear) {
+    const s = store()
+    const year = Number(taxYear)
+    return wait(s.manualAggregateEntries.filter((m) => m.client_id === clientId && m.tax_year === year))
+  },
+
+  async saveManualAggregateEntry({ id, clientId, taxYear, componentType, description, amount, currencyCode, originalAmount, note }) {
+    const s = store()
+    const year = Number(taxYear)
+    const now = iso(Date.now())
+    if (id) {
+      const row = s.manualAggregateEntries.find((m) => m.id === id)
+      if (!row) throw new Error('MANUAL_ENTRY_NOT_FOUND')
+      Object.assign(row, {
+        component_type: componentType,
+        description,
+        amount,
+        currency_code: currencyCode || null,
+        original_amount: originalAmount ?? null,
+        note: note || null,
+        updated_at: now
+      })
+      commit()
+      return wait(row)
+    }
+    const row = {
+      id: uid('manual'),
+      client_id: clientId,
+      tax_year: year,
+      component_type: componentType,
+      description,
+      amount,
+      currency_code: currencyCode || null,
+      original_amount: originalAmount ?? null,
+      note: note || null,
+      created_at: now,
+      updated_at: now
+    }
+    s.manualAggregateEntries.push(row)
+    commit()
+    return wait(row)
+  },
+
+  async deleteManualAggregateEntry(id) {
+    const s = store()
+    s.manualAggregateEntries = s.manualAggregateEntries.filter((m) => m.id !== id)
+    commit()
+    return true
   },
 
   // Demo-mode mirror of api/diagnose-client.js — same output shape, so the

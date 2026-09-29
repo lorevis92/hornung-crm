@@ -98,22 +98,26 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
   if (documentIds.length) {
     const { data, error } = await admin
       .from('extracted_document_fields')
-      .select('document_id, field_key, field_value, included_in_calculation, verified_by_specialist')
+      .select('document_id, field_key, field_value, included_in_calculation, verified_by_specialist, source_quote')
       .in('document_id', documentIds)
     if (error) throw error
     extractedFields = data || []
   }
 
-  const [rulesRes, fieldDefsRes, categoriesRes, parametersRes] = await Promise.all([
+  const [rulesRes, fieldDefsRes, categoriesRes, parametersRes, fieldDecisionsRes, manualEntriesRes] = await Promise.all([
     admin.from('field_calculation_rules').select('*'),
     admin.from('category_field_definitions').select('category_code, field_key, field_label'),
     admin.from('document_categories').select('code, group_key, label_en, label_de, label_fr, label_it'),
-    admin.from('tax_parameters').select('*').eq('tax_year', taxYear)
+    admin.from('tax_parameters').select('*').eq('tax_year', taxYear),
+    admin.from('tax_field_decisions').select('*').eq('client_id', clientId).eq('tax_year', taxYear),
+    admin.from('tax_manual_aggregate_entries').select('*').eq('client_id', clientId).eq('tax_year', taxYear)
   ])
   if (rulesRes.error) throw rulesRes.error
   if (fieldDefsRes.error) throw fieldDefsRes.error
   if (categoriesRes.error) throw categoriesRes.error
   if (parametersRes.error) throw parametersRes.error
+  if (fieldDecisionsRes.error) throw fieldDecisionsRes.error
+  if (manualEntriesRes.error) throw manualEntriesRes.error
 
   // Canton: prefer the client's own record; fall back to an included
   // current_tax_sheet.canton extraction. Never invent a default.
@@ -140,6 +144,8 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
     primaryPerson,
     spousePerson,
     children,
+    fieldDecisions: fieldDecisionsRes.data || [],
+    manualEntries: manualEntriesRes.data || [],
     lang
   })
 
@@ -204,6 +210,9 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
           section_key: c.sectionKey,
           amount: c.amount,
           needs_verification: c.needsVerification || false,
+          decision: c.decision || null,
+          is_manual: c.isManual || false,
+          manual_entry_id: c.manualEntryId || null,
           currency_code: c.currencyCode || null,
           label: c.label,
           field_label: c.fieldLabel,

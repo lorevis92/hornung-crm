@@ -2,12 +2,13 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Link, useParams } from 'react-router-dom'
 import {
-  AlertTriangle, AlignJustify, ArrowLeft, Calculator, Eye, FileDown, FolderOpen, Info, Landmark, List, PiggyBank, Receipt
+  AlertTriangle, AlignJustify, ArrowLeft, Calculator, Eye, FileDown, FolderOpen, Info, Landmark, List,
+  Pencil, PiggyBank, Plus, Receipt, Trash2
 } from 'lucide-react'
 import CompactFieldRow from '../components/CompactFieldRow'
 import ExtractedFieldRow from '../components/ExtractedFieldRow'
 import Modal from '../components/Modal'
-import { EmptyState, Field, PageLoader, Spinner, Stat, TextInput } from '../components/ui'
+import { EmptyState, Field, PageLoader, Select, Spinner, Stat, Textarea, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
@@ -44,6 +45,29 @@ function groupBy(list, key) {
     ;(acc[item[key]] ||= []).push(item)
     return acc
   }, {})
+}
+
+// Which kind of open question a flagged component represents — drives which
+// actions the "Needs verification" row offers (see src/lib/taxCalculation.js
+// for the note text each check produces). Kept as a plain regex match on
+// the persisted field_label rather than a dedicated column: the label
+// already carries this exactly, and adding a parallel enum column would
+// just be a second place for the two to drift apart.
+function classifyVerificationItem(fieldLabel) {
+  const label = fieldLabel || ''
+  if (/foreign currency/.test(label)) return 'foreignCurrency'
+  if (/missing tax parameter/.test(label)) return 'missingParam'
+  if (/marital status unknown/.test(label)) return 'missingRegistry'
+  if (/separately taxed|no cantonal depreciation/.test(label)) return 'separate'
+  if (/possible double deduction/.test(label)) return 'doubleDeduction'
+  if (/not deductible —/.test(label)) return 'consideration'
+  return 'generic'
+}
+
+const MANUAL_ENTRY_TYPES = ['income', 'deduction', 'wealth', 'debt']
+
+function emptyManualEntryForm() {
+  return { id: null, componentType: 'deduction', description: '', currencyCode: '', originalAmount: '', rate: '', amount: '', note: '' }
 }
 
 // Which of the two field-review layouts a specialist last picked — same
@@ -103,6 +127,14 @@ export default function TaxSummary() {
   const [questionnaire, setQuestionnaire] = useState(null)
   const [retryingDocId, setRetryingDocId] = useState(null)
 
+  const [manualEntries, setManualEntries] = useState([])
+  const [manualEntryForm, setManualEntryForm] = useState(null)
+  const [savingManualEntry, setSavingManualEntry] = useState(false)
+  const [deletingManualEntryId, setDeletingManualEntryId] = useState(null)
+  const [confirmDeleteManualEntry, setConfirmDeleteManualEntry] = useState(null)
+  const [decidingKey, setDecidingKey] = useState(null)
+  const [amountEdits, setAmountEdits] = useState({})
+
   useEffect(() => {
     let active = true
     const run = async () => {
@@ -114,17 +146,19 @@ export default function TaxSummary() {
       }
       setCaseRow(row)
 
-      const [docs, cats, allDefs, existingAggregate, questionnaire] = await Promise.all([
+      const [docs, cats, allDefs, existingAggregate, questionnaire, manual] = await Promise.all([
         api.listClientDocuments(row.client_id, row.tax_year),
         api.listDocumentCategories(),
         api.listFieldDefinitions(),
         api.getTaxAggregate(row.client_id, row.tax_year),
-        api.getQuestionnaire(row.client_id)
+        api.getQuestionnaire(row.client_id),
+        api.listManualAggregateEntries(row.client_id, row.tax_year)
       ])
       if (!active) return
       const categorized = docs.filter((d) => d.category_code)
       setAllDocuments(docs)
       setDocuments(categorized)
+      setManualEntries(manual)
       setCategories(cats)
       setResult(existingAggregate)
       setChildrenCount((questionnaire?.children || []).length)
@@ -184,18 +218,21 @@ export default function TaxSummary() {
     return CALC_SECTION_KEYS.map((key) => ({
       key,
       titleKey: SECTIONS.find((s) => s.key === key)?.titleKey,
-      components: result.components.filter((c) => c.section_key === key && !c.needs_verification)
+      // A specialist's own "exclude" decision resolves the field (it's no
+      // longer needs_verification), but it still never counts — it belongs
+      // in the verification/decisions list below, not in the "totals = sum
+      // of these rows" reconciliation this table guarantees.
+      components: result.components.filter((c) => c.section_key === key && !c.needs_verification && c.decision !== 'exclude')
     })).filter((s) => s.components.length)
   }, [result])
 
-  // Capped entries whose tax parameter couldn't be found for this client's
-  // canton/year — excluded from the totals above (not part of the
-  // reconciliation the section above guarantees), listed separately so the
-  // specialist can see what's missing and decide whether to include it
-  // anyway (editing/confirming the field, or its include toggle, is what
-  // makes it count — see src/lib/taxCalculation.js).
-  const needsVerificationComponents = useMemo(
-    () => (result?.components || []).filter((c) => c.needs_verification),
+  // Every component that ever needed a specialist's attention — still open
+  // (needs_verification) or already resolved one way or the other
+  // (decision set) — shown together so a resolved item's final status is
+  // just as visible as an unresolved one, never silently indistinguishable
+  // from "never had a question at all" (see src/lib/taxCalculation.js).
+  const verificationItems = useMemo(
+    () => (result?.components || []).filter((c) => c.needs_verification || c.decision),
     [result]
   )
 
@@ -434,6 +471,119 @@ export default function TaxSummary() {
       toast.error(error.message || t('common.error'))
     } finally {
       setResolvingUncertainKey(null)
+    }
+  }
+
+  // A specialist's explicit include/exclude call on one flagged field —
+  // persists to tax_field_decisions (survives recalculation, unlike the
+  // component row itself), snapshotting the amount it was decided against
+  // so a later, materially different re-extraction reverts it to needing
+  // verification again instead of silently keeping a stale call (see
+  // src/lib/taxCalculation.js).
+  const decideField = async (component, decision) => {
+    const key = fieldKey(component)
+    setDecidingKey(key)
+    try {
+      await api.saveFieldDecision({
+        clientId: caseRow.client_id,
+        taxYear: caseRow.tax_year,
+        documentId: component.document_id,
+        fieldKey: component.field_key,
+        decision,
+        decidedAmount: component.amount
+      })
+      const computed = await recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
+      if (computed) setResult(computed)
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setDecidingKey(null)
+    }
+  }
+
+  // The generic "edit amount" action offered on every needs-verification
+  // row — reuses the exact same save path as editing a value in the
+  // "Extracted data" sections above (confirmField), just scoped to a
+  // single inline input instead of requiring a scroll back up to find the
+  // field there.
+  const saveAmountEdit = async (component) => {
+    const key = fieldKey(component)
+    const original = fields.find((f) => f.document_id === component.document_id && f.field_key === component.field_key)
+    if (!original) return
+    const value = amountEdits[key]
+    if (value == null || !String(value).trim()) return
+    await confirmField({ ...original, field_value: String(value).trim() })
+    setAmountEdits((edits) => {
+      const { [key]: _discard, ...rest } = edits
+      return rest
+    })
+  }
+
+  const openManualEntryForAdd = () => setManualEntryForm(emptyManualEntryForm())
+
+  const openManualEntryForEdit = (component) => {
+    const entry = manualEntries.find((m) => m.id === component.manual_entry_id)
+    if (!entry) return
+    setManualEntryForm({
+      id: entry.id,
+      componentType: entry.component_type,
+      description: entry.description,
+      currencyCode: entry.currency_code || '',
+      originalAmount: entry.original_amount != null ? String(entry.original_amount) : '',
+      rate: '',
+      amount: String(entry.amount),
+      note: entry.note || ''
+    })
+  }
+
+  const saveManualEntry = async () => {
+    const form = manualEntryForm
+    if (!form) return
+    const amount = parseFloat(form.amount)
+    if (!form.description.trim() || !Number.isFinite(amount)) return
+    setSavingManualEntry(true)
+    try {
+      const originalAmount = form.currencyCode.trim() && form.originalAmount !== '' ? parseFloat(form.originalAmount) : null
+      await api.saveManualAggregateEntry({
+        id: form.id || undefined,
+        clientId: caseRow.client_id,
+        taxYear: caseRow.tax_year,
+        componentType: form.componentType,
+        description: form.description.trim(),
+        amount,
+        currencyCode: form.currencyCode.trim() ? form.currencyCode.trim().toUpperCase() : null,
+        originalAmount: Number.isFinite(originalAmount) ? originalAmount : null,
+        note: form.note.trim() || null
+      })
+      setManualEntryForm(null)
+      setManualEntries(await api.listManualAggregateEntries(caseRow.client_id, caseRow.tax_year))
+      const computed = await recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
+      if (computed) setResult(computed)
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setSavingManualEntry(false)
+    }
+  }
+
+  const deleteManualEntry = async (entry) => {
+    setDeletingManualEntryId(entry.id)
+    try {
+      await api.deleteManualAggregateEntry(entry.id)
+      setManualEntries((list) => list.filter((m) => m.id !== entry.id))
+      const computed = await recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
+      if (computed) setResult(computed)
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setDeletingManualEntryId(null)
+      setConfirmDeleteManualEntry(null)
     }
   }
 
@@ -1112,6 +1262,148 @@ export default function TaxSummary() {
             </ul>
           </Modal>
 
+          <Modal
+            open={Boolean(manualEntryForm)}
+            onClose={() => setManualEntryForm(null)}
+            title={t('summary.manualEntryAdd')}
+            size="md"
+            footer={
+              <>
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setManualEntryForm(null)}>
+                  {t('common.cancel')}
+                </button>
+                <button type="button" className="btn-primary btn-sm" onClick={saveManualEntry} disabled={savingManualEntry}>
+                  {savingManualEntry ? <Spinner size={14} /> : null}
+                  {t('common.save')}
+                </button>
+              </>
+            }
+          >
+            {manualEntryForm ? (
+              <div className="space-y-3">
+                <Field label={t('summary.manualEntryType')} htmlFor="manual-entry-type">
+                  <Select
+                    id="manual-entry-type"
+                    value={manualEntryForm.componentType}
+                    onChange={(e) => setManualEntryForm((f) => ({ ...f, componentType: e.target.value }))}
+                  >
+                    {MANUAL_ENTRY_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {t(
+                          type === 'income'
+                            ? 'summary.sectionIncome'
+                            : type === 'deduction'
+                              ? 'summary.sectionDeductions'
+                              : type === 'wealth'
+                                ? 'summary.sectionWealth'
+                                : 'summary.manualEntryTypeDebt'
+                        )}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                <Field label={t('summary.manualEntryDescription')} htmlFor="manual-entry-description">
+                  <TextInput
+                    id="manual-entry-description"
+                    value={manualEntryForm.description}
+                    onChange={(e) => setManualEntryForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder={t('summary.manualEntryDescriptionPlaceholder')}
+                  />
+                </Field>
+
+                <Field label={t('summary.manualEntryCurrency')} htmlFor="manual-entry-currency">
+                  <TextInput
+                    id="manual-entry-currency"
+                    value={manualEntryForm.currencyCode}
+                    onChange={(e) => setManualEntryForm((f) => ({ ...f, currencyCode: e.target.value }))}
+                    placeholder="CHF"
+                  />
+                </Field>
+
+                {manualEntryForm.currencyCode.trim() && manualEntryForm.currencyCode.trim().toUpperCase() !== 'CHF' ? (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Field label={t('summary.manualEntryOriginalAmount')} className="w-[150px]">
+                      <TextInput
+                        type="number"
+                        step="0.01"
+                        value={manualEntryForm.originalAmount}
+                        onChange={(e) => {
+                          const originalAmount = e.target.value
+                          setManualEntryForm((f) => {
+                            const rate = parseFloat(f.rate)
+                            const orig = parseFloat(originalAmount)
+                            const amount = Number.isFinite(rate) && Number.isFinite(orig) ? String(Math.round(orig * rate * 100) / 100) : f.amount
+                            return { ...f, originalAmount, amount }
+                          })
+                        }}
+                      />
+                    </Field>
+                    <Field label={t('summary.uncertaintyExchangeRate')} className="w-[130px]">
+                      <TextInput
+                        type="number"
+                        step="0.0001"
+                        value={manualEntryForm.rate}
+                        onChange={(e) => {
+                          const rate = e.target.value
+                          setManualEntryForm((f) => {
+                            const r = parseFloat(rate)
+                            const orig = parseFloat(f.originalAmount)
+                            const amount = Number.isFinite(r) && Number.isFinite(orig) ? String(Math.round(orig * r * 100) / 100) : f.amount
+                            return { ...f, rate, amount }
+                          })
+                        }}
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+
+                <Field label={t('summary.manualEntryAmount')} htmlFor="manual-entry-amount">
+                  <TextInput
+                    id="manual-entry-amount"
+                    type="number"
+                    step="0.01"
+                    value={manualEntryForm.amount}
+                    onChange={(e) => setManualEntryForm((f) => ({ ...f, amount: e.target.value }))}
+                  />
+                </Field>
+
+                <Field label={t('summary.manualEntryNote')} htmlFor="manual-entry-note">
+                  <Textarea
+                    id="manual-entry-note"
+                    value={manualEntryForm.note}
+                    onChange={(e) => setManualEntryForm((f) => ({ ...f, note: e.target.value }))}
+                    rows={2}
+                  />
+                </Field>
+              </div>
+            ) : null}
+          </Modal>
+
+          <Modal
+            open={Boolean(confirmDeleteManualEntry)}
+            onClose={() => (deletingManualEntryId ? null : setConfirmDeleteManualEntry(null))}
+            title={t('summary.manualEntryDeleteConfirmTitle')}
+            description={t('summary.manualEntryDeleteConfirmBody')}
+            size="sm"
+            footer={
+              <>
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setConfirmDeleteManualEntry(null)} disabled={Boolean(deletingManualEntryId)}>
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  onClick={() => deleteManualEntry(confirmDeleteManualEntry)}
+                  disabled={Boolean(deletingManualEntryId)}
+                >
+                  {deletingManualEntryId ? <Spinner size={14} /> : null}
+                  {t('common.delete')}
+                </button>
+              </>
+            }
+          />
+
           {result.cantonMissing ? (
             <div className="rounded-xl bg-amber-50 px-4 py-3 text-[14px] text-amber-900">
               {t('summary.cantonMissing')}
@@ -1141,9 +1433,15 @@ export default function TaxSummary() {
             </div>
           </div>
 
-          {componentsBySection.length ? (
+          {componentsBySection.length || manualEntries.length ? (
             <div className="space-y-4">
-              <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.componentsTitle')}</h3>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.componentsTitle')}</h3>
+                <button type="button" className="btn-secondary btn-sm" onClick={openManualEntryForAdd}>
+                  <Plus size={14} aria-hidden="true" />
+                  {t('summary.manualEntryAdd')}
+                </button>
+              </div>
               {componentsBySection.map((section) => (
                 <div key={section.key} className="space-y-1.5">
                   <p className="text-[13px] font-medium text-ink-500">{t(section.titleKey)}</p>
@@ -1187,6 +1485,9 @@ export default function TaxSummary() {
                                     <Eye size={13} aria-hidden="true" className="ml-1.5 inline align-[-2px] text-ink-300" />
                                   )
                                 ) : null}
+                                {c.is_manual ? (
+                                  <span className="chip ml-1.5 bg-sand text-ink-500 ring-line">{t('summary.manualEntryBadge')}</span>
+                                ) : null}
                               </td>
                               <td
                                 className={clsx(
@@ -1196,8 +1497,36 @@ export default function TaxSummary() {
                                     : 'text-red-700'
                                 )}
                               >
-                                {c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}
-                                {formatChfSwiss(Math.abs(c.amount))}
+                                <span className="inline-flex items-center gap-2">
+                                  {c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}
+                                  {formatChfSwiss(Math.abs(c.amount))}
+                                  {c.is_manual ? (
+                                    <span className="inline-flex items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        className="btn-ghost btn-sm !p-1"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          openManualEntryForEdit(c)
+                                        }}
+                                        title={t('common.edit')}
+                                      >
+                                        <Pencil size={13} aria-hidden="true" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-ghost btn-sm !p-1"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setConfirmDeleteManualEntry(manualEntries.find((m) => m.id === c.manual_entry_id) || { id: c.manual_entry_id })
+                                        }}
+                                        title={t('common.delete')}
+                                      >
+                                        <Trash2 size={13} aria-hidden="true" />
+                                      </button>
+                                    </span>
+                                  ) : null}
+                                </span>
                               </td>
                             </tr>
                           )
@@ -1210,64 +1539,167 @@ export default function TaxSummary() {
             </div>
           ) : null}
 
-          {needsVerificationComponents.length ? (
+          {verificationItems.length ? (
             <div className="space-y-2">
               <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.needsVerificationTitle')}</h3>
               <p className="text-[13px] text-ink-400">{t('summary.needsVerificationHelp')}</p>
-              <div className="overflow-x-auto rounded-xl border border-amber-200">
-                <table className="w-full text-[13.5px]">
-                  <thead className="bg-amber-50 text-left text-[11.5px] font-medium uppercase tracking-wide text-amber-800">
-                    <tr>
-                      <th className="px-4 py-2.5">{t('summary.colItem')}</th>
-                      <th className="px-4 py-2.5 text-right">{t('summary.colAmount')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-amber-100 bg-amber-50/40">
-                    {needsVerificationComponents.map((c) => {
-                      const hasSource = Boolean(c.document_id)
-                      const loadingSource = viewingKey === fieldKey(c)
-                      return (
-                        <tr
-                          key={c.id}
-                          className={clsx(hasSource && 'cursor-pointer hover:bg-amber-100/60')}
-                          onClick={hasSource ? () => viewComponentSource(c) : undefined}
-                          onKeyDown={
-                            hasSource
-                              ? (e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault()
-                                    viewComponentSource(c)
-                                  }
-                                }
-                              : undefined
-                          }
-                          tabIndex={hasSource ? 0 : undefined}
-                          role={hasSource ? 'button' : undefined}
-                          title={hasSource ? t('extraction.viewSource') : undefined}
-                        >
-                          <td className="px-4 py-2.5 text-amber-900">
-                            <span className="flex items-center gap-1.5">
-                              <AlertTriangle size={13} className="shrink-0" aria-hidden="true" />
-                              {c.field_label || c.label}
-                              {hasSource ? (
-                                loadingSource ? (
-                                  <Spinner size={13} className="inline align-[-2px]" />
-                                ) : (
-                                  <Eye size={13} aria-hidden="true" className="inline align-[-2px] text-amber-400" />
-                                )
+              <div className="space-y-2">
+                {verificationItems.map((c) => {
+                  const kind = classifyVerificationItem(c.field_label)
+                  const hasSource = Boolean(c.document_id)
+                  const loadingSource = viewingKey === fieldKey(c)
+                  const key = fieldKey(c)
+                  const busy = decidingKey === key
+                  const resolved = Boolean(c.decision)
+                  const original = fields.find((f) => f.document_id === c.document_id && f.field_key === c.field_key)
+
+                  return (
+                    <div
+                      key={c.id}
+                      className={clsx(
+                        'rounded-xl border px-3.5 py-3',
+                        resolved
+                          ? c.decision === 'include'
+                            ? 'border-emerald-200 bg-emerald-50/50'
+                            : 'border-ink-200 bg-sand/40'
+                          : 'border-amber-200 bg-amber-50/40'
+                      )}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <span className="flex items-start gap-1.5 text-[13.5px] text-ink-800">
+                          <AlertTriangle
+                            size={13}
+                            className={clsx('mt-0.5 shrink-0', resolved ? 'text-ink-400' : 'text-amber-600')}
+                            aria-hidden="true"
+                          />
+                          {c.field_label || c.label}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="font-medium tabular-nums text-ink-800">
+                            {c.currency_code ? formatAmountSwiss(Math.abs(c.amount), c.currency_code) : formatChfSwiss(Math.abs(c.amount))}
+                          </span>
+                          {hasSource ? (
+                            <button
+                              type="button"
+                              className="btn-ghost btn-sm"
+                              onClick={() => viewComponentSource(c)}
+                              title={t('extraction.viewSource')}
+                            >
+                              {loadingSource ? <Spinner size={13} /> : <Eye size={13} aria-hidden="true" />}
+                            </button>
+                          ) : null}
+                        </span>
+                      </div>
+
+                      {resolved ? (
+                        <p className={clsx('mt-1.5 text-[12.5px] font-medium', c.decision === 'include' ? 'text-emerald-700' : 'text-ink-500')}>
+                          {c.decision === 'include' ? t('summary.verificationDecidedIncluded') : t('summary.verificationDecidedExcluded')}
+                        </p>
+                      ) : null}
+
+                      {hasSource ? (
+                        <div className="mt-2 flex flex-wrap items-end gap-2">
+                          {kind === 'foreignCurrency' ? (
+                            <>
+                              <Field label={t('summary.uncertaintyExchangeRate')} className="w-[150px]">
+                                <TextInput
+                                  type="number"
+                                  step="0.0001"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={fxEdits[key]?.rate || ''}
+                                  onChange={(e) => setFxEdits((edits) => ({ ...edits, [key]: { rate: e.target.value, amount: '' } }))}
+                                />
+                              </Field>
+                              <span className="pb-2.5 text-[12.5px] text-ink-400">{t('summary.uncertaintyOr')}</span>
+                              <Field label={t('summary.uncertaintyChfAmount')} className="w-[150px]">
+                                <TextInput
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={fxEdits[key]?.amount || ''}
+                                  onChange={(e) => setFxEdits((edits) => ({ ...edits, [key]: { rate: '', amount: e.target.value } }))}
+                                />
+                              </Field>
+                              <button type="button" className="btn-primary btn-sm" onClick={() => resolveForeignCurrencyItem(c)} disabled={busy || resolvingUncertainKey === key}>
+                                {resolvingUncertainKey === key ? <Spinner size={14} /> : null}
+                                {t('common.save')}
+                              </button>
+                              <button type="button" className="btn-secondary btn-sm" onClick={() => decideField(c, 'exclude')} disabled={busy}>
+                                {busy ? <Spinner size={14} /> : null}
+                                {t('summary.verificationActionExcludeCurrency')}
+                              </button>
+                            </>
+                          ) : kind === 'missingParam' ? (
+                            <>
+                              <button type="button" className="btn-secondary btn-sm" onClick={() => confirmUncertainFieldAsIs(c)} disabled={resolvingUncertainKey === key}>
+                                {resolvingUncertainKey === key ? <Spinner size={14} /> : null}
+                                {t('summary.uncertaintyConfirmAsIs')}
+                              </button>
+                              <Link to="/tax-settings" className="text-[12.5px] font-medium underline">
+                                {t('summary.uncertaintyGoToTaxSettings')}
+                              </Link>
+                            </>
+                          ) : kind === 'doubleDeduction' ? (
+                            <>
+                              <button type="button" className="btn-primary btn-sm" onClick={() => decideField(c, 'include')} disabled={busy}>
+                                {busy ? <Spinner size={14} /> : null}
+                                {t('summary.verificationActionInclude')}
+                              </button>
+                              <button type="button" className="btn-secondary btn-sm" onClick={() => decideField(c, 'exclude')} disabled={busy}>
+                                {busy ? <Spinner size={14} /> : null}
+                                {t('summary.verificationActionExclude')}
+                              </button>
+                            </>
+                          ) : kind === 'consideration' ? (
+                            <>
+                              <button type="button" className="btn-secondary btn-sm" onClick={() => decideField(c, 'exclude')} disabled={busy}>
+                                {busy ? <Spinner size={14} /> : null}
+                                {t('summary.verificationActionExcludeConfirmed')}
+                              </button>
+                              <button type="button" className="btn-primary btn-sm" onClick={() => decideField(c, 'include')} disabled={busy}>
+                                {busy ? <Spinner size={14} /> : null}
+                                {t('summary.verificationActionIncludeAnyway')}
+                              </button>
+                            </>
+                          ) : kind === 'missingRegistry' || kind === 'separate' ? (
+                            <button type="button" className="text-[12.5px] font-medium underline" onClick={() => viewComponentSource(c)}>
+                              {t('summary.uncertaintyViewSource')}
+                            </button>
+                          ) : (
+                            <>
+                              <button type="button" className="btn-primary btn-sm" onClick={() => decideField(c, 'include')} disabled={busy}>
+                                {busy ? <Spinner size={14} /> : null}
+                                {t('summary.verificationActionInclude')}
+                              </button>
+                              <button type="button" className="btn-secondary btn-sm" onClick={() => decideField(c, 'exclude')} disabled={busy}>
+                                {busy ? <Spinner size={14} /> : null}
+                                {t('summary.verificationActionExclude')}
+                              </button>
+                              {original ? (
+                                <>
+                                  <Field label={t('summary.verificationEditAmount')} className="w-[130px]">
+                                    <TextInput
+                                      type="number"
+                                      step="0.01"
+                                      value={amountEdits[key] ?? original.field_value ?? ''}
+                                      onChange={(e) => setAmountEdits((edits) => ({ ...edits, [key]: e.target.value }))}
+                                    />
+                                  </Field>
+                                  <button type="button" className="btn-secondary btn-sm" onClick={() => saveAmountEdit(c)} disabled={busyKey === fieldKey(original)}>
+                                    {busyKey === fieldKey(original) ? <Spinner size={14} /> : null}
+                                    {t('common.save')}
+                                  </button>
+                                </>
                               ) : null}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-right font-medium tabular-nums text-amber-900">
-                            {c.currency_code
-                              ? formatAmountSwiss(Math.abs(c.amount), c.currency_code)
-                              : formatChfSwiss(Math.abs(c.amount))}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           ) : null}

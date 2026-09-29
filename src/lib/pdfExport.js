@@ -105,10 +105,14 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
   y += boxH + 12
 
   // ----------------------------------------------- how this was calculated --
+  // A specialist's own "exclude" decision resolves a field (no longer
+  // needs_verification), but it still never counts — it belongs in the
+  // "excluded by specialist" table below, not here (see TaxSummary.jsx's
+  // componentsBySection for the same rule on screen).
   const componentsBySection = CALC_SECTIONS.map(({ key, titleKey }) => ({
     key,
     titleKey,
-    components: (result.components || []).filter((c) => c.section_key === key && !c.needs_verification)
+    components: (result.components || []).filter((c) => c.section_key === key && !c.needs_verification && c.decision !== 'exclude')
   })).filter((s) => s.components.length)
 
   if (componentsBySection.length) {
@@ -130,7 +134,13 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
         margin: { left: marginX, right: marginX },
         head: [[t('summary.colItem'), t('summary.colAmount')]],
         body: section.components.map((c) => [
-          c.field_label || c.label,
+          // Every row shows its final status — a specialist's "include"
+          // decision on an otherwise-flagged field is marked here exactly
+          // the same way a manual entry is, so neither ever looks like an
+          // ordinary, unquestioned figure.
+          [c.field_label || c.label, c.is_manual ? `(${t('summary.manualEntryBadge')})` : c.decision === 'include' ? `(${t('summary.verificationDecidedIncluded')})` : null]
+            .filter(Boolean)
+            .join(' '),
           `${c.component_type === 'deduction' || c.component_type === 'debt' ? '−' : '+'}${formatChfSwiss(Math.abs(c.amount))}`
         ]),
         columnStyles: { 1: { halign: 'right' } },
@@ -145,9 +155,14 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
   }
 
   // ------------------------------------------------------ needs verification --
-  const needsVerificationComponents = (result.components || []).filter((c) => c.needs_verification)
+  // Split by final status: still open (genuinely unresolved — never
+  // silently omitted from the handed-over document) vs. resolved as
+  // excluded by a specialist decision (shown separately so it's clearly
+  // NOT part of either the totals above or the open questions below).
+  const openVerificationComponents = (result.components || []).filter((c) => c.needs_verification)
+  const excludedByDecisionComponents = (result.components || []).filter((c) => c.decision === 'exclude')
 
-  if (needsVerificationComponents.length) {
+  if (openVerificationComponents.length) {
     ensureSpace(20)
     doc.setFontSize(14)
     doc.setTextColor(...INK)
@@ -162,7 +177,7 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
       startY: y,
       margin: { left: marginX, right: marginX },
       head: [[t('summary.colItem'), t('summary.colAmount')]],
-      body: needsVerificationComponents.map((c) => [
+      body: openVerificationComponents.map((c) => [
         c.field_label || c.label,
         c.currency_code ? formatAmountSwiss(Math.abs(c.amount), c.currency_code) : formatChfSwiss(Math.abs(c.amount))
       ]),
@@ -170,6 +185,30 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
       styles: { fontSize: 9, cellPadding: 2.5, textColor: AMBER_TEXT, fillColor: AMBER_PANEL },
       headStyles: { fillColor: AMBER_LINE, textColor: AMBER_TEXT, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: AMBER_PANEL },
+      theme: 'grid'
+    })
+    y = doc.lastAutoTable.finalY + 10
+  }
+
+  if (excludedByDecisionComponents.length) {
+    ensureSpace(14)
+    doc.setFontSize(11)
+    doc.setTextColor(...MUTED)
+    doc.text(t('summary.verificationDecidedExcluded'), marginX, y)
+    y += 5
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [[t('summary.colItem'), t('summary.colAmount')]],
+      body: excludedByDecisionComponents.map((c) => [
+        c.field_label || c.label,
+        c.currency_code ? formatAmountSwiss(Math.abs(c.amount), c.currency_code) : formatChfSwiss(Math.abs(c.amount))
+      ]),
+      columnStyles: { 1: { halign: 'right' } },
+      styles: { fontSize: 9, cellPadding: 2.5, textColor: MUTED, fillColor: PANEL },
+      headStyles: { fillColor: LINE, textColor: INK, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: PANEL },
       theme: 'grid'
     })
     y = doc.lastAutoTable.finalY + 10

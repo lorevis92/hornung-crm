@@ -238,10 +238,55 @@ function makeSyntheticEntry({
     effective: needsVerification ? 0 : rawAmount,
     note: note || null,
     needsVerification: Boolean(needsVerification),
+    decision: null,
     currencyCode: null,
-    deferred: false
+    deferred: false,
+    isManual: false,
+    manualEntryId: null
   }
 }
+
+// A manual "how this was calculated" row a specialist typed in directly —
+// no underlying extracted field at all. Always counts (subject to the same
+// rounding as everything else), independent of any recalculation — loaded
+// fresh from tax_manual_aggregate_entries every time, never recreated or
+// guessed at, since these are the specialist's own numbers, not derived
+// from a document.
+const MANUAL_CONTRIBUTION_BY_COMPONENT_TYPE = {
+  income: 'income_plus',
+  deduction: 'income_minus',
+  wealth: 'wealth_plus',
+  debt: 'wealth_minus'
+}
+
+function makeManualEntry(row) {
+  const contributionType = MANUAL_CONTRIBUTION_BY_COMPONENT_TYPE[row.component_type]
+  if (!contributionType) return null
+  const amount = Number(row.amount)
+  if (!Number.isFinite(amount)) return null
+  return {
+    documentId: null,
+    fileName: null,
+    categoryCode: null,
+    categoryLabel: null,
+    groupKey: CONTRIBUTION_TO_SECTION[contributionType] || null,
+    fieldKey: null,
+    fieldLabel: row.description,
+    contributionType,
+    capFamily: null,
+    verifiedBySpecialist: true,
+    rawAmount: amount,
+    effective: amount,
+    note: row.note || null,
+    needsVerification: false,
+    decision: null,
+    currencyCode: null,
+    deferred: false,
+    isManual: true,
+    manualEntryId: row.id
+  }
+}
+
 
 // documents: client_documents rows (id, category_code, file_name), already
 //   scoped to one client/tax_year and to only the categorized ones.
@@ -254,6 +299,12 @@ function makeSyntheticEntry({
 // taxYear: the tax year being computed (needed to age children as of 31.12).
 // primaryPerson/spousePerson: client_persons rows (or null/undefined).
 // children: client_children rows for this client (or empty/undefined).
+// fieldDecisions: tax_field_decisions rows for this client/tax_year (or
+//   empty/undefined) — a specialist's explicit include/exclude call on a
+//   flagged field, applied only while its decided_amount still matches.
+// manualEntries: tax_manual_aggregate_entries rows for this client/tax_year
+//   (or empty/undefined) — specialist-added rows with no underlying
+//   extracted field, always counted.
 export function computeTaxAggregate({
   canton,
   documents,
@@ -266,6 +317,8 @@ export function computeTaxAggregate({
   primaryPerson,
   spousePerson,
   children,
+  fieldDecisions,
+  manualEntries,
   lang = 'en'
 }) {
   const categoryByCode = Object.fromEntries((categories || []).map((c) => [c.code, c]))
@@ -274,6 +327,41 @@ export function computeTaxAggregate({
   const fieldLabelByKey = Object.fromEntries(
     (fieldDefs || []).map((f) => [`${f.category_code}:${f.field_key}`, f.field_label])
   )
+  // A specialist's explicit include/exclude call on one field (see
+  // tax_field_decisions) — ignored if `decided_amount` no longer matches
+  // the field's current raw amount (the document changed since the
+  // decision was made), so a stale human call never silently keeps
+  // overriding a figure that isn't the one it was actually made about.
+  const decisionByKey = Object.fromEntries(
+    (fieldDecisions || []).map((d) => [`${d.document_id}:${d.field_key}`, d])
+  )
+
+  // Two occurrences of the SAME repeatable field on the SAME document,
+  // with IDENTICAL source text, are the AI reading one line twice under
+  // two different occurrence suffixes — not two real entries (see the
+  // "Account balance (31.12)" duplicate this caught in the Weber case:
+  // occurrences 1 and 3 both quoted "Cash USD at 31 Dec USD 1 240.00").
+  // Flagged (both), never silently summed as if they were distinct;
+  // resolved the same way as any other needs-verification field, via a
+  // decision.
+  const duplicateSourceFieldKeys = new Set()
+  {
+    const bySignatureGroup = new Map()
+    for (const field of extractedFields || []) {
+      if (field.included_in_calculation === false) continue
+      const doc = documentById[field.document_id]
+      if (!doc || !doc.category_code) continue
+      const quote = (field.source_quote || '').trim().toLowerCase()
+      if (!quote) continue
+      const groupKey = `${doc.id}:${baseFieldKey(doc.category_code, field.field_key)}:${quote}`
+      if (!bySignatureGroup.has(groupKey)) bySignatureGroup.set(groupKey, [])
+      bySignatureGroup.get(groupKey).push(field)
+    }
+    for (const group of bySignatureGroup.values()) {
+      if (group.length < 2) continue
+      for (const field of group) duplicateSourceFieldKeys.add(`${field.document_id}:${field.field_key}`)
+    }
+  }
 
   // A document's "identifier" for readable labels — the first
   // *_name/*_organization field found for it (e.g. an employer or
@@ -358,108 +446,154 @@ export function computeTaxAggregate({
       continue
     }
 
+    // Snapshotted BEFORE netting (below) — the plain number as extracted,
+    // which is what a specialist making a decision actually looked at.
+    const initialRawAmount = rawAmount
+    const decisionRow = decisionByKey[`${field.document_id}:${field.field_key}`]
+    const decisionFresh =
+      decisionRow && Number.isFinite(Number(decisionRow.decided_amount)) &&
+      Math.abs(Number(decisionRow.decided_amount) - initialRawAmount) < 0.005
+    // A decision whose snapshot no longer matches (the document was
+    // re-extracted/corrected with a materially different amount since it
+    // was made) is ignored outright — the field reverts to ordinary
+    // needs-verification logic below, exactly as if no decision existed.
+    const excludeDecision = decisionFresh && decisionRow.decision === 'exclude'
+    // Never lets a blanket "include" bypass the foreign-currency check
+    // (5) below — only actual conversion, or excluding the field, resolves
+    // that one; every other judgment-call check (1, 3, 4, 6, 7, 8, the
+    // duplicate-source check) can be overridden by an "include" decision.
+    const includeOverride = decisionFresh && decisionRow.decision === 'include'
+
     const ruleKey = `${doc.category_code}:${baseKey}`
     let needsVerification = false
     let note = null
-
-    // 1. Categories that are always shown but never counted (separate
-    // taxation, or a figure this app can't reliably compute).
-    if (ALWAYS_FLAGGED_CATEGORIES[doc.category_code]) {
-      needsVerification = true
-      note = ALWAYS_FLAGGED_CATEGORIES[doc.category_code]
-    }
-
-    // 2. Net against a sibling field (e.g. medical costs net of
-    // reimbursement) — computed regardless, it's part of the raw amount.
-    const netsAgainstKey = NETS_AGAINST[ruleKey]
-    if (netsAgainstKey) {
-      const reimbursement = parseAmount(siblingValueFor(netsAgainstKey)) || 0
-      rawAmount = Math.max(0, rawAmount - reimbursement)
-    }
-
-    // 3. Voided by a sibling flag (donation with consideration, commute
-    // with employer-provided free transport).
-    if (!needsVerification) {
-      const voidRule = VOID_IF_TRUTHY[ruleKey]
-      if (voidRule && isAffirmative(siblingValueFor(voidRule.siblingKey))) {
-        needsVerification = true
-        note = voidRule.note
-      }
-    }
-
-    // 4. Alimony — no longer deductible/taxable once the child beneficiary
-    // is no longer a minor.
-    if (!needsVerification && ALIMONY_CHILD_CUTOFF_KEYS.has(ruleKey)) {
-      const beneficiaryType = String(siblingValueFor('beneficiary_type') || '').trim().toLowerCase()
-      const minorValue = siblingValueFor('beneficiary_is_minor')
-      if (CHILD_BENEFICIARY_VALUES.has(beneficiaryType) && minorValue && !isAffirmative(minorValue)) {
-        needsVerification = true
-        note = 'not deductible/taxable — the child beneficiary is no longer a minor'
-      }
-    }
-
-    // 5. Foreign currency — never summed as if it were CHF. A whole-document
-    // flag (one "currency" field), not per-occurrence — a broker statement
-    // has one reporting currency for everything on it. A specialist who
-    // has specifically edited/confirmed THIS field is trusted to have
-    // entered its already-converted CHF value — the shared currency field
-    // itself is deliberately left untouched by that (see the "things to
-    // verify" popup), so every other not-yet-converted field on the same
-    // document still correctly gets flagged.
-    const currencyFieldKey = CURRENCY_FIELD_BY_CATEGORY[doc.category_code]
-    const currencyValue = currencyFieldKey ? siblingValue(doc.id, currencyFieldKey) : null
+    let decision = null
     let currencyCode = null
-    if (!needsVerification && currencyValue && !isChfOrUnspecified(currencyValue) && !field.verified_by_specialist) {
-      needsVerification = true
-      currencyCode = currencyValue.trim().toUpperCase()
-      note = `in foreign currency (${currencyCode}), not converted — manual verification needed`
-    }
 
-    // 6. Donations below the statutory minimum aren't deductible at all.
-    if (!needsVerification && rule.cap_parameter_family === DONATION_CAP_FAMILY) {
-      const minParam = useParam(DONATION_MIN_FAMILY)
-      if (minParam && rawAmount < (minParam.value_numeric || 0)) {
+    if (excludeDecision) {
+      decision = 'exclude'
+      note = decisionRow.note || 'excluded — specialist decision'
+    } else {
+      // 1. Categories that are always shown but never counted (separate
+      // taxation, or a figure this app can't reliably compute) — a
+      // structural/legal reason, not a judgment call, so unlike the checks
+      // below an "include" decision can never bypass this one (an
+      // "exclude" decision is still fine — it's a no-op either way, since
+      // neither state ever counts these in the total).
+      if (ALWAYS_FLAGGED_CATEGORIES[doc.category_code]) {
         needsVerification = true
-        note = `below the CHF ${minParam.value_numeric} minimum for a deductible donation`
+        note = ALWAYS_FLAGGED_CATEGORIES[doc.category_code]
       }
-    }
 
-    // 7. A voluntary pension buy-in (Einkauf) might already be reflected in
-    // the salary certificate's own "pension fund contributions" figure
-    // (net salary is computed after it) — the buy-in document itself
-    // rarely states whether it's additional to that or the same payment
-    // counted twice. Never decide that silently: flag it for a specialist
-    // to confirm, unless one already has (editing/confirming the field via
-    // the normal Tax Summary review sets verified_by_specialist, same
-    // override used for the missing-cap-parameter case above).
-    if (!needsVerification && ruleKey === PENSION_BUYBACK_RULE_KEY && !field.verified_by_specialist) {
-      const hasSalaryPensionContribution = (extractedFields || []).some(
-        (f) =>
-          documentById[f.document_id]?.category_code === 'salary_statement' &&
-          baseFieldKey('salary_statement', f.field_key) === 'pension_fund_contributions' &&
-          f.field_value &&
-          f.included_in_calculation !== false
-      )
-      if (hasSalaryPensionContribution) {
+      // 2. Net against a sibling field (e.g. medical costs net of
+      // reimbursement) — computed regardless, it's part of the raw amount.
+      const netsAgainstKey = NETS_AGAINST[ruleKey]
+      if (netsAgainstKey) {
+        const reimbursement = parseAmount(siblingValueFor(netsAgainstKey)) || 0
+        rawAmount = Math.max(0, rawAmount - reimbursement)
+      }
+
+      // 3. Voided by a sibling flag (donation with consideration, commute
+      // with employer-provided free transport).
+      if (!needsVerification && !includeOverride) {
+        const voidRule = VOID_IF_TRUTHY[ruleKey]
+        if (voidRule && isAffirmative(siblingValueFor(voidRule.siblingKey))) {
+          needsVerification = true
+          note = voidRule.note
+        }
+      }
+
+      // 4. Alimony — no longer deductible/taxable once the child beneficiary
+      // is no longer a minor.
+      if (!needsVerification && !includeOverride && ALIMONY_CHILD_CUTOFF_KEYS.has(ruleKey)) {
+        const beneficiaryType = String(siblingValueFor('beneficiary_type') || '').trim().toLowerCase()
+        const minorValue = siblingValueFor('beneficiary_is_minor')
+        if (CHILD_BENEFICIARY_VALUES.has(beneficiaryType) && minorValue && !isAffirmative(minorValue)) {
+          needsVerification = true
+          note = 'not deductible/taxable — the child beneficiary is no longer a minor'
+        }
+      }
+
+      // 5. Foreign currency — never summed as if it were CHF. A whole-document
+      // flag (one "currency" field), not per-occurrence — a broker statement
+      // has one reporting currency for everything on it. A specialist who
+      // has specifically edited/confirmed THIS field is trusted to have
+      // entered its already-converted CHF value — the shared currency field
+      // itself is deliberately left untouched by that (see the "things to
+      // verify" popup), so every other not-yet-converted field on the same
+      // document still correctly gets flagged. Deliberately NOT overridable
+      // by includeOverride — see above.
+      const currencyFieldKey = CURRENCY_FIELD_BY_CATEGORY[doc.category_code]
+      const currencyValue = currencyFieldKey ? siblingValue(doc.id, currencyFieldKey) : null
+      if (!needsVerification && currencyValue && !isChfOrUnspecified(currencyValue) && !field.verified_by_specialist) {
+        needsVerification = true
+        currencyCode = currencyValue.trim().toUpperCase()
+        note = `in foreign currency (${currencyCode}), not converted — manual verification needed`
+      }
+
+      // 6. Donations below the statutory minimum aren't deductible at all.
+      if (!needsVerification && !includeOverride && rule.cap_parameter_family === DONATION_CAP_FAMILY) {
+        const minParam = useParam(DONATION_MIN_FAMILY)
+        if (minParam && rawAmount < (minParam.value_numeric || 0)) {
+          needsVerification = true
+          note = `below the CHF ${minParam.value_numeric} minimum for a deductible donation`
+        }
+      }
+
+      // 7. A voluntary pension buy-in (Einkauf) might already be reflected in
+      // the salary certificate's own "pension fund contributions" figure
+      // (net salary is computed after it) — the buy-in document itself
+      // rarely states whether it's additional to that or the same payment
+      // counted twice. Never decide that silently: flag it for a specialist
+      // to confirm, unless one already has (editing/confirming the field via
+      // the normal Tax Summary review sets verified_by_specialist, same
+      // override used for the missing-cap-parameter case above).
+      if (!needsVerification && !includeOverride && ruleKey === PENSION_BUYBACK_RULE_KEY && !field.verified_by_specialist) {
+        const hasSalaryPensionContribution = (extractedFields || []).some(
+          (f) =>
+            documentById[f.document_id]?.category_code === 'salary_statement' &&
+            baseFieldKey('salary_statement', f.field_key) === 'pension_fund_contributions' &&
+            f.field_value &&
+            f.included_in_calculation !== false
+        )
+        if (hasSalaryPensionContribution) {
+          needsVerification = true
+          note =
+            'possible double deduction — the salary certificate already shows pension fund contributions ' +
+            'that may include this buy-in; confirm the field once checked against the two documents'
+        }
+      }
+
+      // 8. The same amount also sitting under a mutually exclusive sibling
+      // field on this document (e.g. maintenance_costs and
+      // administration_costs both reading the same figure) — almost
+      // certainly one real expense captured twice, not two real deductions.
+      if (!needsVerification && !includeOverride) {
+        const exclusiveSiblingKey = MUTUALLY_EXCLUSIVE_IF_EQUAL[ruleKey]
+        if (exclusiveSiblingKey) {
+          const siblingRaw = parseAmount(siblingValueFor(exclusiveSiblingKey))
+          if (siblingRaw != null && siblingRaw === rawAmount) {
+            needsVerification = true
+            note = 'same amount also appears under a mutually exclusive field on this document — confirm which one actually applies'
+          }
+        }
+      }
+
+      // 9. Same source text as another occurrence of this field on this
+      // document — the AI reading one line twice, not two real entries.
+      if (!needsVerification && !includeOverride && duplicateSourceFieldKeys.has(`${field.document_id}:${field.field_key}`)) {
         needsVerification = true
         note =
-          'possible double deduction — the salary certificate already shows pension fund contributions ' +
-          'that may include this buy-in; confirm the field once checked against the two documents'
+          'identical source text as another occurrence of this field on this document — likely the same line ' +
+          'read twice; confirm before including both'
       }
-    }
 
-    // 8. The same amount also sitting under a mutually exclusive sibling
-    // field on this document (e.g. maintenance_costs and
-    // administration_costs both reading the same figure) — almost
-    // certainly one real expense captured twice, not two real deductions.
-    if (!needsVerification) {
-      const exclusiveSiblingKey = MUTUALLY_EXCLUSIVE_IF_EQUAL[ruleKey]
-      if (exclusiveSiblingKey) {
-        const siblingRaw = parseAmount(siblingValueFor(exclusiveSiblingKey))
-        if (siblingRaw != null && siblingRaw === rawAmount) {
-          needsVerification = true
-          note = 'same amount also appears under a mutually exclusive field on this document — confirm which one actually applies'
-        }
+      if (includeOverride) {
+        // The include decision only actually took effect if nothing above
+        // still needed verification despite it (currency (5) is never
+        // overridable) — otherwise this is a stale/inapplicable decision
+        // and the field stays a genuine open question.
+        decision = needsVerification ? null : 'include'
       }
     }
 
@@ -490,30 +624,35 @@ export function computeTaxAggregate({
       effective: rawAmount,
       note,
       needsVerification,
+      decision,
       currencyCode,
-      deferred: false
+      deferred: false,
+      isManual: false,
+      manualEntryId: null
     })
   }
 
+  for (const row of manualEntries || []) {
+    const entry = makeManualEntry(row)
+    if (entry) entries.push(entry)
+  }
+
   // Entries already excluded at creation time (voided donation, foreign
-  // currency, separate taxation, ...) contribute nothing from here on —
-  // zeroed immediately, not just at the final rounding pass, so every
-  // intermediate figure below (wealth-derived income, provisional income
-  // for percentage thresholds) is correct too, not just the final total.
+  // currency, separate taxation, a specialist's own "exclude" decision, ...)
+  // contribute nothing from here on — zeroed immediately, not just at the
+  // final rounding pass, so every intermediate figure below (wealth-derived
+  // income, provisional income for percentage thresholds) is correct too,
+  // not just the final total.
+  const isExcluded = (entry) => entry.needsVerification || entry.decision === 'exclude'
   for (const entry of entries) {
-    if (entry.needsVerification) entry.effective = 0
+    if (isExcluded(entry)) entry.effective = 0
   }
 
   // Wealth-derived income — needed for the debt-interest allowance, defined
   // generically as income_plus contributions from asset/property documents
   // (interest, dividends, imputed rental value), not by field name.
   const wealthDerivedIncome = entries
-    .filter(
-      (e) =>
-        e.contributionType === 'income_plus' &&
-        (e.groupKey === 'assets' || e.groupKey === 'property') &&
-        !e.needsVerification
-    )
+    .filter((e) => e.contributionType === 'income_plus' && (e.groupKey === 'assets' || e.groupKey === 'property') && !isExcluded(e))
     .reduce((sum, e) => sum + e.rawAmount, 0)
 
   const isMarried = isMarriedHousehold(primaryPerson, spousePerson)
@@ -532,7 +671,7 @@ export function computeTaxAggregate({
   // by marital status, plus a per-child increment) before the generic
   // per-entry cap loop runs — a plain per-entry cap would let each premium
   // independently use the full allowance instead of sharing one.
-  const insuranceEntries = entries.filter((e) => !e.needsVerification && e.capFamily === INSURANCE_POOL_FAMILY)
+  const insuranceEntries = entries.filter((e) => !isExcluded(e) && e.capFamily === INSURANCE_POOL_FAMILY)
   if (insuranceEntries.length) {
     const resolved = resolveInsurancePremiumCap(isMarried, qualifyingChildren.length, useParam)
     if (!resolved) {
@@ -562,9 +701,10 @@ export function computeTaxAggregate({
   // a provisional income figure computed further down.
   for (const entry of entries) {
     // Already excluded above (voided donation, foreign currency, separate
-    // taxation, ...) — nothing left to resolve, and the cap/param logic
-    // below would only overwrite that reason with an unrelated one.
-    if (entry.needsVerification) continue
+    // taxation, a specialist's own "exclude" decision, ...) — nothing left
+    // to resolve, and the cap/param logic below would only overwrite that
+    // reason with an unrelated one.
+    if (isExcluded(entry)) continue
     if (!entry.capFamily) continue
     const param = useParam(entry.capFamily)
     if (!param) {
@@ -612,7 +752,7 @@ export function computeTaxAggregate({
   // before provisional income is computed, so it counts as an "organic"
   // deduction like every other one above.
   const netSalaryEntries = entries.filter(
-    (e) => e.categoryCode === 'salary_statement' && e.fieldKey === 'net_salary' && !e.needsVerification
+    (e) => e.categoryCode === 'salary_statement' && e.fieldKey === 'net_salary' && !isExcluded(e)
   )
   if (netSalaryEntries.length) {
     const pctParam = useParam('professional_expenses_pct')
@@ -870,13 +1010,20 @@ export function computeTaxAggregate({
       fieldKey: entry.fieldKey,
       componentType: CONTRIBUTION_TO_COMPONENT[entry.contributionType],
       sectionKey: CONTRIBUTION_TO_SECTION[entry.contributionType] || null,
-      // A needs-verification row shows the amount it WOULD contribute —
-      // effective is 0 for total-summation purposes (see above), so this
-      // row is never part of the "totals = sum of rows" reconciliation in
-      // the normal breakdown; it's rendered as its own, clearly separate
-      // section instead.
-      amount: entry.needsVerification ? entry.rawAmount : entry.effective,
+      // A needs-verification row (or one a specialist decided to exclude)
+      // shows the amount it WOULD contribute — effective is 0 for
+      // total-summation purposes (see above), so this row is never part of
+      // the "totals = sum of rows" reconciliation in the normal breakdown;
+      // it's rendered as its own, clearly separate section instead.
+      amount: entry.needsVerification || entry.decision === 'exclude' ? entry.rawAmount : entry.effective,
       needsVerification: entry.needsVerification,
+      // null when never flagged, 'include'/'exclude' when a specialist has
+      // explicitly resolved it — lets the UI show a final status (resolved
+      // vs. still open) instead of every ever-flagged field looking
+      // identically unresolved forever.
+      decision: entry.decision || null,
+      isManual: Boolean(entry.isManual),
+      manualEntryId: entry.manualEntryId || null,
       // Set only for the foreign-currency exclusion reason — the display
       // layer uses this instead of formatting the (untouched, still in
       // that currency) amount as if it were CHF.
