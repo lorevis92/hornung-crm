@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle, AlignJustify, ArrowLeft, Calculator, Eye, FileDown, FolderOpen, Info, Landmark, List,
+  AlertTriangle, AlignJustify, ArrowLeft, Calculator, Eye, FileDown, FileText, FolderOpen, Info, Landmark, List,
   Pencil, PiggyBank, Plus, Receipt, Trash2
 } from 'lucide-react'
 import CompactFieldRow from '../components/CompactFieldRow'
@@ -419,6 +419,23 @@ export default function TaxSummary() {
       isPdf: doc.mime_type === 'application/pdf',
       isText: doc.mime_type === 'text/plain'
     })
+
+  // The "What each document says" file name — same source viewer, opened
+  // from the top of the document (no specific field/quote), same as
+  // viewOrphanedDocument above. `documents` (not `allDocuments`) is enough:
+  // every document a documentDataGroups entry can reference is already
+  // categorized (see the `fields` this is built from, in the useEffect at
+  // the top of this component).
+  const viewDocumentGroupSource = (documentId) => {
+    const doc = documents.find((d) => d.id === documentId)
+    if (!doc) return
+    viewSource({
+      document_id: doc.id,
+      file_name: doc.file_name,
+      isPdf: doc.mime_type === 'application/pdf',
+      isText: doc.mime_type === 'text/plain'
+    })
+  }
 
   const markDocumentNotRelevant = async (doc) => {
     setMarkingNotRelevantId(doc.id)
@@ -1211,9 +1228,15 @@ export default function TaxSummary() {
                       const rowGroups = groupFieldsByRow(docGroup.fields)
                       return fieldLayout === 'compact' ? (
                         <div key={docGroup.documentId} className="overflow-hidden rounded-xl border border-line bg-white">
-                          <p className="border-b border-line/70 bg-sand/40 px-2 py-1 text-[12.5px] font-medium text-ink-500">
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-1 border-b border-line/70 bg-sand/40 px-2 py-1 text-left text-[12.5px] font-medium text-gold-700 underline decoration-gold-300 underline-offset-2 hover:text-gold-800"
+                            onClick={() => viewDocumentGroupSource(docGroup.documentId)}
+                            title={t('extraction.viewSource')}
+                          >
+                            <FileText size={12} aria-hidden="true" />
                             {docGroup.fileName}
-                          </p>
+                          </button>
                           {rowGroups.map((rowGroup) => (
                             <div key={rowGroup.rowKey}>
                               {rowGroup.legacyFormat ? (
@@ -1258,7 +1281,15 @@ export default function TaxSummary() {
                         </div>
                       ) : (
                         <div key={docGroup.documentId} className="space-y-2 rounded-xl bg-sand/40 p-3">
-                          <p className="px-1 text-[12.5px] font-medium text-ink-500">{docGroup.fileName}</p>
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 px-1 text-[12.5px] font-medium text-gold-700 underline decoration-gold-300 underline-offset-2 hover:text-gold-800"
+                            onClick={() => viewDocumentGroupSource(docGroup.documentId)}
+                            title={t('extraction.viewSource')}
+                          >
+                            <FileText size={12} aria-hidden="true" />
+                            {docGroup.fileName}
+                          </button>
                           {rowGroups.map((rowGroup) => (
                             <div key={rowGroup.rowKey} className="space-y-2">
                               {rowGroup.legacyFormat ? (
@@ -1952,9 +1983,21 @@ export default function TaxSummary() {
               <h3 className="text-[15px] font-semibold text-ink-700">{t('summary.documentDataTitle')}</h3>
               <p className="text-[13px] text-ink-400">{t('summary.documentDataHelp')}</p>
               <div className="space-y-3">
-                {documentDataGroups.map((group) => (
-                  <div key={group.documentId} className="rounded-xl border border-line bg-sand/30 p-3.5">
-                    <p className="mb-2 text-[13px] font-medium text-ink-600">{group.heading}</p>
+                {documentDataGroups.map((group, idx) => (
+                  <div key={`${group.documentId}:${idx}`} className="rounded-xl border border-line bg-sand/30 p-3.5">
+                    <p className="mb-2 text-[13px] font-medium text-ink-600">
+                      {group.categoryLabel ? `${group.categoryLabel} — ` : ''}
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 font-medium text-gold-700 underline decoration-gold-300 underline-offset-2 hover:text-gold-800"
+                        onClick={() => viewDocumentGroupSource(group.documentId)}
+                        title={t('extraction.viewSource')}
+                      >
+                        <FileText size={12} aria-hidden="true" />
+                        {group.fileName}
+                      </button>
+                      {group.rowLabel ? ` — ${group.rowLabel}` : ''}
+                    </p>
                     <dl className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
                       {group.fields.map((f) => (
                         <div key={f.label} className="flex justify-between gap-3 text-[13px]">

@@ -102,7 +102,8 @@ export function verifiedFieldsByDocument(section, lang) {
     documents.forEach((docGroup) => {
       const withValue = docGroup.fields.filter((f) => f.field_value)
       if (!withValue.length) return
-      const baseHeading = `${docTypeLabel(category, lang) || ''} — ${docGroup.fileName}`
+      const categoryLabel = docTypeLabel(category, lang) || ''
+      const baseHeading = `${categoryLabel} — ${docGroup.fileName}`
       // One row (an account, an insurance premium, a mortgage) becomes its
       // own group, headed by that row's own identifier, instead of every
       // row's fields interleaved into one flat list under the document.
@@ -118,7 +119,17 @@ export function verifiedFieldsByDocument(section, lang) {
       for (const rowGroup of rowGroups) {
         groups.push({
           documentId: docGroup.documentId,
+          // `heading` is the plain-text, non-interactive version (used by
+          // the PDF export, which has no concept of a clickable source
+          // link) — categoryLabel/fileName/rowLabel are the same three
+          // parts, kept separate so the on-screen Tax Summary can render
+          // just the file name as a link back to the source document
+          // without also making the category label or row identifier
+          // clickable.
           heading: rowGroup.rowLabel ? `${baseHeading} — ${rowGroup.rowLabel}` : baseHeading,
+          categoryLabel,
+          fileName: docGroup.fileName,
+          rowLabel: rowGroup.rowLabel || null,
           fields: rowGroup.fields.map((f) => ({ label: f.field_label, value: f.field_value || '—' }))
         })
       }
