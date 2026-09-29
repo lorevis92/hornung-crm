@@ -423,6 +423,18 @@ export const supabaseApi = {
     )
   },
 
+  // "Mark as not relevant" on Tax Summary's incomplete-calculation banner —
+  // a document that genuinely has nothing worth extracting (or whose
+  // content needs a manual entry instead, see the chalet-expenses case)
+  // moves to 'rejected' (an existing, final client_documents status) so it
+  // stops showing up as an unexplained orphaned-document warning, instead
+  // of a specialist having no way to acknowledge it was actually reviewed.
+  async updateClientDocumentStatus(documentId, status) {
+    return unwrap(
+      await supabase.from('client_documents').update({ status }).eq('id', documentId).select().single()
+    )
+  },
+
   // Tax settings — federal/cantonal tax parameters (staff only, RLS: "tax
   // parameters: staff only").
   async listTaxParameters() {

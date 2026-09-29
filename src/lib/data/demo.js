@@ -1138,6 +1138,15 @@ export const demoApi = {
     return wait({ ok: true })
   },
 
+  async updateClientDocumentStatus(documentId, status) {
+    const s = store()
+    const doc = s.documents.find((d) => d.id === documentId)
+    if (!doc) throw new Error('Document not found.')
+    doc.status = status
+    commit()
+    return wait(doc)
+  },
+
   // The "reload everything" safety net (see api/reprocess-client-year.js
   // for the real-backend equivalent) — no actual AI call in demo mode
   // (documents are pre-seeded with their extracted fields already), so

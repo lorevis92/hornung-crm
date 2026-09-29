@@ -621,6 +621,8 @@ export default {
     retryExtraction: 'Riprova estrazione',
     fixChildren: 'Verifica e applica',
     incompleteOrphanedDoc: '"{name}" è stato estratto ma nessuno dei suoi dati compare nel calcolo qui sotto — verifica manualmente.',
+    incompleteViewDocument: 'Visualizza documento',
+    incompleteMarkNotRelevant: 'Segna come non rilevante',
     uncertaintyBadge: '{count} da verificare',
     uncertaintyModalTitle: 'Prima di affidarti a questo calcolo, verifica questi punti',
     uncertaintyModalHelp: 'Il calcolo attuale include elementi che richiedono una verifica da parte dello specialista:',

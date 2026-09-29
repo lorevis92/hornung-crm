@@ -622,6 +622,8 @@ export default {
     retryExtraction: 'Extraktion erneut versuchen',
     fixChildren: 'Prüfen & übernehmen',
     incompleteOrphanedDoc: '„{name}“ wurde extrahiert, aber keine seiner Daten erscheint in der Berechnung unten — bitte manuell prüfen.',
+    incompleteViewDocument: 'Dokument ansehen',
+    incompleteMarkNotRelevant: 'Als nicht relevant markieren',
     uncertaintyBadge: '{count} zu prüfen',
     uncertaintyModalTitle: 'Vor Verwendung dieser Berechnung diese Punkte prüfen',
     uncertaintyModalHelp: 'Diese Berechnung enthält Punkte, die eine Prüfung durch den Fachspezialisten benötigen:',

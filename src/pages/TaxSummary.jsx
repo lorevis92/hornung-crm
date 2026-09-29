@@ -126,6 +126,7 @@ export default function TaxSummary() {
   // Questionnaire and the calculation stayed empty/wrong.
   const [questionnaire, setQuestionnaire] = useState(null)
   const [retryingDocId, setRetryingDocId] = useState(null)
+  const [markingNotRelevantId, setMarkingNotRelevantId] = useState(null)
 
   const [manualEntries, setManualEntries] = useState([])
   const [manualEntryForm, setManualEntryForm] = useState(null)
@@ -318,6 +319,32 @@ export default function TaxSummary() {
       toast.error(error.message || t('common.error'))
     } finally {
       setRetryingDocId(null)
+    }
+  }
+
+  // An orphaned document's own "View document" action — same idea as
+  // viewComponentSource, but for a whole document rather than one field's
+  // exact page/quote (there isn't one yet — that's the whole problem this
+  // banner is about), so it just opens the file from the top.
+  const viewOrphanedDocument = (doc) =>
+    viewSource({
+      document_id: doc.id,
+      file_name: doc.file_name,
+      isPdf: doc.mime_type === 'application/pdf',
+      isText: doc.mime_type === 'text/plain'
+    })
+
+  const markDocumentNotRelevant = async (doc) => {
+    setMarkingNotRelevantId(doc.id)
+    try {
+      await api.updateClientDocumentStatus(doc.id, 'rejected')
+      setAllDocuments((list) => list.map((d) => (d.id === doc.id ? { ...d, status: 'rejected' } : d)))
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setMarkingNotRelevantId(null)
     }
   }
 
@@ -862,10 +889,25 @@ export default function TaxSummary() {
             {orphanedDocuments.map((doc) => (
               <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 text-[13.5px] text-red-800">
                 <span>{t('summary.incompleteOrphanedDoc', { name: doc.file_name })}</span>
-                <button type="button" className="btn-secondary btn-sm shrink-0" onClick={calculate} disabled={calculating}>
-                  {calculating ? <Spinner size={14} /> : null}
-                  {t('summary.recalculate')}
-                </button>
+                <span className="flex shrink-0 flex-wrap items-center gap-2">
+                  <button type="button" className="btn-secondary btn-sm" onClick={() => viewOrphanedDocument(doc)}>
+                    <Eye size={13} aria-hidden="true" />
+                    {t('summary.incompleteViewDocument')}
+                  </button>
+                  <button type="button" className="btn-secondary btn-sm" onClick={openManualEntryForAdd}>
+                    <Plus size={13} aria-hidden="true" />
+                    {t('summary.manualEntryAdd')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => markDocumentNotRelevant(doc)}
+                    disabled={markingNotRelevantId === doc.id}
+                  >
+                    {markingNotRelevantId === doc.id ? <Spinner size={13} /> : null}
+                    {t('summary.incompleteMarkNotRelevant')}
+                  </button>
+                </span>
               </li>
             ))}
           </ul>

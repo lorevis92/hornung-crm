@@ -623,6 +623,8 @@ export default {
     retryExtraction: "Réessayer l'extraction",
     fixChildren: 'Vérifier et appliquer',
     incompleteOrphanedDoc: '« {name} » a été extrait mais aucune de ses données n’apparaît dans le calcul ci-dessous — vérifiez manuellement.',
+    incompleteViewDocument: 'Voir le document',
+    incompleteMarkNotRelevant: 'Marquer comme non pertinent',
     uncertaintyBadge: '{count} à vérifier',
     uncertaintyModalTitle: 'Avant de vous fier à ce calcul, vérifiez ces points',
     uncertaintyModalHelp: 'Ce calcul comprend des éléments nécessitant une vérification par le spécialiste :',

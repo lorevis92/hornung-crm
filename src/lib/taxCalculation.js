@@ -25,6 +25,12 @@ const DONATION_MIN_FAMILY = 'donation_min_amount'
 // pre-pass recognizes; the actual cap is resolved dynamically from marital
 // status + qualifying-children count (see resolveInsurancePremiumCap).
 const INSURANCE_POOL_FAMILY = 'insurance_premium_pool'
+// Not a real tax_parameters family on its own — a marker the pillar-3a
+// pre-pass recognizes; the actual federal cap depends on whether the
+// person has an occupational pension fund (2nd pillar) tied to their
+// employment, resolved dynamically below (see the pre-pass right after
+// insurance pooling), the same reasoning as INSURANCE_POOL_FAMILY.
+const PILLAR_3A_FAMILY = 'pillar_3a_dynamic'
 
 // A handful of fields need to look at a sibling field on the SAME document
 // before they can be turned into a plain amount — same "special-cased by
@@ -116,9 +122,22 @@ function isChfOrUnspecified(value) {
   return !v || CHF_ALIASES.has(v)
 }
 
+// The AI extraction is inconsistent about whether a currency amount field
+// comes back as a bare number ("15000.00") or with the currency written
+// into the same string ("CHF 15 000.00", "15'000.00 CHF", ...) — the
+// original Weber/Sara test cases show both forms for the same kind of
+// field on different documents. Letters are stripped wherever they fall in
+// the string (prefix or suffix) rather than assuming one position, so a
+// real amount is never silently dropped (and dropped without any visible
+// trace — see `warnings` below) just because a currency code was inlined.
 function parseAmount(value) {
   if (value == null) return null
-  const cleaned = String(value).trim().replace(/['’\s]/g, '').replace(/,/g, '')
+  const cleaned = String(value)
+    .trim()
+    .replace(/[a-zA-Z]+/g, '')
+    .replace(/['’\s]/g, '')
+    .replace(/,/g, '')
+    .trim()
   if (!cleaned) return null
   const num = Number(cleaned)
   return Number.isFinite(num) ? num : null
@@ -363,6 +382,28 @@ export function computeTaxAggregate({
     }
   }
 
+  // An imputed rental value (owner-occupied) and an actual rental income
+  // (rented out) are mutually exclusive ways of taxing the SAME property —
+  // Swiss tax law taxes the real rent once a property is rented, never the
+  // imputed value on top of it. Documents for the same client/year don't
+  // reliably state which property they're each about (a rental statement
+  // may carry no address at all), so this can't be resolved by matching
+  // addresses across documents — flagged whenever a client/year has ANY
+  // nonzero imputed_rental_value AND ANY nonzero annual_rental_income among
+  // their property_tax_value documents, for the specialist to confirm
+  // rather than silently taxing both.
+  const hasNonzeroPropertyField = (fieldKey) =>
+    (extractedFields || []).some((f) => {
+      if (f.included_in_calculation === false) return false
+      const doc = documentById[f.document_id]
+      if (!doc || doc.category_code !== 'property_tax_value') return false
+      if (baseFieldKey('property_tax_value', f.field_key) !== fieldKey) return false
+      const amount = parseAmount(f.field_value)
+      return amount != null && amount !== 0
+    })
+  const imputedVsActualRentalConflict =
+    hasNonzeroPropertyField('imputed_rental_value') && hasNonzeroPropertyField('annual_rental_income')
+
   // A document's "identifier" for readable labels — the first
   // *_name/*_organization field found for it (e.g. an employer or
   // institution name), falling back to the file name. Generic on purpose:
@@ -508,9 +549,18 @@ export function computeTaxAggregate({
       if (!needsVerification && !includeOverride && ALIMONY_CHILD_CUTOFF_KEYS.has(ruleKey)) {
         const beneficiaryType = String(siblingValueFor('beneficiary_type') || '').trim().toLowerCase()
         const minorValue = siblingValueFor('beneficiary_is_minor')
-        if (CHILD_BENEFICIARY_VALUES.has(beneficiaryType) && minorValue && !isAffirmative(minorValue)) {
-          needsVerification = true
-          note = 'not deductible/taxable — the child beneficiary is no longer a minor'
+        if (CHILD_BENEFICIARY_VALUES.has(beneficiaryType)) {
+          if (minorValue && !isAffirmative(minorValue)) {
+            needsVerification = true
+            note = 'not deductible/taxable — the child beneficiary is no longer a minor'
+          } else if (!minorValue) {
+            // A child beneficiary's taxability hinges on this exact fact
+            // (minors: taxable to the custodial parent; no longer minor:
+            // not taxable) — the document not stating it at all is a real
+            // gap, not a safe default to assume either way.
+            needsVerification = true
+            note = 'whether the child beneficiary is still a minor is not stated — confirm before including as taxable income'
+          }
         }
       }
 
@@ -586,6 +636,22 @@ export function computeTaxAggregate({
         note =
           'identical source text as another occurrence of this field on this document — likely the same line ' +
           'read twice; confirm before including both'
+      }
+
+      // 10. Imputed rental value AND actual rental income both present
+      // somewhere in this client/year's property documents — mutually
+      // exclusive ways of taxing the same property (owner-occupied vs.
+      // rented out). Never silently taxed as if both applied.
+      if (
+        !needsVerification &&
+        !includeOverride &&
+        imputedVsActualRentalConflict &&
+        (ruleKey === 'property_tax_value:imputed_rental_value' || ruleKey === 'property_tax_value:annual_rental_income')
+      ) {
+        needsVerification = true
+        note =
+          'both an imputed rental value and an actual rental income appear across this client\'s property documents — ' +
+          'a rented property is normally taxed on the real rent, not the imputed value; confirm which applies'
       }
 
       if (includeOverride) {
@@ -695,6 +761,55 @@ export function computeTaxAggregate({
       }
     }
     for (const entry of insuranceEntries) entry.capFamily = null // resolved — skip the generic loop below
+  }
+
+  // Pillar 3a contributions — the federal deduction ceiling is one of two
+  // fixed figures depending on whether the person has an occupational
+  // pension fund (2nd pillar / LPP) through their employer: a much lower
+  // cap for someone who already builds retirement savings that way, a much
+  // higher one (a percentage-of-income ceiling, itself capped) for someone
+  // who doesn't (typically the purely self-employed). Same signal already
+  // used for the pension-buy-in double-deduction check below: a
+  // salary_statement document showing pension_fund_contributions.
+  const pillar3aEntries = entries.filter((e) => !isExcluded(e) && e.capFamily === PILLAR_3A_FAMILY)
+  if (pillar3aEntries.length) {
+    const hasSalaryPensionContribution = (extractedFields || []).some(
+      (f) =>
+        documentById[f.document_id]?.category_code === 'salary_statement' &&
+        baseFieldKey('salary_statement', f.field_key) === 'pension_fund_contributions' &&
+        f.field_value &&
+        f.included_in_calculation !== false
+    )
+    const param = hasSalaryPensionContribution ? useParam('pillar_3a_with_lpp') : useParam('pillar_3a_without_lpp')
+    if (!param) {
+      for (const entry of pillar3aEntries) {
+        if (entry.verifiedBySpecialist) {
+          entry.note = 'tax parameter not found — included by the specialist despite the missing cap'
+        } else {
+          entry.needsVerification = true
+          entry.effective = 0
+          entry.note = 'not verified — missing tax parameter, excluded from calculation'
+        }
+      }
+    } else {
+      let cap = param.value_numeric || 0
+      // The "without LPP" ceiling is a percentage-of-income cap in Swiss
+      // law (20% of net self-employment income), not a flat amount —
+      // value_numeric here is only the federal upper bound on that
+      // percentage, so it's tightened further when actual self-employment
+      // income is on file for this same client/year.
+      if (!hasSalaryPensionContribution && param.value_type === 'formula') {
+        const selfEmployedIncome = entries
+          .filter((e) => e.categoryCode === 'self_employed_income_statement' && e.fieldKey === 'net_profit' && !isExcluded(e))
+          .reduce((sum, e) => sum + e.rawAmount, 0)
+        cap = Math.min(cap, selfEmployedIncome * 0.2)
+      }
+      for (const entry of pillar3aEntries) {
+        entry.effective = Math.min(entry.rawAmount, cap)
+        if (entry.effective < entry.rawAmount) entry.note = 'cap applied'
+      }
+    }
+    for (const entry of pillar3aEntries) entry.capFamily = null // resolved — skip the generic loop below
   }
 
   // Resolve every capped entry except percentage-type ones, which depend on

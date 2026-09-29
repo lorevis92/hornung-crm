@@ -623,6 +623,8 @@ export default {
     retryExtraction: 'Retry extraction',
     fixChildren: 'Review & apply',
     incompleteOrphanedDoc: '"{name}" was extracted but none of its data appears in the calculation below — verify it manually.',
+    incompleteViewDocument: 'View document',
+    incompleteMarkNotRelevant: 'Mark as not relevant',
     uncertaintyBadge: '{count} to verify',
     uncertaintyModalTitle: 'Before relying on this calculation, check these points',
     uncertaintyModalHelp: 'This calculation includes items that need a specialist to review:',
