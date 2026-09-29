@@ -162,12 +162,24 @@ describe('Weber 2025 — golden case', () => {
     expect(ancillary?.amount).toBe(1440)
   })
 
-  it('bonus: Lina\'s own bank account/interest (CHF 5\'980.20 / CHF 18.20) is captured distinctly from the joint account', () => {
+  it('bonus: Lina\'s own bank account/interest (CHF 5\'980.20 / CHF 18.20) is captured distinctly from the joint account — and, lacking an account holder in this pre-attribution fixture, correctly held for verification rather than silently pooled with it', () => {
     const chfDoc = docByFilePart('attestazione_banca_conti')
-    const balances = componentsFor(components, chfDoc).filter((c) => c.fieldKey?.startsWith('account_balance_31_12') && !c.needsVerification)
+    const balances = componentsFor(components, chfDoc).filter((c) => c.fieldKey?.startsWith('account_balance_31_12'))
     const interests = componentsFor(components, chfDoc).filter((c) => c.fieldKey?.startsWith('interest_income'))
-    expect(balances.some((c) => c.amount === 5980)).toBe(true) // rounded to whole CHF
-    expect(interests.some((c) => c.amount === 18)).toBe(true)
+    // The joint account (first occurrence) still resolves via the shared
+    // institution name, same as always.
+    expect(balances.find((c) => c.fieldKey === 'account_balance_31_12')?.needsVerification).toBe(false)
+    expect(interests.find((c) => c.fieldKey === 'interest_income')?.needsVerification).toBe(false)
+    // Lina's own account (second occurrence) is captured as its own,
+    // distinct row — but this fixture predates per-account holder
+    // attribution, so it's correctly flagged "unidentified" instead of
+    // being silently folded into the joint account's total.
+    const linaBalance = balances.find((c) => c.fieldKey === 'account_balance_31_12_2')
+    const linaInterest = interests.find((c) => c.fieldKey === 'interest_income_2')
+    expect(linaBalance?.needsVerification).toBe(true)
+    expect(linaBalance?.amount).toBe(5980.2)
+    expect(linaInterest?.needsVerification).toBe(true)
+    expect(linaInterest?.amount).toBe(18.2)
   })
 })
 

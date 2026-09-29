@@ -33,14 +33,35 @@ export const REPEATABLE_FIELD_KEYS = new Set([
   'bank_securities_crypto_statement:dividend_income',
   'bank_securities_crypto_statement:interest_income',
   'bank_securities_crypto_statement:account_balance_31_12',
-  // pillar_3a_certificate — several separate payments in the year.
+  // account_holder_name/account_iban — the "whose account is this"
+  // context a repeated account actually needs to be labeled by (see
+  // taxCalculation.js's OCCURRENCE_CONTEXT_FIELDS), not just the "#2"
+  // occurrence marker a bare number gave no specialist any way to use.
+  'bank_securities_crypto_statement:account_holder_name',
+  'bank_securities_crypto_statement:account_iban',
+  // pillar_3a_certificate — several separate payments in the year, each
+  // potentially at a different institution/policy, and/or for a different
+  // family member (policyholder_name).
   'pillar_3a_certificate:annual_contribution',
+  'pillar_3a_certificate:institution_name',
+  'pillar_3a_certificate:policy_number',
+  'pillar_3a_certificate:policyholder_name',
   // health_insurance_policy — one uploaded document can bundle separate
   // policies for different family members (e.g. "premi_cassa_malati.pdf"
   // listing each person's own insurer and premium), not one combined
-  // policy with a single premium.
+  // policy with a single premium. insured_person_name/policy_type are the
+  // context that actually identifies whose premium — and whether it's
+  // basic (LAMal/KVG) or supplementary (LCA/VVG) — cover is which.
   'health_insurance_policy:insurer_name',
   'health_insurance_policy:annual_premium',
+  'health_insurance_policy:insured_person_name',
+  'health_insurance_policy:policy_type',
+  // medical_costs — a single document can itemize different family
+  // members' own medical expenses (and their own reimbursements), not
+  // just one person's; person_name is who the expense belongs to.
+  'medical_costs:total_amount',
+  'medical_costs:insurance_reimbursement',
+  'medical_costs:person_name',
   // debt_certificate — one mortgage/loan statement can cover more than one
   // distinct debt (e.g. a Sion mortgage and a Martigny mortgage on the same
   // bank certificate), each with its own creditor, balance and interest.

@@ -113,6 +113,131 @@ const CHF_ALIASES = new Set(['CHF', 'SFR'])
 
 const MARRIED_STATUSES = new Set(['married', 'registered_partnership'])
 
+// Per category, the field(s) whose PER-OCCURRENCE value identify who or
+// what that specific repeated row actually belongs to — checked before,
+// and combined with, the generic *_name/*_organization heuristic below.
+// A shared, document-wide identifier (e.g. one insurer name covering four
+// premiums) tells a specialist WHERE the money is, never WHOSE it is —
+// exactly the gap that used to leave nothing but a bare "#2" to go on.
+const OCCURRENCE_CONTEXT_FIELDS = {
+  bank_securities_crypto_statement: ['account_holder_name', 'account_iban'],
+  health_insurance_policy: ['insured_person_name', 'policy_type'],
+  medical_costs: ['person_name'],
+  pillar_3a_certificate: ['policyholder_name']
+}
+const POLICY_TYPE_BASE_VALUES = new Set(['lamal', 'kvg', 'base', 'basic', 'obligatoire', 'obbligatoria', 'di base'])
+const POLICY_TYPE_SUPPLEMENTARY_VALUES = new Set([
+  'lca', 'vvg', 'complementare', 'complementary', 'complémentaire', 'zusatzversicherung', 'zusatz', 'integrativa'
+])
+
+// Localization-free labels — the display layer (or the PDF export, which
+// shares this same string) doesn't currently thread per-field i18n through
+// this deep, so a short bilingual-friendly abbreviation is used instead of
+// a full sentence in one language only.
+function normalizePolicyTypeLabel(raw) {
+  const v = String(raw || '').trim().toLowerCase()
+  if (POLICY_TYPE_BASE_VALUES.has(v)) return 'LAMal/KVG'
+  if (POLICY_TYPE_SUPPLEMENTARY_VALUES.has(v)) return 'LCA/VVG'
+  return null
+}
+
+// Accent/case/whitespace-insensitive comparison — the same normalization
+// already used for property addresses (src/lib/personalDetails.js), reused
+// here so "Sara Bianchi" extracted from a document matches the client's own
+// "Sara Bianchi" in client_persons/client_children regardless of case or
+// how the AI happened to space it.
+function normalizePersonName(raw) {
+  return String(raw || '')
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function fullPersonName(person) {
+  return [person?.first_name, person?.last_name].filter(Boolean).join(' ').trim()
+}
+
+// Matches a raw name extracted from a document against the client's own
+// registry (client_persons/client_children — the same source the
+// Questionnaire and this calculation otherwise read) so a repeated entry's
+// label can use the canonical, already-verified name instead of whatever
+// spelling the AI happened to extract, and so per-person pooling (the
+// health-insurance premium cap below) knows whether a name refers to an
+// adult or a specific child. 'unknown' means the document DID name someone,
+// just not someone this client's registry recognizes — shown as extracted
+// (never silently discarded), but never poolable with a resolved bucket.
+function resolvePersonReference(rawName, primaryPerson, spousePerson, children) {
+  const normalized = normalizePersonName(rawName)
+  if (!normalized) return null
+  if (primaryPerson && normalized === normalizePersonName(fullPersonName(primaryPerson))) {
+    return { kind: 'adult', canonicalName: fullPersonName(primaryPerson) || rawName }
+  }
+  if (spousePerson && normalized === normalizePersonName(fullPersonName(spousePerson))) {
+    return { kind: 'adult', canonicalName: fullPersonName(spousePerson) || rawName }
+  }
+  for (const child of children || []) {
+    if (normalized === normalizePersonName(child.full_name)) {
+      return { kind: 'child', child, canonicalName: child.full_name || rawName }
+    }
+  }
+  return { kind: 'unknown', canonicalName: rawName }
+}
+
+// "CH1234567890123456789" -> "CH12…6789" — enough to recognize an account
+// without printing the whole number everywhere the label appears.
+function maskIban(raw) {
+  const compact = String(raw || '').replace(/\s+/g, '')
+  if (compact.length <= 8) return compact
+  return `${compact.slice(0, 4)}…${compact.slice(-4)}`
+}
+
+// Category-specific "who/what is this occurrence" composition — see
+// OCCURRENCE_CONTEXT_FIELDS above for why this can't just be the generic
+// *_name/*_organization heuristic for these four. Returns null when none of
+// the category's own context fields have a value for this occurrence, so
+// the caller falls through to the generic heuristic and, failing that,
+// marks the occurrence unresolved rather than guessing.
+// fieldAt(key): raw field_value for `key` at this occurrence's suffix, or
+//   undefined.
+function buildOccurrenceIdentifier({ category, fieldAt, registryResolve }) {
+  if (category === 'bank_securities_crypto_statement') {
+    const holder = fieldAt('account_holder_name')
+    const iban = fieldAt('account_iban')
+    const parts = []
+    let personRef = null
+    if (holder) {
+      personRef = registryResolve(holder)
+      parts.push(personRef?.canonicalName || holder)
+    }
+    if (iban) parts.push(maskIban(iban))
+    return parts.length ? { label: parts.join(' — '), personRef } : null
+  }
+  if (category === 'health_insurance_policy') {
+    const person = fieldAt('insured_person_name')
+    if (!person) return null
+    const personRef = registryResolve(person)
+    const policyType = normalizePolicyTypeLabel(fieldAt('policy_type'))
+    const parts = [personRef?.canonicalName || person]
+    if (policyType) parts.push(policyType)
+    return { label: parts.join(' — '), personRef }
+  }
+  if (category === 'medical_costs') {
+    const person = fieldAt('person_name')
+    if (!person) return null
+    const personRef = registryResolve(person)
+    return { label: personRef?.canonicalName || person, personRef }
+  }
+  if (category === 'pillar_3a_certificate') {
+    const holder = fieldAt('policyholder_name')
+    if (!holder) return null
+    const personRef = registryResolve(holder)
+    return { label: personRef?.canonicalName || holder, personRef }
+  }
+  return null
+}
+
 function isAffirmative(value) {
   return AFFIRMATIVE_VALUES.has(String(value || '').trim().toLowerCase())
 }
@@ -404,33 +529,69 @@ export function computeTaxAggregate({
   const imputedVsActualRentalConflict =
     hasNonzeroPropertyField('imputed_rental_value') && hasNonzeroPropertyField('annual_rental_income')
 
-  // A document's "identifier" for readable labels — the first
-  // *_name/*_organization field found for it (e.g. an employer or
-  // institution name), falling back to the file name. Generic on purpose:
-  // no per-category hardcoding of which field is the "interesting" one.
-  //
-  // Keyed by occurrence suffix too, not just document id: a repeatable
-  // document (several donations, each with its own recipient_organization/
-  // recipient_organization_2/...) has a DIFFERENT identifier per entry —
-  // using whichever name field happened to be found first for the whole
-  // document, regardless of which donation it actually named, is exactly
-  // what mismatched a donation's amount to another donation's organization
-  // the first time repeated entries shipped.
+  // A document's "identifier" for readable labels. Two layers, checked in
+  // order per occurrence:
+  //  1. A category-specific "who/what is this occurrence" lookup
+  //     (OCCURRENCE_CONTEXT_FIELDS/buildOccurrenceIdentifier above) — an
+  //     insurer's own name is the same for every premium on the statement,
+  //     so it can never tell two premiums apart; the insured person (and,
+  //     for health insurance, whether cover is basic or supplementary) can.
+  //  2. The generic first *_name/*_organization field found for THIS
+  //     occurrence (an employer, a bank, a recipient organisation) — still
+  //     how everything not listed above is identified.
+  // A document's own shared identifier (layer 2 found only at the
+  // unsuffixed occurrence) is used as a fallback for every occurrence ONLY
+  // when the field genuinely never repeats on this document — once it
+  // does, reusing one shared name for every row is exactly how a bare "#2"
+  // used to get replaced by a misleadingly-confident label that still
+  // didn't say WHOSE row it was. An occurrence that resolves neither layer
+  // is marked unresolved (occurrenceMetaByDocId) instead of guessing — the
+  // main loop below turns that into an explicit "not identified, needs
+  // verification" state.
   const identifierByDocId = {}
+  const occurrenceMetaByDocId = {}
+  const registryResolve = (raw) => resolvePersonReference(raw, primaryPerson, spousePerson, children)
+
   for (const doc of documents || []) {
-    const nameFields = (extractedFields || []).filter(
-      (f) =>
-        f.document_id === doc.id &&
-        f.included_in_calculation !== false &&
-        /_(name|organization)$/.test(baseFieldKey(doc.category_code, f.field_key)) &&
-        f.field_value
+    const docFields = (extractedFields || []).filter(
+      (f) => f.document_id === doc.id && f.included_in_calculation !== false && f.field_value
     )
+    const genericNameFields = docFields.filter((f) => /_(name|organization)$/.test(baseFieldKey(doc.category_code, f.field_key)))
+    const suffixesPresent = new Set(docFields.map((f) => fieldSuffix(doc.category_code, f.field_key)))
+    const isRepeated = suffixesPresent.size > 1
+
     const bySuffix = {}
-    for (const nf of nameFields) {
-      const key = fieldSuffix(doc.category_code, nf.field_key)
-      if (!(key in bySuffix)) bySuffix[key] = nf.field_value
+    const metaBySuffix = {}
+    for (const suffix of suffixesPresent) {
+      const fieldAt = (key) => docFields.find((f) => f.field_key === key + suffix)?.field_value
+      const specific = buildOccurrenceIdentifier({ category: doc.category_code, fieldAt, registryResolve })
+      if (specific) {
+        bySuffix[suffix] = specific.label
+        metaBySuffix[suffix] = { resolved: true, personRef: specific.personRef || null }
+        continue
+      }
+      const genericMatch = genericNameFields.find((f) => fieldSuffix(doc.category_code, f.field_key) === suffix)
+      if (genericMatch) {
+        bySuffix[suffix] = genericMatch.field_value
+        metaBySuffix[suffix] = { resolved: true, personRef: null }
+        continue
+      }
+      if (!isRepeated) {
+        // A single, non-repeated occurrence never needed a name to
+        // disambiguate it from anything else — whether or not one exists,
+        // that's not a problem worth flagging (unlike a genuinely repeated
+        // occurrence below, which is exactly the case this whole mechanism
+        // exists for).
+        const fallback = genericNameFields.find((f) => fieldSuffix(doc.category_code, f.field_key) === '')
+        bySuffix[suffix] = fallback ? fallback.field_value : null
+        metaBySuffix[suffix] = { resolved: true, personRef: null }
+        continue
+      }
+      bySuffix[suffix] = null
+      metaBySuffix[suffix] = { resolved: false, personRef: null }
     }
     identifierByDocId[doc.id] = bySuffix
+    occurrenceMetaByDocId[doc.id] = metaBySuffix
   }
 
   // For the sibling-field lookups below (net-of-reimbursement, voided-by,
@@ -509,6 +670,7 @@ export function computeTaxAggregate({
     let needsVerification = false
     let note = null
     let decision = null
+    let occurrenceUnresolved = false
     let currencyCode = null
 
     if (excludeDecision) {
@@ -654,6 +816,20 @@ export function computeTaxAggregate({
           'a rented property is normally taxed on the real rent, not the imputed value; confirm which applies'
       }
 
+      // 11. A genuinely repeated occurrence (this document has more than
+      // one occurrence of some field) whose specific identifying context —
+      // whose account, whose insurance premium, whose medical expense —
+      // couldn't be resolved (see occurrenceMetaByDocId above). Shown as
+      // "not identified" rather than a bare "#2", and held for confirmation
+      // rather than silently counted, since attribution (and, for health
+      // insurance, which per-person cap applies) depends on knowing whose
+      // it actually is.
+      if (!needsVerification && !includeOverride && occurrenceMetaByDocId[doc.id]?.[suffix]?.resolved === false) {
+        needsVerification = true
+        occurrenceUnresolved = true
+        note = 'occurrence not identified — no account holder, insured person or similar context found; confirm before including'
+      }
+
       if (includeOverride) {
         // The include decision only actually took effect if nothing above
         // still needed verification despite it (currency (5) is never
@@ -671,14 +847,11 @@ export function computeTaxAggregate({
       categoryLabel: categoryLabel(category, lang),
       groupKey: category?.group_key || null,
       fieldKey: field.field_key,
-      // A repeated field's later occurrences get a "#2"/"#3" marker so two
-      // rows sharing the same underlying field (two donations, two
-      // dividend distributions, ...) stay distinguishable in the
-      // breakdown — the first occurrence is unmarked, exactly as it read
-      // before this field could ever repeat.
-      fieldLabel:
-        (fieldLabelByKey[`${doc.category_code}:${baseKey}`] || field.field_key) +
-        (suffix ? ` #${suffix.slice(1)}` : ''),
+      // No numeric "#2"/"#3" marker any more — a repeated occurrence is
+      // distinguished by its resolved identifier (or, failing that, an
+      // explicit "not identified" needs-verification flag, set above),
+      // never a bare number a specialist has no way to use.
+      fieldLabel: fieldLabelByKey[`${doc.category_code}:${baseKey}`] || field.field_key,
       contributionType: rule.contribution_type,
       capFamily: rule.cap_parameter_family || null,
       // Only read for the "cap parameter missing" case below — an explicit
@@ -694,7 +867,12 @@ export function computeTaxAggregate({
       currencyCode,
       deferred: false,
       isManual: false,
-      manualEntryId: null
+      manualEntryId: null,
+      occurrenceUnresolved,
+      // Whoever this occurrence was resolved to (adult/child/unknown), if
+      // its category has person-context fields at all — used below to pool
+      // health-insurance premiums per person instead of one household lump.
+      personRef: occurrenceMetaByDocId[doc.id]?.[suffix]?.personRef || null
     })
   }
 
@@ -733,15 +911,32 @@ export function computeTaxAggregate({
         .filter((c) => c.resolved)
     : []
 
-  // Pool health + life insurance premiums under one shared cap (base amount
-  // by marital status, plus a per-child increment) before the generic
-  // per-entry cap loop runs — a plain per-entry cap would let each premium
-  // independently use the full allowance instead of sharing one.
+  // Pool health + life insurance premiums under a cap — split per person
+  // once premiums are actually attributed to someone: the household's
+  // adults share one single/married cap (unchanged), but each CHILD gets
+  // their own increment as an individual cap, never folded into one lump
+  // with everyone else's premiums — otherwise one person's larger premium
+  // could "borrow" headroom from another's smaller, otherwise fully
+  // deductible one, which a genuinely per-person statutory cap never
+  // allows. Falls back to the original single combined pool when NONE of
+  // the entries have a resolved insured person at all (a document
+  // extracted before this attribution existed, or simply not stated) —
+  // the same total-household cap as before, unchanged.
   const insuranceEntries = entries.filter((e) => !isExcluded(e) && e.capFamily === INSURANCE_POOL_FAMILY)
   if (insuranceEntries.length) {
-    const resolved = resolveInsurancePremiumCap(isMarried, qualifyingChildren.length, useParam)
-    if (!resolved) {
-      for (const entry of insuranceEntries) {
+    const applyCapToBucket = (bucketEntries, cap, poolNote) => {
+      if (!bucketEntries.length) return
+      const rawSum = bucketEntries.reduce((sum, e) => sum + e.rawAmount, 0)
+      if (rawSum > cap) {
+        const scale = cap / rawSum
+        for (const entry of bucketEntries) {
+          entry.effective = entry.rawAmount * scale
+          entry.note = poolNote
+        }
+      }
+    }
+    const applyMissingParamFallback = (bucketEntries) => {
+      for (const entry of bucketEntries) {
         if (entry.verifiedBySpecialist) {
           entry.note = 'tax parameter not found — included by the specialist despite the missing cap'
         } else {
@@ -750,13 +945,56 @@ export function computeTaxAggregate({
           entry.note = 'not verified — missing tax parameter, excluded from calculation'
         }
       }
+    }
+
+    // "unknown" still counts as person data PRESENT (the document named
+    // someone, just not someone this client's registry recognizes) — that
+    // has to take the per-person path below (where it's individually
+    // flagged) rather than the old combined fallback, which would
+    // otherwise silently pool an unidentifiable premium in with everyone
+    // else's confirmed ones.
+    const anyPersonDataPresent = insuranceEntries.some((e) => e.personRef !== null)
+    if (!anyPersonDataPresent) {
+      const resolved = resolveInsurancePremiumCap(isMarried, qualifyingChildren.length, useParam)
+      if (!resolved) applyMissingParamFallback(insuranceEntries)
+      else applyCapToBucket(insuranceEntries, resolved.cap, 'cap applied (pooled with other insurance premiums)')
     } else {
-      const rawSum = insuranceEntries.reduce((sum, e) => sum + e.rawAmount, 0)
-      if (rawSum > resolved.cap) {
-        const scale = resolved.cap / rawSum
-        for (const entry of insuranceEntries) {
-          entry.effective = entry.rawAmount * scale
-          entry.note = 'cap applied (pooled with other insurance premiums)'
+      const adultEntries = []
+      const unresolvedEntries = []
+      const childBucketsByKey = new Map()
+      for (const entry of insuranceEntries) {
+        const ref = entry.personRef
+        if (ref?.kind === 'adult') {
+          adultEntries.push(entry)
+        } else if (ref?.kind === 'child') {
+          const key = ref.child?.id || normalizePersonName(ref.child?.full_name || '')
+          if (!childBucketsByKey.has(key)) childBucketsByKey.set(key, { child: ref.child, entries: [] })
+          childBucketsByKey.get(key).entries.push(entry)
+        } else {
+          unresolvedEntries.push(entry)
+        }
+      }
+
+      for (const entry of unresolvedEntries) {
+        entry.needsVerification = true
+        entry.effective = 0
+        entry.note = 'insured person not matched to a known household member — confirm before applying a deduction cap'
+      }
+
+      if (adultEntries.length) {
+        const adultParam = useParam(isMarried ? 'insurance_premium_cap_married' : 'insurance_premium_cap_single')
+        if (!adultParam) applyMissingParamFallback(adultEntries)
+        else applyCapToBucket(adultEntries, adultParam.value_numeric || 0, "cap applied (pooled with this household's other insurance premiums)")
+      }
+
+      if (childBucketsByKey.size) {
+        const childParam = useParam('insurance_premium_child_increment')
+        for (const { child, entries: childEntries } of childBucketsByKey.values()) {
+          if (!childParam) {
+            applyMissingParamFallback(childEntries)
+            continue
+          }
+          applyCapToBucket(childEntries, childParam.value_numeric || 0, `cap applied (pooled with ${child?.full_name || 'this child'}'s other insurance premiums)`)
         }
       }
     }
@@ -931,14 +1169,31 @@ export function computeTaxAggregate({
     provisionalIncome - generalDeferred.reduce((sum, e) => sum + e.effective, 0)
   )
 
-  for (const entry of medicalDeferred) {
-    const pct = entry.param.value_numeric || 0
+  // The statutory threshold applies ONCE to the household's total medical
+  // expenses for the year, never separately to each entry — now that
+  // medical_costs can repeat per family member, several medicalDeferred
+  // entries must share a single threshold (computed against their combined
+  // raw total, then distributed back proportionally) instead of each
+  // independently subtracting the full threshold, which would multiply the
+  // effective allowance by however many people's expenses happen to be on
+  // file.
+  if (medicalDeferred.length) {
+    const pct = medicalDeferred[0].param.value_numeric || 0
     const threshold = incomeAfterGeneralDeductions * (pct / 100)
+    const medicalRawTotal = medicalDeferred.reduce((sum, e) => sum + e.rawAmount, 0)
     // Structural ceiling: whatever the threshold computes to, the
-    // deductible amount can never exceed the net expense that generated it
-    // (deduction = min(net expense above threshold, net expense)).
-    entry.effective = Math.min(entry.rawAmount, Math.max(0, entry.rawAmount - threshold))
-    entry.note = 'only the amount exceeding the threshold is deductible'
+    // deductible total can never exceed the combined net expense that
+    // generated it (deduction = min(net expense above threshold, net
+    // expense)).
+    const totalDeductible = Math.min(medicalRawTotal, Math.max(0, medicalRawTotal - threshold))
+    const scale = medicalRawTotal > 0 ? totalDeductible / medicalRawTotal : 0
+    for (const entry of medicalDeferred) {
+      entry.effective = entry.rawAmount * scale
+      entry.note =
+        medicalDeferred.length > 1
+          ? 'only the amount exceeding the threshold is deductible (pooled with this client\'s other medical expenses)'
+          : 'only the amount exceeding the threshold is deductible'
+    }
   }
 
   const incomeAfterMedical = incomeAfterGeneralDeductions - medicalDeferred.reduce((sum, e) => sum + e.effective, 0)
@@ -1110,7 +1365,12 @@ export function computeTaxAggregate({
   const components = entries.map((entry) => {
     const entryOccurrence = fieldSuffix(entry.categoryCode, entry.fieldKey)
     const perDocIdentifiers = entry.documentId ? identifierByDocId[entry.documentId] : null
-    const identifier = perDocIdentifiers ? perDocIdentifiers[entryOccurrence] ?? perDocIdentifiers[''] ?? null : null
+    // identifierByDocId already resolved (or deliberately withheld) this
+    // occurrence's own identifier — no further '' fallback here, since that
+    // fallback is exactly what would silently reintroduce one shared name
+    // for every occurrence of a genuinely repeated field.
+    const resolvedIdentifier = perDocIdentifiers ? perDocIdentifiers[entryOccurrence] ?? null : null
+    const identifier = resolvedIdentifier || (entry.occurrenceUnresolved ? 'Unidentified person' : null)
     const suffix = identifier || entry.fileName || null
     const label = suffix
       ? `${entry.fieldLabel} — ${entry.categoryLabel} ${identifier ? identifier : `(${entry.fileName})`}${entry.note ? ` — ${entry.note}` : ''}`

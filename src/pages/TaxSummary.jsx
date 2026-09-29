@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle, AlignJustify, ArrowLeft, Calculator, Eye, FileDown, FolderOpen, Info, Landmark, List,
   Pencil, PiggyBank, Plus, Receipt, Trash2
@@ -20,6 +20,7 @@ import {
   recalculateInBackground, syncChildSuggestionsInBackground, syncPersonalDetailsInBackground,
   syncPropertySuggestionInBackground
 } from '../lib/recalc'
+import { resolveTaxSummaryView } from '../lib/taxSummaryView'
 
 // pdfjs-dist is a large dependency — only fetched when a specialist actually
 // opens the source view, not on every page load.
@@ -95,6 +96,8 @@ export default function TaxSummary() {
   const { t, lang } = useI18n()
   const { profile } = useAuth()
   const toast = useToast()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [loading, setLoading] = useState(true)
   const [caseRow, setCaseRow] = useState(null)
@@ -102,9 +105,21 @@ export default function TaxSummary() {
   const [documents, setDocuments] = useState([])
   const [fields, setFields] = useState([])
 
-  const [view, setView] = useState('list')
-  const [fieldLayout, setFieldLayoutState] = useState(readStoredFieldLayout)
+  // Driven by the URL (?view=source), not bare local state — so pressing
+  // the browser's own back button, not just this page's own "back" click,
+  // returns to the Tax Summary list instead of skipping past it to
+  // whatever page was open before Tax Summary (the case, or the client
+  // page) — see resolveTaxSummaryView and viewSource/backToList below.
   const [sourceField, setSourceField] = useState(null)
+  const view = resolveTaxSummaryView(searchParams.get('view'), Boolean(sourceField))
+  // Whether the current source view was actually pushed onto browser
+  // history by THIS page (an in-app click) — as opposed to being reached
+  // directly (a shared link, or a hard refresh landing on a stale
+  // ?view=source URL). Only in the first case is popping real history
+  // (navigate(-1)) the right way back; otherwise there may be nothing of
+  // this page's own to pop, so backToList just clears the query param.
+  const enteredSourceViaClick = useRef(false)
+  const [fieldLayout, setFieldLayoutState] = useState(readStoredFieldLayout)
   const [fileUrls, setFileUrls] = useState({})
   const [busyKey, setBusyKey] = useState(null)
   const [togglingKey, setTogglingKey] = useState(null)
@@ -797,7 +812,15 @@ export default function TaxSummary() {
       setViewingKey(null)
     }
     setSourceField(field)
-    setView('source')
+    enteredSourceViaClick.current = true
+    // A real history entry (default push, not replace) — so the browser's
+    // own back button lands back on this exact list/scroll position too,
+    // not just this page's own "back" button.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('view', 'source')
+      return next
+    })
   }
 
   const setFieldLayout = (layout) => {
@@ -806,7 +829,18 @@ export default function TaxSummary() {
   }
 
   const backToList = () => {
-    setView('list')
+    if (enteredSourceViaClick.current) {
+      navigate(-1)
+    } else {
+      // Reached the source view directly (a shared link, or a hard
+      // refresh) — nothing of this page's own to pop, so just drop the
+      // query param instead of navigating away from Tax Summary entirely.
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('view')
+        return next
+      })
+    }
     const key = sourceField ? fieldKey(sourceField) : null
     requestAnimationFrame(() => {
       fieldRefs.current[key]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
