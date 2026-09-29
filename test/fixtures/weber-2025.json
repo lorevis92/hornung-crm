@@ -188,7 +188,8 @@
       "source_quote": "Lina Weber",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "40d3a89b-885d-47c7-865c-a0665719f5b0",
@@ -198,7 +199,8 @@
       "source_quote": "KITA PETIT SOLEIL",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "40d3a89b-885d-47c7-865c-a0665719f5b0",
@@ -208,7 +210,8 @@
       "source_quote": "CHF 10 200.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "40d3a89b-885d-47c7-865c-a0665719f5b0",
@@ -218,7 +221,8 @@
       "source_quote": "Quota effettivamente a carico dei genitori CHF 8 400.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "40d3a89b-885d-47c7-865c-a0665719f5b0",
@@ -228,7 +232,8 @@
       "source_quote": "CHF 1 800.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "54f6e651-1ac3-4905-a534-9987288f62f5",
@@ -238,7 +243,8 @@
       "source_quote": "CHF 36 420.50",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "54f6e651-1ac3-4905-a534-9987288f62f5",
@@ -248,7 +254,8 @@
       "source_quote": "BANQUE MONT ROUX",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "54f6e651-1ac3-4905-a534-9987288f62f5",
@@ -258,7 +265,8 @@
       "source_quote": "CONTO COINTESTATO CH43 9999 0000 0000 4018 2",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "54f6e651-1ac3-4905-a534-9987288f62f5",
@@ -268,27 +276,30 @@
       "source_quote": "Saldo 31.12.2025 CHF 36 420.50",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "54f6e651-1ac3-4905-a534-9987288f62f5",
-      "field_key": "account_type_2",
+      "field_key": "account_type",
       "field_value": "CONTO RISPARMIO LINA",
       "confidence": 0.9,
       "source_quote": "CONTO RISPARMIO LINA CH18 9999 0000 0000 1186 4",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "54f6e651-1ac3-4905-a534-9987288f62f5",
-      "field_key": "account_balance_31_12_2",
+      "field_key": "account_balance_31_12",
       "field_value": "5980.2",
       "confidence": 0.95,
       "source_quote": "Saldo 31.12.2025 CHF 5 980.20",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "54f6e651-1ac3-4905-a534-9987288f62f5",
@@ -298,17 +309,19 @@
       "source_quote": "Interessi lordi 2025 CHF 64.50",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "54f6e651-1ac3-4905-a534-9987288f62f5",
-      "field_key": "interest_income_2",
+      "field_key": "interest_income",
       "field_value": "18.2",
       "confidence": 0.95,
       "source_quote": "Interessi lordi 2025 CHF 18.20",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -318,7 +331,8 @@
       "source_quote": "Codice F Trasporto gratuito casa-lavoro",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -328,7 +342,8 @@
       "source_quote": "RHONE TECH GMBH",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -338,7 +353,8 @@
       "source_quote": "8 Salario lordo CHF 71 600.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -348,7 +364,8 @@
       "source_quote": "11 Salario netto CHF 59 654.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -358,7 +375,8 @@
       "source_quote": "12 Imposta alla fonte CHF 0.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -368,7 +386,8 @@
       "source_quote": "9 AVS / AI / IPG / AD CHF 4 546.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -378,7 +397,8 @@
       "source_quote": "10.1 Previdenza professionale ordinaria CHF 4 380.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -388,7 +408,8 @@
       "source_quote": "01.01.2025 - 31.12.2025",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "5b65865c-7409-4220-8a14-5b7282160461",
@@ -398,47 +419,52 @@
       "source_quote": "01.01.2025 - 31.12.2025",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
-      "field_key": "debt_type_2",
+      "field_key": "debt_type",
       "field_value": "IPOTECA IMMOBILE MARTIGNY",
       "confidence": 0.95,
       "source_quote": "IPOTECA IMMOBILE MARTIGNY",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
-      "field_key": "debt_balance_2",
+      "field_key": "debt_balance",
       "field_value": "265000.00",
       "confidence": 0.95,
       "source_quote": "CHF 265 000.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
-      "field_key": "annual_interest_paid_2",
+      "field_key": "annual_interest_paid",
       "field_value": "4590.00",
       "confidence": 0.95,
       "source_quote": "CHF 4 590.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
-      "field_key": "annual_amortization_2",
+      "field_key": "annual_amortization",
       "field_value": "6000.00",
       "confidence": 0.95,
       "source_quote": "CHF 6 000.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
@@ -448,7 +474,8 @@
       "source_quote": "BANQUE MONT ROUX",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
@@ -458,7 +485,8 @@
       "source_quote": "IPOTECA ABITAZIONE SION",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
@@ -468,7 +496,8 @@
       "source_quote": "CHF 435 000.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
@@ -478,7 +507,8 @@
       "source_quote": "CHF 7 490.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
@@ -488,27 +518,30 @@
       "source_quote": "CHF 10 000.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "79e62e8a-690d-4b22-8e16-d102aa39845e",
-      "field_key": "creditor_name_2",
+      "field_key": "creditor_name",
       "field_value": "BANQUE MONT ROUX",
       "confidence": 0.9,
       "source_quote": "BANQUE MONT ROUX",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "878712d9-3de3-4ed9-9923-298b515ec20e",
-      "field_key": "annual_amount_2",
+      "field_key": "annual_amount",
       "field_value": "150.00",
       "confidence": 0.95,
       "source_quote": "CHF 150.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "878712d9-3de3-4ed9-9923-298b515ec20e",
@@ -518,7 +551,8 @@
       "source_quote": "Fondazione Aiuto Alpino - donazione pura",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "878712d9-3de3-4ed9-9923-298b515ec20e",
@@ -528,7 +562,8 @@
       "source_quote": "CHF 420.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "878712d9-3de3-4ed9-9923-298b515ec20e",
@@ -538,27 +573,30 @@
       "source_quote": "donazione pura",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "878712d9-3de3-4ed9-9923-298b515ec20e",
-      "field_key": "recipient_organization_2",
+      "field_key": "recipient_organization",
       "field_value": "Associazione culturale Art et Valais",
       "confidence": 0.95,
       "source_quote": "Associazione culturale Art et Valais - tessera annuale",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "878712d9-3de3-4ed9-9923-298b515ec20e",
-      "field_key": "has_consideration_2",
+      "field_key": "has_consideration",
       "field_value": "yes",
       "confidence": 0.9,
       "source_quote": "Consente ingresso a mostre e sconti; controprestazione",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "aec4ef83-2b99-4a03-aa2d-c83ff387cbc9",
@@ -568,7 +606,8 @@
       "source_quote": "Cassa pensione Alpes",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "aec4ef83-2b99-4a03-aa2d-c83ff387cbc9",
@@ -578,7 +617,8 @@
       "source_quote": "CHF 5 240.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "bbe33847-d4f1-47ad-b04e-4bcc4f4c928f",
@@ -588,7 +628,8 @@
       "source_quote": "Totale pagato nel 2025",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "bbe33847-d4f1-47ad-b04e-4bcc4f4c928f",
@@ -598,27 +639,30 @@
       "source_quote": "APPARTAMENTO LOCATO - RUE DES FINETTES 6",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "cda3be91-3880-48ba-acb0-ca28a5ce067d",
-      "field_key": "account_balance_31_12_2",
+      "field_key": "account_balance_31_12",
       "field_value": "8350",
       "confidence": 0.85,
       "source_quote": "US stock shares at 31 Dec; market value USD 8 350.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "cda3be91-3880-48ba-acb0-ca28a5ce067d",
-      "field_key": "account_balance_31_12_3",
+      "field_key": "account_balance_31_12",
       "field_value": "1240",
       "confidence": 0.9,
       "source_quote": "Cash USD at 31 Dec USD 1 240.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-3"
     },
     {
       "document_id": "cda3be91-3880-48ba-acb0-ca28a5ce067d",
@@ -628,7 +672,8 @@
       "source_quote": "Realized gain from sale of listed shares USD 1 200.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "cda3be91-3880-48ba-acb0-ca28a5ce067d",
@@ -638,7 +683,8 @@
       "source_quote": "Currency",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "cda3be91-3880-48ba-acb0-ca28a5ce067d",
@@ -648,7 +694,8 @@
       "source_quote": "GLOBAL MARKETS BROKER",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "cda3be91-3880-48ba-acb0-ca28a5ce067d",
@@ -658,7 +705,8 @@
       "source_quote": "Cash USD at 31 Dec USD 1 240.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "cda3be91-3880-48ba-acb0-ca28a5ce067d",
@@ -668,17 +716,19 @@
       "source_quote": "US ETF distributions gross USD 480.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "cda3be91-3880-48ba-acb0-ca28a5ce067d",
-      "field_key": "dividend_income_2",
+      "field_key": "dividend_income",
       "field_value": "185",
       "confidence": 0.85,
       "source_quote": "US stock dividends gross USD 185.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "d550b61a-1e3e-4f95-881d-380bcc4a13d1",
@@ -688,7 +738,8 @@
       "source_quote": "SANTÉ VALAIS",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d550b61a-1e3e-4f95-881d-380bcc4a13d1",
@@ -698,7 +749,8 @@
       "source_quote": "Giulia Weber",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d550b61a-1e3e-4f95-881d-380bcc4a13d1",
@@ -708,57 +760,63 @@
       "source_quote": "Giulia Weber CHF 4 560.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "d550b61a-1e3e-4f95-881d-380bcc4a13d1",
-      "field_key": "annual_premium_2",
+      "field_key": "annual_premium",
       "field_value": "4320",
       "confidence": 0.9,
       "source_quote": "Marc Weber CHF 4 320.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "d550b61a-1e3e-4f95-881d-380bcc4a13d1",
-      "field_key": "annual_premium_3",
+      "field_key": "annual_premium",
       "field_value": "1320",
       "confidence": 0.9,
       "source_quote": "Lina Weber CHF 1 320.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-3"
     },
     {
       "document_id": "d550b61a-1e3e-4f95-881d-380bcc4a13d1",
-      "field_key": "annual_premium_4",
+      "field_key": "annual_premium",
       "field_value": "780",
       "confidence": 0.9,
       "source_quote": "Giulia Weber CHF 780.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-4"
     },
     {
       "document_id": "d550b61a-1e3e-4f95-881d-380bcc4a13d1",
-      "field_key": "annual_premium_5",
+      "field_key": "annual_premium",
       "field_value": "540",
       "confidence": 0.9,
       "source_quote": "Marc Weber CHF 540.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-5"
     },
     {
       "document_id": "d550b61a-1e3e-4f95-881d-380bcc4a13d1",
-      "field_key": "annual_premium_6",
+      "field_key": "annual_premium",
       "field_value": "240",
       "confidence": 0.9,
       "source_quote": "Lina Weber CHF 240.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-6"
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -768,7 +826,8 @@
       "source_quote": "Spese rimborsate secondo regolamento CHF 1 920.00 (non incluse nel salario netto)",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -778,7 +837,8 @@
       "source_quote": "Periodo 01.01.2025 - 31.12.2025",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -788,7 +848,8 @@
       "source_quote": "Periodo 01.01.2025 - 31.12.2025",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -798,7 +859,8 @@
       "source_quote": "10.1 Previdenza professionale ordinaria CHF 6 860.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -808,7 +870,8 @@
       "source_quote": "ALPES DATA SA",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -818,7 +881,8 @@
       "source_quote": "8 Salario lordo CHF 112 000.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -828,7 +892,8 @@
       "source_quote": "11 Salario netto CHF 92 788.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -838,7 +903,8 @@
       "source_quote": "12 Imposta alla fonte CHF 0.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "d6b1c27e-73db-47fa-9741-cb06583ebac0",
@@ -848,7 +914,8 @@
       "source_quote": "9 AVS / AI / IPG / AD CHF 7 112.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -858,7 +925,8 @@
       "source_quote": "Giulia Weber, nata 18.06.1987",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -868,7 +936,8 @@
       "source_quote": "Giulia Weber, nata 18.06.1987",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -878,7 +947,8 @@
       "source_quote": "Marc Weber, nato 04.11.1985",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -888,7 +958,8 @@
       "source_quote": "Marc Weber, nato 04.11.1985",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -898,7 +969,8 @@
       "source_quote": "Rue de la Dixence 24, 1950 Sion VS",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -908,7 +980,8 @@
       "source_quote": "Rue de la Dixence 24, 1950 Sion VS",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -918,7 +991,8 @@
       "source_quote": "Lina Weber, nata 12.03.2020",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -928,7 +1002,8 @@
       "source_quote": "Coniugati dal 2016",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -938,7 +1013,8 @@
       "source_quote": "Rue de la Dixence 24, 1950 Sion VS",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -948,7 +1024,8 @@
       "source_quote": "Rue de la Dixence 24, 1950 Sion VS",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "df9d9b5d-2867-429d-870a-b8d00390385d",
@@ -958,7 +1035,8 @@
       "source_quote": "Lina Weber, nata 12.03.2020",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "ed903410-6abb-4268-8618-d6c0d93ee284",
@@ -968,7 +1046,8 @@
       "source_quote": "Conteggio annuale cure e franchigie",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "ed903410-6abb-4268-8618-d6c0d93ee284",
@@ -978,7 +1057,8 @@
       "source_quote": "Rimborsi assicurazione per le stesse spese CHF 5 350.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "ed903410-6abb-4268-8618-d6c0d93ee284",
@@ -988,7 +1068,8 @@
       "source_quote": "Prestazioni mediche e dentarie documentate CHF 7 600.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "f11e5e12-9207-4102-b7cc-8ff97e5453a1",
@@ -998,7 +1079,8 @@
       "source_quote": "Rue de la Dixence 24, 1950 Sion",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "f11e5e12-9207-4102-b7cc-8ff97e5453a1",
@@ -1008,7 +1090,8 @@
       "source_quote": "CHF 625 000.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "f11e5e12-9207-4102-b7cc-8ff97e5453a1",
@@ -1018,7 +1101,8 @@
       "source_quote": "CHF 14 800.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "f9cc94c0-1cac-4bde-8bfa-4ac52e357cfd",
@@ -1028,7 +1112,8 @@
       "source_quote": "Fondazione Previdenza Valais",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "f9cc94c0-1cac-4bde-8bfa-4ac52e357cfd",
@@ -1038,7 +1123,8 @@
       "source_quote": "CONTRATTO PV-3141 - GIULIA WEBER",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "f9cc94c0-1cac-4bde-8bfa-4ac52e357cfd",
@@ -1048,17 +1134,19 @@
       "source_quote": "CHF 7 258.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-1"
     },
     {
       "document_id": "f9cc94c0-1cac-4bde-8bfa-4ac52e357cfd",
-      "field_key": "annual_contribution_2",
+      "field_key": "annual_contribution",
       "field_value": "6000.00",
       "confidence": 0.95,
       "source_quote": "CHF 6 000.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": "row-2"
     },
     {
       "document_id": "fd56cb21-becc-401e-8090-e7bc5257e9a8",
@@ -1068,7 +1156,8 @@
       "source_quote": "CHF 600.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "fd56cb21-becc-401e-8090-e7bc5257e9a8",
@@ -1078,7 +1167,8 @@
       "source_quote": "Rue des Finettes 6, 1920 Martigny",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "fd56cb21-becc-401e-8090-e7bc5257e9a8",
@@ -1088,7 +1178,8 @@
       "source_quote": "CHF 395 000.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "fd56cb21-becc-401e-8090-e7bc5257e9a8",
@@ -1098,7 +1189,8 @@
       "source_quote": "CHF 16 800.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "fd56cb21-becc-401e-8090-e7bc5257e9a8",
@@ -1108,7 +1200,8 @@
       "source_quote": "CHF 1 440.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     },
     {
       "document_id": "fd56cb21-becc-401e-8090-e7bc5257e9a8",
@@ -1118,7 +1211,8 @@
       "source_quote": "CHF 600.00",
       "source_page": 1,
       "included_in_calculation": true,
-      "verified_by_specialist": false
+      "verified_by_specialist": false,
+      "row_key": ""
     }
   ],
   "categories": [

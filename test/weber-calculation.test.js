@@ -23,8 +23,8 @@ function docByFilePart(part) {
 function componentsFor(components, doc) {
   return components.filter((c) => c.documentId === doc?.id)
 }
-function componentFor(components, doc, fieldKey) {
-  return components.find((c) => c.documentId === doc?.id && c.fieldKey === fieldKey)
+function componentFor(components, doc, fieldKey, rowKey = '') {
+  return components.find((c) => c.documentId === doc?.id && c.fieldKey === fieldKey && c.rowKey === rowKey)
 }
 
 function runWeber(overrides = {}) {
@@ -66,8 +66,8 @@ describe('Weber 2025 — golden case', () => {
 
   it('the pure donation (CHF 420, Fondazione Aiuto Alpino) is included; the membership fee with a consideration (CHF 150, Associazione culturale Art et Valais) is excluded', () => {
     const doc = docByCategory('donation_certificate')
-    const pure = componentFor(components, doc, 'annual_amount')
-    const withConsideration = componentFor(components, doc, 'annual_amount_2')
+    const pure = componentFor(components, doc, 'annual_amount', 'row-1')
+    const withConsideration = componentFor(components, doc, 'annual_amount', 'row-2')
 
     expect(pure).toBeTruthy()
     expect(pure.amount).toBe(420)
@@ -89,10 +89,10 @@ describe('Weber 2025 — golden case', () => {
 
   it('both mortgages are present (Sion 435\'000/7\'490, Martigny 265\'000/4\'590); amortization is never deducted', () => {
     const doc = docByCategory('debt_certificate')
-    const sionBalance = componentFor(components, doc, 'debt_balance')
-    const sionInterest = componentFor(components, doc, 'annual_interest_paid')
-    const martignyBalance = componentFor(components, doc, 'debt_balance_2')
-    const martignyInterest = componentFor(components, doc, 'annual_interest_paid_2')
+    const sionBalance = componentFor(components, doc, 'debt_balance', 'row-1')
+    const sionInterest = componentFor(components, doc, 'annual_interest_paid', 'row-1')
+    const martignyBalance = componentFor(components, doc, 'debt_balance', 'row-2')
+    const martignyInterest = componentFor(components, doc, 'annual_interest_paid', 'row-2')
 
     expect(sionBalance?.amount).toBe(435000)
     expect(sionInterest?.amount).toBe(7490)
@@ -162,24 +162,39 @@ describe('Weber 2025 — golden case', () => {
     expect(ancillary?.amount).toBe(1440)
   })
 
-  it('bonus: Lina\'s own bank account/interest (CHF 5\'980.20 / CHF 18.20) is captured distinctly from the joint account — and, lacking an account holder in this pre-attribution fixture, correctly held for verification rather than silently pooled with it', () => {
+  it('bonus: Lina\'s own bank account/interest (CHF 5\'980.20 / CHF 18.20) is captured distinctly from the joint account, each correctly identified by its own account_type rather than the single, document-wide institution name', () => {
     const chfDoc = docByFilePart('attestazione_banca_conti')
-    const balances = componentsFor(components, chfDoc).filter((c) => c.fieldKey?.startsWith('account_balance_31_12'))
-    const interests = componentsFor(components, chfDoc).filter((c) => c.fieldKey?.startsWith('interest_income'))
-    // The joint account (first occurrence) still resolves via the shared
-    // institution name, same as always.
-    expect(balances.find((c) => c.fieldKey === 'account_balance_31_12')?.needsVerification).toBe(false)
-    expect(interests.find((c) => c.fieldKey === 'interest_income')?.needsVerification).toBe(false)
-    // Lina's own account (second occurrence) is captured as its own,
-    // distinct row — but this fixture predates per-account holder
-    // attribution, so it's correctly flagged "unidentified" instead of
-    // being silently folded into the joint account's total.
-    const linaBalance = balances.find((c) => c.fieldKey === 'account_balance_31_12_2')
-    const linaInterest = interests.find((c) => c.fieldKey === 'interest_income_2')
-    expect(linaBalance?.needsVerification).toBe(true)
-    expect(linaBalance?.amount).toBe(5980.2)
-    expect(linaInterest?.needsVerification).toBe(true)
-    expect(linaInterest?.amount).toBe(18.2)
+    const balances = componentsFor(components, chfDoc).filter((c) => c.fieldKey === 'account_balance_31_12')
+    const interests = componentsFor(components, chfDoc).filter((c) => c.fieldKey === 'interest_income')
+    expect(balances).toHaveLength(2)
+    expect(interests).toHaveLength(2)
+    // Neither row states its own account holder, and this document's
+    // institution_name is a single, document-level fact (one bank for the
+    // whole statement) rather than a per-row identity field — so it can
+    // never tell the joint account and Lina's own account apart on its
+    // own. But each row's own account_type ("CONTO COINTESTATO" / "CONTO
+    // RISPARMIO LINA") IS a per-row identity field here, and does the job
+    // instead — both rows resolve, each to its OWN label, never to the one
+    // shared bank name (exactly the bug this round fixes: a document-wide
+    // fact is never enough to tell rows apart, but a genuine per-row fact
+    // is used whenever the document actually provides one).
+    const jointBalance = balances.find((c) => c.rowKey === 'row-1')
+    const linaBalance = balances.find((c) => c.rowKey === 'row-2')
+    const jointInterest = interests.find((c) => c.rowKey === 'row-1')
+    const linaInterest = interests.find((c) => c.rowKey === 'row-2')
+    expect(jointBalance?.needsVerification).toBe(false)
+    // Rounded to whole CHF now that it's actually included (not held for
+    // verification) — see the final rounding pass in taxCalculation.js.
+    expect(jointBalance?.amount).toBe(36421)
+    expect(jointBalance?.fieldLabel).toContain('COINTESTATO')
+    expect(jointInterest?.needsVerification).toBe(false)
+    expect(linaBalance?.needsVerification).toBe(false)
+    expect(linaBalance?.amount).toBe(5980)
+    expect(linaBalance?.fieldLabel).toContain('LINA')
+    expect(linaInterest?.needsVerification).toBe(false)
+    expect(linaInterest?.amount).toBe(18)
+    expect(jointBalance?.fieldLabel).not.toMatch(/#\d/)
+    expect(linaBalance?.fieldLabel).not.toMatch(/#\d/)
   })
 })
 

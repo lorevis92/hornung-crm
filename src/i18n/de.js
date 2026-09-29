@@ -620,6 +620,8 @@ export default {
     incompleteProcessingDoc: '„{name}“ wird noch verarbeitet — dessen Daten sind noch nicht in den Summen unten enthalten.',
     incompleteChildrenMismatch: 'Das Dokument mit den persönlichen Daten nennt {extracted} Kind(er), aber nur {registered} sind beim Kunden erfasst.',
     retryExtraction: 'Extraktion erneut versuchen',
+    reExtractDocument: 'Dokument neu extrahieren',
+    legacyFormatBanner: 'Mit einem alten Format extrahiert — jede Zeile muss neu extrahiert werden, um korrekt identifiziert zu werden.',
     fixChildren: 'Prüfen & übernehmen',
     incompleteOrphanedDoc: '„{name}“ wurde extrahiert, aber keine seiner Daten erscheint in der Berechnung unten — bitte manuell prüfen.',
     incompleteViewDocument: 'Dokument ansehen',

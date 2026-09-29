@@ -3,7 +3,7 @@
 // data layer (in-memory data, browser), so the actual math is never
 // duplicated between the two. No import.meta.env / Vite-only syntax here —
 // this file is imported directly from a plain Node ESM serverless function.
-import { baseFieldKey, fieldSuffix } from './repeatableFields.js'
+import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL, legacySuffixBaseKey } from './rowBasedFields.js'
 
 const CONTRIBUTION_TO_COMPONENT = {
   income_plus: 'income',
@@ -113,18 +113,6 @@ const CHF_ALIASES = new Set(['CHF', 'SFR'])
 
 const MARRIED_STATUSES = new Set(['married', 'registered_partnership'])
 
-// Per category, the field(s) whose PER-OCCURRENCE value identify who or
-// what that specific repeated row actually belongs to — checked before,
-// and combined with, the generic *_name/*_organization heuristic below.
-// A shared, document-wide identifier (e.g. one insurer name covering four
-// premiums) tells a specialist WHERE the money is, never WHOSE it is —
-// exactly the gap that used to leave nothing but a bare "#2" to go on.
-const OCCURRENCE_CONTEXT_FIELDS = {
-  bank_securities_crypto_statement: ['account_holder_name', 'account_iban'],
-  health_insurance_policy: ['insured_person_name', 'policy_type'],
-  medical_costs: ['person_name'],
-  pillar_3a_certificate: ['policyholder_name']
-}
 const POLICY_TYPE_BASE_VALUES = new Set(['lamal', 'kvg', 'base', 'basic', 'obligatoire', 'obbligatoria', 'di base'])
 const POLICY_TYPE_SUPPLEMENTARY_VALUES = new Set([
   'lca', 'vvg', 'complementare', 'complementary', 'complémentaire', 'zusatzversicherung', 'zusatz', 'integrativa'
@@ -193,49 +181,43 @@ function maskIban(raw) {
   return `${compact.slice(0, 4)}…${compact.slice(-4)}`
 }
 
-// Category-specific "who/what is this occurrence" composition — see
-// OCCURRENCE_CONTEXT_FIELDS above for why this can't just be the generic
-// *_name/*_organization heuristic for these four. Returns null when none of
-// the category's own context fields have a value for this occurrence, so
-// the caller falls through to the generic heuristic and, failing that,
-// marks the occurrence unresolved rather than guessing.
-// fieldAt(key): raw field_value for `key` at this occurrence's suffix, or
-//   undefined.
+// Generic, category-driven "who/what is this row" composition — walks
+// ROW_IDENTITY_FIELDS[category] (src/lib/rowBasedFields.js) in order,
+// joining whichever identity fields this row actually has a value for into
+// one label ("Sara Bianchi — Banque du Léman — Conto risparmio —
+// CH12…6789"). A person-name identity field is resolved against the
+// client's own registry (client_persons/client_children) so the label uses
+// the canonical household name; an IBAN is masked; a policy_type is
+// normalized to LAMal/KVG vs LCA/VVG. Returns null when the row has none of
+// its category's identity fields at all, so the caller falls through to the
+// generic *_name/*_organization heuristic and, failing that, marks the row
+// unresolved rather than guessing.
+// fieldAt(key): raw field_value for `key` on this row, or undefined.
+const PERSON_IDENTITY_FIELD_KEYS = new Set([
+  'account_holder_name', 'insured_person_name', 'policyholder_name', 'person_name'
+])
+const IBAN_IDENTITY_FIELD_KEYS = new Set(['account_iban'])
+
 function buildOccurrenceIdentifier({ category, fieldAt, registryResolve }) {
-  if (category === 'bank_securities_crypto_statement') {
-    const holder = fieldAt('account_holder_name')
-    const iban = fieldAt('account_iban')
-    const parts = []
-    let personRef = null
-    if (holder) {
-      personRef = registryResolve(holder)
-      parts.push(personRef?.canonicalName || holder)
+  const identityFields = ROW_IDENTITY_FIELDS[category]
+  if (!identityFields) return null
+  const parts = []
+  let personRef = null
+  for (const key of identityFields) {
+    const raw = fieldAt(key)
+    if (!raw) continue
+    if (PERSON_IDENTITY_FIELD_KEYS.has(key)) {
+      personRef = registryResolve(raw)
+      parts.push(personRef?.canonicalName || raw)
+    } else if (IBAN_IDENTITY_FIELD_KEYS.has(key)) {
+      parts.push(maskIban(raw))
+    } else if (key === 'policy_type') {
+      parts.push(normalizePolicyTypeLabel(raw) || raw)
+    } else {
+      parts.push(raw)
     }
-    if (iban) parts.push(maskIban(iban))
-    return parts.length ? { label: parts.join(' — '), personRef } : null
   }
-  if (category === 'health_insurance_policy') {
-    const person = fieldAt('insured_person_name')
-    if (!person) return null
-    const personRef = registryResolve(person)
-    const policyType = normalizePolicyTypeLabel(fieldAt('policy_type'))
-    const parts = [personRef?.canonicalName || person]
-    if (policyType) parts.push(policyType)
-    return { label: parts.join(' — '), personRef }
-  }
-  if (category === 'medical_costs') {
-    const person = fieldAt('person_name')
-    if (!person) return null
-    const personRef = registryResolve(person)
-    return { label: personRef?.canonicalName || person, personRef }
-  }
-  if (category === 'pillar_3a_certificate') {
-    const holder = fieldAt('policyholder_name')
-    if (!holder) return null
-    const personRef = registryResolve(holder)
-    return { label: personRef?.canonicalName || holder, personRef }
-  }
-  return null
+  return parts.length ? { label: parts.join(' — '), personRef } : null
 }
 
 function isAffirmative(value) {
@@ -477,17 +459,16 @@ export function computeTaxAggregate({
   // decision was made), so a stale human call never silently keeps
   // overriding a figure that isn't the one it was actually made about.
   const decisionByKey = Object.fromEntries(
-    (fieldDecisions || []).map((d) => [`${d.document_id}:${d.field_key}`, d])
+    (fieldDecisions || []).map((d) => [`${d.document_id}:${d.field_key}:${d.row_key || ROW_KEY_DOCUMENT_LEVEL}`, d])
   )
 
-  // Two occurrences of the SAME repeatable field on the SAME document,
-  // with IDENTICAL source text, are the AI reading one line twice under
-  // two different occurrence suffixes — not two real entries (see the
-  // "Account balance (31.12)" duplicate this caught in the Weber case:
-  // occurrences 1 and 3 both quoted "Cash USD at 31 Dec USD 1 240.00").
-  // Flagged (both), never silently summed as if they were distinct;
-  // resolved the same way as any other needs-verification field, via a
-  // decision.
+  // Two rows of the SAME field on the SAME document, with IDENTICAL source
+  // text, are the AI reading one line twice under two different row_keys —
+  // not two real entries (see the "Account balance (31.12)" duplicate this
+  // caught in the Weber case: two rows both quoted "Cash USD at 31 Dec USD
+  // 1 240.00"). Flagged (both), never silently summed as if they were
+  // distinct; resolved the same way as any other needs-verification field,
+  // via a decision.
   const duplicateSourceFieldKeys = new Set()
   {
     const bySignatureGroup = new Map()
@@ -497,13 +478,15 @@ export function computeTaxAggregate({
       if (!doc || !doc.category_code) continue
       const quote = (field.source_quote || '').trim().toLowerCase()
       if (!quote) continue
-      const groupKey = `${doc.id}:${baseFieldKey(doc.category_code, field.field_key)}:${quote}`
+      const groupKey = `${doc.id}:${field.field_key}:${quote}`
       if (!bySignatureGroup.has(groupKey)) bySignatureGroup.set(groupKey, [])
       bySignatureGroup.get(groupKey).push(field)
     }
     for (const group of bySignatureGroup.values()) {
       if (group.length < 2) continue
-      for (const field of group) duplicateSourceFieldKeys.add(`${field.document_id}:${field.field_key}`)
+      for (const field of group) {
+        duplicateSourceFieldKeys.add(`${field.document_id}:${field.field_key}:${field.row_key || ROW_KEY_DOCUMENT_LEVEL}`)
+      }
     }
   }
 
@@ -522,7 +505,7 @@ export function computeTaxAggregate({
       if (f.included_in_calculation === false) return false
       const doc = documentById[f.document_id]
       if (!doc || doc.category_code !== 'property_tax_value') return false
-      if (baseFieldKey('property_tax_value', f.field_key) !== fieldKey) return false
+      if (f.field_key !== fieldKey) return false
       const amount = parseAmount(f.field_value)
       return amount != null && amount !== 0
     })
@@ -530,24 +513,25 @@ export function computeTaxAggregate({
     hasNonzeroPropertyField('imputed_rental_value') && hasNonzeroPropertyField('annual_rental_income')
 
   // A document's "identifier" for readable labels. Two layers, checked in
-  // order per occurrence:
-  //  1. A category-specific "who/what is this occurrence" lookup
-  //     (OCCURRENCE_CONTEXT_FIELDS/buildOccurrenceIdentifier above) — an
+  // order per row (a row = one shared row_key — one account, one insurance
+  // premium, one mortgage; see src/lib/rowBasedFields.js):
+  //  1. The category-specific "who/what is this row" lookup
+  //     (ROW_IDENTITY_FIELDS/buildOccurrenceIdentifier above) — an
   //     insurer's own name is the same for every premium on the statement,
   //     so it can never tell two premiums apart; the insured person (and,
   //     for health insurance, whether cover is basic or supplementary) can.
-  //  2. The generic first *_name/*_organization field found for THIS
-  //     occurrence (an employer, a bank, a recipient organisation) — still
-  //     how everything not listed above is identified.
+  //  2. The generic first *_name/*_organization field found for THIS row —
+  //     still how everything not listed above is identified.
   // A document's own shared identifier (layer 2 found only at the
-  // unsuffixed occurrence) is used as a fallback for every occurrence ONLY
-  // when the field genuinely never repeats on this document — once it
-  // does, reusing one shared name for every row is exactly how a bare "#2"
-  // used to get replaced by a misleadingly-confident label that still
-  // didn't say WHOSE row it was. An occurrence that resolves neither layer
-  // is marked unresolved (occurrenceMetaByDocId) instead of guessing — the
+  // document-level row, row_key '') is used as a fallback for every row
+  // ONLY when the category genuinely has just one real row on this
+  // document — once it has more than one, reusing one shared name for
+  // every row is exactly how Sara Bianchi's three bank accounts ended up
+  // all labeled "BANQUE DES ALPES". A row that resolves neither layer is
+  // marked unresolved (occurrenceMetaByDocId) instead of guessing — the
   // main loop below turns that into an explicit "not identified, needs
-  // verification" state.
+  // verification" state. The document-level row itself (row_key '') never
+  // needs an identifier at all — it isn't a repeatable entity.
   const identifierByDocId = {}
   const occurrenceMetaByDocId = {}
   const registryResolve = (raw) => resolvePersonReference(raw, primaryPerson, spousePerson, children)
@@ -556,52 +540,65 @@ export function computeTaxAggregate({
     const docFields = (extractedFields || []).filter(
       (f) => f.document_id === doc.id && f.included_in_calculation !== false && f.field_value
     )
-    const genericNameFields = docFields.filter((f) => /_(name|organization)$/.test(baseFieldKey(doc.category_code, f.field_key)))
-    const suffixesPresent = new Set(docFields.map((f) => fieldSuffix(doc.category_code, f.field_key)))
-    const isRepeated = suffixesPresent.size > 1
+    const genericNameFields = docFields.filter((f) => /_(name|organization)$/.test(f.field_key))
+    const rowKeysPresent = new Set(docFields.map((f) => f.row_key || ROW_KEY_DOCUMENT_LEVEL))
+    const realRowKeys = new Set([...rowKeysPresent].filter((k) => k !== ROW_KEY_DOCUMENT_LEVEL))
+    const isRepeated = realRowKeys.size > 1
 
-    const bySuffix = {}
-    const metaBySuffix = {}
-    for (const suffix of suffixesPresent) {
-      const fieldAt = (key) => docFields.find((f) => f.field_key === key + suffix)?.field_value
-      const specific = buildOccurrenceIdentifier({ category: doc.category_code, fieldAt, registryResolve })
-      if (specific) {
-        bySuffix[suffix] = specific.label
-        metaBySuffix[suffix] = { resolved: true, personRef: specific.personRef || null }
+    const byRow = {}
+    const metaByRow = {}
+    for (const rowKey of rowKeysPresent) {
+      if (rowKey === ROW_KEY_DOCUMENT_LEVEL) {
+        // Document-level fields (an employer name, a bank statement's
+        // single reporting currency) describe the document, not a
+        // repeatable row — never flagged as "not identified".
+        byRow[rowKey] = null
+        metaByRow[rowKey] = { resolved: true, personRef: null }
         continue
       }
-      const genericMatch = genericNameFields.find((f) => fieldSuffix(doc.category_code, f.field_key) === suffix)
+      const fieldAt = (key) => docFields.find((f) => f.field_key === key && (f.row_key || ROW_KEY_DOCUMENT_LEVEL) === rowKey)?.field_value
+      const specific = buildOccurrenceIdentifier({ category: doc.category_code, fieldAt, registryResolve })
+      if (specific) {
+        byRow[rowKey] = specific.label
+        metaByRow[rowKey] = { resolved: true, personRef: specific.personRef || null }
+        continue
+      }
+      const genericMatch = genericNameFields.find((f) => (f.row_key || ROW_KEY_DOCUMENT_LEVEL) === rowKey)
       if (genericMatch) {
-        bySuffix[suffix] = genericMatch.field_value
-        metaBySuffix[suffix] = { resolved: true, personRef: null }
+        byRow[rowKey] = genericMatch.field_value
+        metaByRow[rowKey] = { resolved: true, personRef: null }
         continue
       }
       if (!isRepeated) {
-        // A single, non-repeated occurrence never needed a name to
-        // disambiguate it from anything else — whether or not one exists,
-        // that's not a problem worth flagging (unlike a genuinely repeated
-        // occurrence below, which is exactly the case this whole mechanism
-        // exists for).
-        const fallback = genericNameFields.find((f) => fieldSuffix(doc.category_code, f.field_key) === '')
-        bySuffix[suffix] = fallback ? fallback.field_value : null
-        metaBySuffix[suffix] = { resolved: true, personRef: null }
+        // A single real row never needed a name to disambiguate it from
+        // anything else — whether or not one exists, that's not a problem
+        // worth flagging (unlike a genuinely repeated row below, which is
+        // exactly the case this whole mechanism exists for).
+        const fallback = genericNameFields.find((f) => (f.row_key || ROW_KEY_DOCUMENT_LEVEL) === ROW_KEY_DOCUMENT_LEVEL)
+        byRow[rowKey] = fallback ? fallback.field_value : null
+        metaByRow[rowKey] = { resolved: true, personRef: null }
         continue
       }
-      bySuffix[suffix] = null
-      metaBySuffix[suffix] = { resolved: false, personRef: null }
+      byRow[rowKey] = null
+      metaByRow[rowKey] = { resolved: false, personRef: null }
     }
-    identifierByDocId[doc.id] = bySuffix
-    occurrenceMetaByDocId[doc.id] = metaBySuffix
+    identifierByDocId[doc.id] = byRow
+    occurrenceMetaByDocId[doc.id] = metaByRow
   }
 
   // For the sibling-field lookups below (net-of-reimbursement, voided-by,
   // currency, F/G codes) — keyed the same way regardless of whether the
   // companion field itself has a contribution_type (most don't; they're
-  // purely informational on their own).
-  const fieldByDocAndKey = Object.fromEntries(
-    (extractedFields || []).map((f) => [`${f.document_id}:${f.field_key}`, f.field_value])
+  // purely informational on their own). Row-aware: a sibling lives on the
+  // SAME row as the field asking about it (e.g. one premium's own
+  // "insured_person_name" doesn't answer for another premium's row), unless
+  // the caller explicitly asks for the document-level row (row_key '') —
+  // e.g. a broker statement's single reporting currency.
+  const fieldByDocRowAndKey = Object.fromEntries(
+    (extractedFields || []).map((f) => [`${f.document_id}:${f.row_key || ROW_KEY_DOCUMENT_LEVEL}:${f.field_key}`, f.field_value])
   )
-  const siblingValue = (documentId, fieldKey) => fieldByDocAndKey[`${documentId}:${fieldKey}`]
+  const siblingValue = (documentId, rowKey, fieldKey) =>
+    fieldByDocRowAndKey[`${documentId}:${rowKey || ROW_KEY_DOCUMENT_LEVEL}:${fieldKey}`]
 
   const warnings = []
   const entries = []
@@ -630,16 +627,56 @@ export function computeTaxAggregate({
     if (!field.field_value || !field.field_value.trim()) continue
     const doc = documentById[field.document_id]
     if (!doc || !doc.category_code) continue
-    // A repeated occurrence ("annual_amount_2") shares its base field's
-    // rule/label — never has one of its own — and its own sibling fields
-    // (e.g. donation #2's own has_consideration, not donation #1's) carry
-    // the same suffix, looked up via siblingValueFor() below instead of
-    // siblingValue() directly wherever a sibling lookup depends on which
-    // occurrence this is.
-    const baseKey = baseFieldKey(doc.category_code, field.field_key)
-    const suffix = fieldSuffix(doc.category_code, field.field_key)
-    const siblingValueFor = (fieldKey) => siblingValue(doc.id, fieldKey + suffix)
-    const rule = ruleByKey[`${doc.category_code}:${baseKey}`]
+
+    // A field_key still carrying the OLD "_2"/"_3" suffix convention on a
+    // row-based category is data extracted before this model existed — it
+    // has no row_key, and its (now-suffixed) field_key matches no rule at
+    // all, so without this check it would just silently disappear from the
+    // calculation. Surfaced instead as an explicit "re-extract this
+    // document" needs-verification row (see rowBasedFields.js).
+    // legacySuffixBaseKey is a bare "_N" suffix match — it would also match
+    // a perfectly canonical key that just happens to end in digits (e.g.
+    // "account_balance_31_12"). Gated on the FULL field_key matching no
+    // rule at all first: a canonical key always has its own rule, so this
+    // branch only ever fires for a genuinely stale suffixed key.
+    if (isRowBasedCategory(doc.category_code) && !ruleByKey[`${doc.category_code}:${field.field_key}`]) {
+      const legacyBase = legacySuffixBaseKey(field.field_key)
+      if (legacyBase) {
+        const legacyRule = ruleByKey[`${doc.category_code}:${legacyBase}`]
+        if (legacyRule && legacyRule.contribution_type !== 'none') {
+          const category = categoryByCode[doc.category_code]
+          entries.push({
+            documentId: doc.id,
+            fileName: doc.file_name,
+            categoryCode: doc.category_code,
+            categoryLabel: categoryLabel(category, lang),
+            groupKey: category?.group_key || null,
+            fieldKey: field.field_key,
+            fieldLabel: fieldLabelByKey[`${doc.category_code}:${legacyBase}`] || field.field_key,
+            contributionType: legacyRule.contribution_type,
+            capFamily: null,
+            verifiedBySpecialist: false,
+            rawAmount: parseAmount(field.field_value) || 0,
+            effective: 0,
+            note: 'extracted with an old format — re-extract this document so each row (account, premium, position, ...) can be identified correctly',
+            needsVerification: true,
+            decision: null,
+            currencyCode: null,
+            deferred: false,
+            isManual: false,
+            manualEntryId: null,
+            occurrenceUnresolved: true,
+            personRef: null,
+            rowKey: ''
+          })
+        }
+        continue
+      }
+    }
+
+    const rowKey = field.row_key || ROW_KEY_DOCUMENT_LEVEL
+    const siblingValueFor = (fieldKey) => siblingValue(doc.id, rowKey, fieldKey)
+    const rule = ruleByKey[`${doc.category_code}:${field.field_key}`]
     if (!rule || rule.contribution_type === 'none') continue
 
     let rawAmount = parseAmount(field.field_value)
@@ -651,7 +688,7 @@ export function computeTaxAggregate({
     // Snapshotted BEFORE netting (below) — the plain number as extracted,
     // which is what a specialist making a decision actually looked at.
     const initialRawAmount = rawAmount
-    const decisionRow = decisionByKey[`${field.document_id}:${field.field_key}`]
+    const decisionRow = decisionByKey[`${field.document_id}:${field.field_key}:${rowKey}`]
     const decisionFresh =
       decisionRow && Number.isFinite(Number(decisionRow.decided_amount)) &&
       Math.abs(Number(decisionRow.decided_amount) - initialRawAmount) < 0.005
@@ -666,7 +703,7 @@ export function computeTaxAggregate({
     // duplicate-source check) can be overridden by an "include" decision.
     const includeOverride = decisionFresh && decisionRow.decision === 'include'
 
-    const ruleKey = `${doc.category_code}:${baseKey}`
+    const ruleKey = `${doc.category_code}:${field.field_key}`
     let needsVerification = false
     let note = null
     let decision = null
@@ -736,7 +773,7 @@ export function computeTaxAggregate({
       // document still correctly gets flagged. Deliberately NOT overridable
       // by includeOverride — see above.
       const currencyFieldKey = CURRENCY_FIELD_BY_CATEGORY[doc.category_code]
-      const currencyValue = currencyFieldKey ? siblingValue(doc.id, currencyFieldKey) : null
+      const currencyValue = currencyFieldKey ? siblingValue(doc.id, ROW_KEY_DOCUMENT_LEVEL, currencyFieldKey) : null
       if (!needsVerification && currencyValue && !isChfOrUnspecified(currencyValue) && !field.verified_by_specialist) {
         needsVerification = true
         currencyCode = currencyValue.trim().toUpperCase()
@@ -764,7 +801,7 @@ export function computeTaxAggregate({
         const hasSalaryPensionContribution = (extractedFields || []).some(
           (f) =>
             documentById[f.document_id]?.category_code === 'salary_statement' &&
-            baseFieldKey('salary_statement', f.field_key) === 'pension_fund_contributions' &&
+            f.field_key === 'pension_fund_contributions' &&
             f.field_value &&
             f.included_in_calculation !== false
         )
@@ -793,7 +830,7 @@ export function computeTaxAggregate({
 
       // 9. Same source text as another occurrence of this field on this
       // document — the AI reading one line twice, not two real entries.
-      if (!needsVerification && !includeOverride && duplicateSourceFieldKeys.has(`${field.document_id}:${field.field_key}`)) {
+      if (!needsVerification && !includeOverride && duplicateSourceFieldKeys.has(`${field.document_id}:${field.field_key}:${rowKey}`)) {
         needsVerification = true
         note =
           'identical source text as another occurrence of this field on this document — likely the same line ' +
@@ -816,15 +853,15 @@ export function computeTaxAggregate({
           'a rented property is normally taxed on the real rent, not the imputed value; confirm which applies'
       }
 
-      // 11. A genuinely repeated occurrence (this document has more than
-      // one occurrence of some field) whose specific identifying context —
-      // whose account, whose insurance premium, whose medical expense —
-      // couldn't be resolved (see occurrenceMetaByDocId above). Shown as
-      // "not identified" rather than a bare "#2", and held for confirmation
+      // 11. A genuinely repeated row (this document has more than one row
+      // for some category) whose specific identifying context — whose
+      // account, whose insurance premium, whose medical expense — couldn't
+      // be resolved (see occurrenceMetaByDocId above). Shown as "not
+      // identified" rather than a bare "#2", and held for confirmation
       // rather than silently counted, since attribution (and, for health
       // insurance, which per-person cap applies) depends on knowing whose
       // it actually is.
-      if (!needsVerification && !includeOverride && occurrenceMetaByDocId[doc.id]?.[suffix]?.resolved === false) {
+      if (!needsVerification && !includeOverride && occurrenceMetaByDocId[doc.id]?.[rowKey]?.resolved === false) {
         needsVerification = true
         occurrenceUnresolved = true
         note = 'occurrence not identified — no account holder, insured person or similar context found; confirm before including'
@@ -847,11 +884,11 @@ export function computeTaxAggregate({
       categoryLabel: categoryLabel(category, lang),
       groupKey: category?.group_key || null,
       fieldKey: field.field_key,
-      // No numeric "#2"/"#3" marker any more — a repeated occurrence is
+      // No numeric "#2"/"#3" marker any more — a repeated row is
       // distinguished by its resolved identifier (or, failing that, an
       // explicit "not identified" needs-verification flag, set above),
       // never a bare number a specialist has no way to use.
-      fieldLabel: fieldLabelByKey[`${doc.category_code}:${baseKey}`] || field.field_key,
+      fieldLabel: fieldLabelByKey[`${doc.category_code}:${field.field_key}`] || field.field_key,
       contributionType: rule.contribution_type,
       capFamily: rule.cap_parameter_family || null,
       // Only read for the "cap parameter missing" case below — an explicit
@@ -869,10 +906,70 @@ export function computeTaxAggregate({
       isManual: false,
       manualEntryId: null,
       occurrenceUnresolved,
-      // Whoever this occurrence was resolved to (adult/child/unknown), if
-      // its category has person-context fields at all — used below to pool
+      // Whoever this row was resolved to (adult/child/unknown), if its
+      // category has person-identity fields at all — used below to pool
       // health-insurance premiums per person instead of one household lump.
-      personRef: occurrenceMetaByDocId[doc.id]?.[suffix]?.personRef || null
+      personRef: occurrenceMetaByDocId[doc.id]?.[rowKey]?.personRef || null,
+      // The shared row_key this field came from — '' for document-level
+      // fields. Used by the final label-building pass below to look up
+      // this exact row's identifier, and by the UI to group "what this
+      // document says" back into rows instead of a flat field list.
+      rowKey
+    })
+  }
+
+  // Completeness cross-check: when a row-based document also states its
+  // own combined total (e.g. a health-insurance statement's "total
+  // premiums", a broker statement's "total balance"), compare it against
+  // the sum of that document's own row-level value fields and flag a
+  // mismatch — never silently trust either figure over the other. Most
+  // documents never state a total at all (reportedTotal stays null), which
+  // is fine: nothing to check against.
+  const REPORTED_TOTAL_FIELDS = {
+    health_insurance_policy: { totalKey: 'reported_total_premiums', rowValueKey: 'annual_premium' },
+    bank_securities_crypto_statement: { totalKey: 'reported_total_balance', rowValueKey: 'account_balance_31_12' }
+  }
+  const REPORTED_TOTAL_TOLERANCE = 1
+  for (const doc of documents || []) {
+    const spec = REPORTED_TOTAL_FIELDS[doc.category_code]
+    if (!spec) continue
+    const docFields = (extractedFields || []).filter(
+      (f) => f.document_id === doc.id && f.included_in_calculation !== false && f.field_value
+    )
+    const totalField = docFields.find(
+      (f) => f.field_key === spec.totalKey && (f.row_key || ROW_KEY_DOCUMENT_LEVEL) === ROW_KEY_DOCUMENT_LEVEL
+    )
+    const reportedTotal = totalField ? parseAmount(totalField.field_value) : null
+    if (reportedTotal == null) continue
+    const rowsSum = docFields
+      .filter((f) => f.field_key === spec.rowValueKey)
+      .reduce((sum, f) => sum + (parseAmount(f.field_value) || 0), 0)
+    if (Math.abs(rowsSum - reportedTotal) <= REPORTED_TOTAL_TOLERANCE) continue
+    const category = categoryByCode[doc.category_code]
+    const rowValueRule = ruleByKey[`${doc.category_code}:${spec.rowValueKey}`]
+    entries.push({
+      documentId: doc.id,
+      fileName: doc.file_name,
+      categoryCode: doc.category_code,
+      categoryLabel: categoryLabel(category, lang),
+      groupKey: category?.group_key || null,
+      fieldKey: spec.totalKey,
+      fieldLabel: fieldLabelByKey[`${doc.category_code}:${spec.totalKey}`] || spec.totalKey,
+      contributionType: rowValueRule?.contribution_type || 'income_plus',
+      capFamily: null,
+      verifiedBySpecialist: false,
+      rawAmount: reportedTotal,
+      effective: 0,
+      note: `the document states a total of CHF ${reportedTotal.toLocaleString('de-CH')}, but the sum of its individual rows is CHF ${rowsSum.toLocaleString('de-CH')} — confirm which figure is correct before including`,
+      needsVerification: true,
+      decision: null,
+      currencyCode: null,
+      deferred: false,
+      isManual: false,
+      manualEntryId: null,
+      occurrenceUnresolved: false,
+      personRef: null,
+      rowKey: ROW_KEY_DOCUMENT_LEVEL
     })
   }
 
@@ -1014,7 +1111,7 @@ export function computeTaxAggregate({
     const hasSalaryPensionContribution = (extractedFields || []).some(
       (f) =>
         documentById[f.document_id]?.category_code === 'salary_statement' &&
-        baseFieldKey('salary_statement', f.field_key) === 'pension_fund_contributions' &&
+        f.field_key === 'pension_fund_contributions' &&
         f.field_value &&
         f.included_in_calculation !== false
     )
@@ -1086,7 +1183,7 @@ export function computeTaxAggregate({
     } else {
       cap = param.value_type === 'no_cap' ? Infinity : (param.value_numeric ?? entry.rawAmount)
       const halveKey = `${entry.categoryCode}:${entry.fieldKey}`
-      if (Number.isFinite(cap) && HALVE_CAP_IF_TRUTHY[halveKey] && isAffirmative(siblingValue(entry.documentId, HALVE_CAP_IF_TRUTHY[halveKey]))) {
+      if (Number.isFinite(cap) && HALVE_CAP_IF_TRUTHY[halveKey] && isAffirmative(siblingValue(entry.documentId, entry.rowKey, HALVE_CAP_IF_TRUTHY[halveKey]))) {
         cap = cap / 2
       }
     }
@@ -1363,13 +1460,13 @@ export function computeTaxAggregate({
   const taxableIncomeFederal = taxableIncomeCantonal
 
   const components = entries.map((entry) => {
-    const entryOccurrence = fieldSuffix(entry.categoryCode, entry.fieldKey)
+    const entryRowKey = entry.rowKey || ROW_KEY_DOCUMENT_LEVEL
     const perDocIdentifiers = entry.documentId ? identifierByDocId[entry.documentId] : null
     // identifierByDocId already resolved (or deliberately withheld) this
-    // occurrence's own identifier — no further '' fallback here, since that
+    // row's own identifier — no further '' fallback here, since that
     // fallback is exactly what would silently reintroduce one shared name
-    // for every occurrence of a genuinely repeated field.
-    const resolvedIdentifier = perDocIdentifiers ? perDocIdentifiers[entryOccurrence] ?? null : null
+    // for every row of a genuinely repeated field.
+    const resolvedIdentifier = perDocIdentifiers ? perDocIdentifiers[entryRowKey] ?? null : null
     const identifier = resolvedIdentifier || (entry.occurrenceUnresolved ? 'Unidentified person' : null)
     const suffix = identifier || entry.fileName || null
     const label = suffix
@@ -1377,12 +1474,14 @@ export function computeTaxAggregate({
       : `${entry.fieldLabel} — ${entry.categoryLabel}${entry.note ? ` — ${entry.note}` : ''}`
     return {
       documentId: entry.documentId,
-      // The raw field_key this row came from (e.g. "dividend_income_2") —
-      // lets the UI match a "needs verification" row back to the exact
+      // The raw field_key this component came from (e.g. "dividend_income")
+      // plus the shared row_key of the row it belongs to — lets the UI
+      // match a "needs verification" row back to the exact
       // extracted_document_fields row that produced it, to offer a direct
       // fix (entering a converted CHF amount, confirming despite a missing
       // cap parameter, ...) instead of only describing the problem.
       fieldKey: entry.fieldKey,
+      rowKey: entryRowKey,
       componentType: CONTRIBUTION_TO_COMPONENT[entry.contributionType],
       sectionKey: CONTRIBUTION_TO_SECTION[entry.contributionType] || null,
       // A needs-verification row (or one a specialist decided to exclude)

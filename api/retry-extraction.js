@@ -1,5 +1,5 @@
 // POST /api/retry-extraction
-//   { documentId }
+//   { documentId, force }
 //
 // Lets a specialist manually re-run AI extraction on a document that never
 // reached status = 'extracted' — until now this only accepted
@@ -14,10 +14,17 @@
 // unlike api/extract-document.js's webhook-secret auth — this one runs
 // synchronously and waits for the Anthropic call, same UX as the existing
 // "Recalculate" button.
+//
+// force: true additionally allows re-extracting a document already at
+// 'extracted' — used by the "re-extract this document" action on a row
+// flagged as extracted under the old suffix-based field model (see
+// src/lib/rowBasedFields.js), which needs a fresh extraction to assign
+// row_key to each row even though the document already "succeeded" once.
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
 
 const RETRYABLE_STATUSES = ['uploaded', 'extracting', 'extraction_failed']
+const FORCE_RETRYABLE_STATUSES = [...RETRYABLE_STATUSES, 'extracted']
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' })
@@ -26,6 +33,7 @@ export default async function handler(req, res) {
     const { admin } = await requireStaff(req)
     const body = readBody(req)
     const documentId = body.documentId
+    const force = body.force === true
     if (!documentId) throw httpError(400, 'DOCUMENT_ID_REQUIRED', 'A documentId is required.')
 
     const { data: doc, error: docError } = await admin
@@ -35,7 +43,8 @@ export default async function handler(req, res) {
       .maybeSingle()
     if (docError) throw docError
     if (!doc) throw httpError(404, 'DOCUMENT_NOT_FOUND', 'No such document.')
-    if (!RETRYABLE_STATUSES.includes(doc.status)) {
+    const allowedStatuses = force ? FORCE_RETRYABLE_STATUSES : RETRYABLE_STATUSES
+    if (!allowedStatuses.includes(doc.status)) {
       throw httpError(409, 'NOT_RETRYABLE', `Document is "${doc.status}" — nothing to retry.`)
     }
 

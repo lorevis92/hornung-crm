@@ -90,6 +90,48 @@ describe('specialist decisions on a flagged field', () => {
   })
 })
 
+describe('a decision on one row never leaks onto another row sharing the same field_key', () => {
+  // bank_securities_crypto_statement is row-based (src/lib/rowBasedFields.js)
+  // — two accounts share the field_key "account_balance_31_12", and here
+  // both happen to quote the exact same source text (the AI reading one
+  // line twice under two different rows — same real case as Weber's own
+  // duplicate USD balance), which flags both for verification but is
+  // resolvable per row via a decision.
+  const categories = [{ code: 'bank_securities_crypto_statement', group_key: 'assets', label_en: 'Bank statement' }]
+  const rules = [{ category_code: 'bank_securities_crypto_statement', field_key: 'account_balance_31_12', contribution_type: 'wealth_plus', cap_parameter_family: null }]
+  const documents = [{ id: 'doc-bank', category_code: 'bank_securities_crypto_statement', file_name: 'bank.pdf' }]
+  const extractedFields = [
+    { document_id: 'doc-bank', row_key: 'row-1', field_key: 'account_balance_31_12', field_value: '1000', source_quote: 'Balance at 31.12: CHF 1000', included_in_calculation: true },
+    { document_id: 'doc-bank', row_key: 'row-2', field_key: 'account_balance_31_12', field_value: '1000', source_quote: 'Balance at 31.12: CHF 1000', included_in_calculation: true }
+  ]
+
+  it('an "include" decision on row-1 resolves only row-1, leaving row-2 still needing verification', () => {
+    const fieldDecisions = [{ document_id: 'doc-bank', field_key: 'account_balance_31_12', row_key: 'row-1', decision: 'include', decided_amount: 1000 }]
+    const result = computeTaxAggregate({
+      canton: 'VS',
+      documents,
+      extractedFields,
+      rules,
+      fieldDefs: [],
+      categories,
+      parameters: [],
+      taxYear: 2025,
+      primaryPerson: null,
+      spousePerson: null,
+      children: [],
+      fieldDecisions,
+      manualEntries: [],
+      lang: 'en'
+    })
+    const row1 = result.components.find((c) => c.fieldKey === 'account_balance_31_12' && c.rowKey === 'row-1')
+    const row2 = result.components.find((c) => c.fieldKey === 'account_balance_31_12' && c.rowKey === 'row-2')
+    expect(row1.decision).toBe('include')
+    expect(row1.needsVerification).toBe(false)
+    expect(row2.decision).toBeNull()
+    expect(row2.needsVerification).toBe(true)
+  })
+})
+
 describe('manual "how this was calculated" entries', () => {
   const manualEntries = [
     { id: 'manual-income', component_type: 'income', description: 'Extra income known separately', amount: 1000 },

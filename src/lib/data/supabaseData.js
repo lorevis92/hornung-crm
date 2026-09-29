@@ -380,7 +380,10 @@ export const supabaseApi = {
     return unwrap(
       await supabase
         .from('extracted_document_fields')
-        .upsert({ document_id: documentId, ...payload }, { onConflict: 'document_id,field_key' })
+        .upsert(
+          { document_id: documentId, ...payload, row_key: payload.row_key || '' },
+          { onConflict: 'document_id,field_key,row_key' }
+        )
         .select()
         .single()
     )
@@ -493,8 +496,8 @@ export const supabaseApi = {
     return callApi('/api/diagnose-client', { email, clientId, taxYear: Number(taxYear) })
   },
 
-  async retryExtraction(documentId) {
-    return callApi('/api/retry-extraction', { documentId })
+  async retryExtraction(documentId, { force = false } = {}) {
+    return callApi('/api/retry-extraction', { documentId, force })
   },
 
   // The "reload everything" safety net — re-extracts every document of a

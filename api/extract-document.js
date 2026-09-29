@@ -18,7 +18,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, serviceClient } from './_lib.js'
 import { recalculateAndPersist } from './_recalc.js'
-import { baseFieldKey, REPEATABLE_FIELD_KEYS } from '../src/lib/repeatableFields.js'
+import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL } from '../src/lib/rowBasedFields.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
 // import.meta.env) — keep this in sync with that file.
@@ -164,18 +164,30 @@ export async function runExtraction(
     const fieldList = fieldDefs
       .map((f) => `- ${f.field_key} (${f.value_type}): ${f.field_label || f.field_key}`)
       .join('\n')
-    const repeatableKeys = fieldDefs
-      .map((f) => f.field_key)
-      .filter((k) => REPEATABLE_FIELD_KEYS.has(`${categoryCode}:${k}`))
-    const repeatableInstruction = repeatableKeys.length
-      ? '\n\nSome fields can legitimately appear more than once on the same document — ' +
-        `${repeatableKeys.join(', ')} — e.g. several separate donations, several dividend ` +
-        'distributions or securities positions, several pillar 3a payments in the same year. If you ' +
-        'find more than one distinct entry for one of these fields, extract EACH one as its own row: ' +
-        'the first uses the plain field_key exactly as listed above, each additional one uses the ' +
-        'same field_key with "_2", "_3", etc. appended (e.g. "annual_amount", "annual_amount_2", ' +
-        '"annual_amount_3"). Never add multiple entries together into a single total — a specialist ' +
-        'needs to see and verify each one separately.'
+    const rowBased = isRowBasedCategory(categoryCode)
+    const identityFields = ROW_IDENTITY_FIELDS[categoryCode] || []
+    // A row-based category (see src/lib/rowBasedFields.js) can have several
+    // real-world rows on the SAME document — several bank accounts, several
+    // insurance premiums, several securities positions — and every field
+    // that belongs to the same row (its identity fields AND its value
+    // fields) must come back tagged with the SAME row_key, assigned by the
+    // model itself rather than inferred afterwards from list position. That
+    // shared tag is exactly what used to be missing: independent per-field
+    // lists with no way to tell which balance belonged to which institution.
+    const rowInstruction = rowBased
+      ? '\n\nThis document can have more than one row of the same kind — for example several bank ' +
+        'accounts, several insurance premiums for different people, several securities positions, ' +
+        'several mortgages. For EACH field you extract, also give a "row_key": a short string you ' +
+        'choose (e.g. "row-1", "row-2", ...) that is the SAME for every field belonging to the same ' +
+        'real-world row, and DIFFERENT for a different row. This applies to identity fields too — ' +
+        (identityFields.length
+          ? `${identityFields.join(', ')} — `
+          : '') +
+        'e.g. the account holder name, institution name, account type and IBAN of ONE account all ' +
+        'share the same row_key, and a second account\'s own holder/institution/type/IBAN share a ' +
+        'different row_key. A field that describes the document as a whole, not any one row (e.g. a ' +
+        'single reporting currency for the whole statement), uses row_key "". Never combine two ' +
+        'distinct rows into one, and never split one row across two row_keys.'
       : ''
 
     const extractMessage = await anthropic.messages.create({
@@ -193,7 +205,7 @@ export async function runExtraction(
                 "when you actually find its value in the document — never invent, guess, or infer a " +
                 'value that is not written there.\n\n' +
                 `Fields:\n${fieldList}` +
-                repeatableInstruction +
+                rowInstruction +
                 '\n\nFor each field you find, also copy its exact source text — verbatim, character-for-' +
                 'character as printed in the document, never paraphrased, summarized or translated ' +
                 '(it will be used afterwards to search for and highlight that exact text in the ' +
@@ -206,6 +218,7 @@ export async function runExtraction(
                 'is fine, an invented one is not.\n\n' +
                 'Respond with ONLY a JSON array, no other text: ' +
                 '[{"field_key": "<key>", "field_value": "<value as text>", "confidence": <0.0-1.0>, ' +
+                (rowBased ? '"row_key": "<row-1, row-2, ... or "" for a document-level field>", ' : '') +
                 '"source_quote": "<exact verbatim text, or null>", "source_page": <page number, or null>}, ...] ' +
                 '— omit any field you did not find at all.'
             }
@@ -216,20 +229,14 @@ export async function runExtraction(
 
     const extracted = parseJsonFromText(textOf(extractMessage))
     const definedKeys = new Set(fieldDefs.map((f) => f.field_key))
-    const validKeys = {
-      has: (key) => {
-        if (definedKeys.has(key)) return true
-        const base = baseFieldKey(categoryCode, key)
-        return base !== key && definedKeys.has(base)
-      }
-    }
     const parsedRows = (Array.isArray(extracted) ? extracted : [])
-      .filter((row) => row && validKeys.has(row.field_key) && row.field_value !== null && row.field_value !== '')
+      .filter((row) => row && definedKeys.has(row.field_key) && row.field_value !== null && row.field_value !== '')
       .map((row) => {
         const page = Number(row.source_page)
         return {
           document_id: documentId,
           field_key: row.field_key,
+          row_key: rowBased && typeof row.row_key === 'string' ? row.row_key : ROW_KEY_DOCUMENT_LEVEL,
           field_value: String(row.field_value),
           confidence: typeof row.confidence === 'number' ? row.confidence : null,
           source_quote: typeof row.source_quote === 'string' && row.source_quote.trim() ? row.source_quote : null,
@@ -237,18 +244,19 @@ export async function runExtraction(
           verified_by_specialist: false
         }
       })
-    // Deduped by field_key, last one wins: the model occasionally repeats
-    // the same field_key verbatim (rather than with the "_2" suffix asked
-    // for) when it's unsure whether two mentions are really distinct
-    // entries — two rows sharing a field_key in one upsert statement is a
-    // Postgres error (ON CONFLICT DO UPDATE cannot affect the same row
-    // twice in one statement), not just a harmless overwrite.
-    const rows = Array.from(new Map(parsedRows.map((r) => [r.field_key, r])).values())
+    // Deduped by (field_key, row_key), last one wins: the model occasionally
+    // repeats the exact same field+row twice when it's unsure whether two
+    // mentions are really distinct entries — two rows sharing a
+    // (field_key, row_key) pair in one upsert statement is a Postgres error
+    // (ON CONFLICT DO UPDATE cannot affect the same row twice in one
+    // statement), not just a harmless overwrite. Different rows sharing a
+    // field_key are legitimate now and both kept.
+    const rows = Array.from(new Map(parsedRows.map((r) => [`${r.field_key}:${r.row_key}`, r])).values())
 
     if (rows.length) {
       const { error: upsertError } = await admin
         .from('extracted_document_fields')
-        .upsert(rows, { onConflict: 'document_id,field_key' })
+        .upsert(rows, { onConflict: 'document_id,field_key,row_key' })
       if (upsertError) throw upsertError
     }
   }

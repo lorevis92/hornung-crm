@@ -621,6 +621,8 @@ export default {
     incompleteProcessingDoc: '« {name} » est encore en cours de traitement — ses données ne sont pas encore dans les totaux ci-dessous.',
     incompleteChildrenMismatch: 'Le document de données personnelles indique {extracted} enfant(s), mais seuls {registered} sont enregistrés sur la fiche du client.',
     retryExtraction: "Réessayer l'extraction",
+    reExtractDocument: 'Réextraire ce document',
+    legacyFormatBanner: "Extrait avec un ancien format — chaque ligne doit être réextraite pour être identifiée correctement.",
     fixChildren: 'Vérifier et appliquer',
     incompleteOrphanedDoc: '« {name} » a été extrait mais aucune de ses données n’apparaît dans le calcul ci-dessous — vérifiez manuellement.',
     incompleteViewDocument: 'Voir le document',

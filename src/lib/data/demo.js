@@ -638,15 +638,16 @@ export const demoApi = {
 
   async saveExtractedFieldForDocument(documentId, payload) {
     const s = store()
+    const rowKey = payload.row_key || ''
     const existing = s.extractedDocumentFields.find(
-      (f) => f.document_id === documentId && f.field_key === payload.field_key
+      (f) => f.document_id === documentId && f.field_key === payload.field_key && (f.row_key || '') === rowKey
     )
     let row
     if (existing) {
-      Object.assign(existing, payload)
+      Object.assign(existing, payload, { row_key: rowKey })
       row = existing
     } else {
-      row = { id: uid('exf'), document_id: documentId, ...payload }
+      row = { id: uid('exf'), document_id: documentId, ...payload, row_key: rowKey }
       s.extractedDocumentFields.push(row)
     }
     commit()
@@ -1106,6 +1107,7 @@ export const demoApi = {
       aggregate_id: aggregate.id,
       document_id: c.documentId,
       field_key: c.fieldKey || null,
+      row_key: c.rowKey || '',
       component_type: c.componentType,
       section_key: c.sectionKey,
       amount: c.amount,
@@ -1127,7 +1129,8 @@ export const demoApi = {
   // outcome a real retry has when it succeeds (status flips back to
   // 'extracted', the error clears) so the completeness banner's "Retry"
   // action is testable end to end without a live Anthropic call.
-  async retryExtraction(documentId) {
+  async retryExtraction(documentId, { force = false } = {}) {
+    void force
     const s = store()
     const doc = s.documents.find((d) => d.id === documentId)
     if (!doc) throw new Error('Document not found.')
@@ -1231,15 +1234,19 @@ export const demoApi = {
 
   // A specialist's include/exclude call on one flagged field — persists
   // independently of tax_aggregate_components (which is wiped and rebuilt
-  // on every recalculation), keyed by (document_id, field_key) so a second
-  // decision on the same field replaces the first rather than piling up.
-  // decidedAmount is the raw extracted amount at decision time; a later
-  // recalculation ignores the decision once that no longer matches (see
-  // src/lib/taxCalculation.js).
-  async saveFieldDecision({ clientId, taxYear, documentId, fieldKey, decision, decidedAmount, note }) {
+  // on every recalculation), keyed by (document_id, field_key, row_key) so
+  // a second decision on the same field+row replaces the first rather than
+  // piling up, and a decision on one row of a repeated field never leaks
+  // onto another row sharing the same field_key. decidedAmount is the raw
+  // extracted amount at decision time; a later recalculation ignores the
+  // decision once that no longer matches (see src/lib/taxCalculation.js).
+  async saveFieldDecision({ clientId, taxYear, documentId, fieldKey, rowKey, decision, decidedAmount, note }) {
     const s = store()
     const year = Number(taxYear)
-    let row = s.fieldDecisions.find((d) => d.document_id === documentId && d.field_key === fieldKey)
+    const resolvedRowKey = rowKey || ''
+    let row = s.fieldDecisions.find(
+      (d) => d.document_id === documentId && d.field_key === fieldKey && (d.row_key || '') === resolvedRowKey
+    )
     const now = iso(Date.now())
     if (row) {
       Object.assign(row, { decision, decided_amount: decidedAmount, note: note || null, decided_at: now, updated_at: now })
@@ -1250,6 +1257,7 @@ export const demoApi = {
         tax_year: year,
         document_id: documentId,
         field_key: fieldKey,
+        row_key: resolvedRowKey,
         decision,
         decided_amount: decidedAmount,
         note: note || null,

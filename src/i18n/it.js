@@ -619,6 +619,8 @@ export default {
     incompleteProcessingDoc: '"{name}" è ancora in elaborazione — i suoi dati non sono ancora nei totali qui sotto.',
     incompleteChildrenMismatch: 'Il documento dei dati personali indica {extracted} figlio/i, ma solo {registered} risultano registrati sulla scheda del cliente.',
     retryExtraction: 'Riprova estrazione',
+    reExtractDocument: 'Riestrai questo documento',
+    legacyFormatBanner: 'Estratto con un formato vecchio — ogni riga deve essere riestratta per essere identificata correttamente.',
     fixChildren: 'Verifica e applica',
     incompleteOrphanedDoc: '"{name}" è stato estratto ma nessuno dei suoi dati compare nel calcolo qui sotto — verifica manualmente.',
     incompleteViewDocument: 'Visualizza documento',

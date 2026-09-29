@@ -48,6 +48,26 @@ function groupBy(list, key) {
   }, {})
 }
 
+// A document's fields, grouped into rows (one account, one insurance
+// premium, one mortgage, ...) instead of a flat list — mergeFieldsWithDefinitions
+// (src/lib/extraction.js) already emits them in row order, so this only
+// needs to chunk on row_key changing, not re-sort anything. The
+// document-level row (row_key '') never gets its own header — it describes
+// the document itself, not a repeatable entity.
+function groupFieldsByRow(fields) {
+  const groups = []
+  for (const field of fields) {
+    const rowKey = field.row_key || ''
+    const last = groups[groups.length - 1]
+    if (last && last.rowKey === rowKey) {
+      last.fields.push(field)
+    } else {
+      groups.push({ rowKey, rowLabel: field.row_label || null, legacyFormat: Boolean(field.legacyFormat), fields: [field] })
+    }
+  }
+  return groups
+}
+
 // Which kind of open question a flagged component represents — drives which
 // actions the "Needs verification" row offers (see src/lib/taxCalculation.js
 // for the note text each check produces). Kept as a plain regex match on
@@ -56,6 +76,7 @@ function groupBy(list, key) {
 // just be a second place for the two to drift apart.
 function classifyVerificationItem(fieldLabel) {
   const label = fieldLabel || ''
+  if (/re-extract this document/.test(label)) return 'legacyFormat'
   if (/foreign currency/.test(label)) return 'foreignCurrency'
   if (/missing tax parameter/.test(label)) return 'missingParam'
   if (/marital status unknown/.test(label)) return 'missingRegistry'
@@ -307,10 +328,10 @@ export default function TaxSummary() {
   const completenessIssueCount =
     failedDocuments.length + processingDocuments.length + (childrenMismatch ? 1 : 0) + orphanedDocuments.length
 
-  const retryFailedExtraction = async (doc) => {
+  const retryFailedExtraction = async (doc, { force = false } = {}) => {
     setRetryingDocId(doc.id)
     try {
-      await api.retryExtraction(doc.id)
+      await api.retryExtraction(doc.id, { force })
       toast.success(t('common.saved'))
       const docs = await api.listClientDocuments(caseRow.client_id, caseRow.tax_year)
       setAllDocuments(docs)
@@ -335,6 +356,18 @@ export default function TaxSummary() {
     } finally {
       setRetryingDocId(null)
     }
+  }
+
+  // "Re-extract this document" — the action offered on a "needs
+  // verification" row flagged as extracted under the old suffix-based field
+  // model (src/lib/rowBasedFields.js's legacySuffixBaseKey): the document
+  // already reached 'extracted' once, so the ordinary retry path (which
+  // only accepts a non-terminal status) refuses it — force:true bypasses
+  // that specifically for this case.
+  const reExtractDocument = (documentId) => {
+    const doc = allDocuments.find((d) => d.id === documentId)
+    if (!doc) return
+    return retryFailedExtraction(doc, { force: true })
   }
 
   // An orphaned document's own "View document" action — same idea as
@@ -536,6 +569,7 @@ export default function TaxSummary() {
         taxYear: caseRow.tax_year,
         documentId: component.document_id,
         fieldKey: component.field_key,
+        rowKey: component.row_key || '',
         decision,
         decidedAmount: component.amount
       })
@@ -557,7 +591,12 @@ export default function TaxSummary() {
   // field there.
   const saveAmountEdit = async (component) => {
     const key = fieldKey(component)
-    const original = fields.find((f) => f.document_id === component.document_id && f.field_key === component.field_key)
+    const original = fields.find(
+      (f) =>
+        f.document_id === component.document_id &&
+        f.field_key === component.field_key &&
+        (f.row_key || '') === (component.row_key || '')
+    )
     if (!original) return
     const value = amountEdits[key]
     if (value == null || !String(value).trim()) return
@@ -644,7 +683,12 @@ export default function TaxSummary() {
   // exemption, ...) has no document_id at all — nothing to jump to, so
   // callers check for one before ever offering this.
   const viewComponentSource = (component) => {
-    const original = fields.find((f) => f.document_id === component.document_id && f.field_key === component.field_key)
+    const original = fields.find(
+      (f) =>
+        f.document_id === component.document_id &&
+        f.field_key === component.field_key &&
+        (f.row_key || '') === (component.row_key || '')
+    )
     if (!original) return
     viewSource(original)
   }
@@ -664,16 +708,15 @@ export default function TaxSummary() {
     [sections, lang]
   )
 
-  const fieldKey = (field) => `${field.document_id}:${field.field_key}`
+  // A row_key ('' for a document-level field) makes the identity — several
+  // rows can legitimately share the same field_key (e.g. "annual_premium"
+  // once per insured person), so field_key alone is no longer unique.
+  const fieldKey = (field) => `${field.document_id}:${field.field_key}:${field.row_key || ''}`
+  const sameField = (a, b) =>
+    a.document_id === b.document_id && a.field_key === b.field_key && (a.row_key || '') === (b.row_key || '')
 
   const updateValue = (target, value) => {
-    setFields((list) =>
-      list.map((f) =>
-        f.document_id === target.document_id && f.field_key === target.field_key
-          ? { ...f, field_value: value }
-          : f
-      )
-    )
+    setFields((list) => list.map((f) => (sameField(f, target) ? { ...f, field_value: value } : f)))
   }
 
   const confirmField = async (field) => {
@@ -683,6 +726,7 @@ export default function TaxSummary() {
     try {
       const saved = await api.saveExtractedFieldForDocument(field.document_id, {
         field_key: field.field_key,
+        row_key: field.row_key || '',
         field_value: field.field_value.trim(),
         confidence: field.confidence,
         source_quote: field.source_quote,
@@ -693,7 +737,7 @@ export default function TaxSummary() {
       })
       setFields((list) =>
         list.map((f) =>
-          f.document_id === field.document_id && f.field_key === field.field_key
+          sameField(f, field)
             ? { ...f, verified_by_specialist: true, verified_at: saved.verified_at || new Date().toISOString() }
             : f
         )
@@ -725,6 +769,7 @@ export default function TaxSummary() {
       // safeguard below.
       const saved = await api.saveExtractedFieldForDocument(field.document_id, {
         field_key: field.field_key,
+        row_key: field.row_key || '',
         field_value: field.field_value,
         confidence: field.confidence,
         source_quote: field.source_quote,
@@ -736,7 +781,7 @@ export default function TaxSummary() {
       })
       setFields((list) =>
         list.map((f) =>
-          f.document_id === field.document_id && f.field_key === field.field_key
+          sameField(f, field)
             ? {
                 ...f,
                 included_in_calculation: saved.included_in_calculation,
@@ -1103,57 +1148,100 @@ export default function TaxSummary() {
                         </span>
                       ) : null}
                     </h3>
-                    {catDocuments.map((docGroup) =>
-                      fieldLayout === 'compact' ? (
+                    {catDocuments.map((docGroup) => {
+                      const rowGroups = groupFieldsByRow(docGroup.fields)
+                      return fieldLayout === 'compact' ? (
                         <div key={docGroup.documentId} className="overflow-hidden rounded-xl border border-line bg-white">
                           <p className="border-b border-line/70 bg-sand/40 px-2 py-1 text-[12.5px] font-medium text-ink-500">
                             {docGroup.fileName}
                           </p>
-                          <ul>
-                            {docGroup.fields.map((field) => (
-                              <CompactFieldRow
-                                key={field.field_key}
-                                innerRef={(el) => {
-                                  fieldRefs.current[fieldKey(field)] = el
-                                }}
-                                field={field}
-                                showDocument={false}
-                                saving={busyKey === fieldKey(field)}
-                                togglingInclude={togglingKey === fieldKey(field)}
-                                viewingSource={viewingKey === fieldKey(field)}
-                                onChange={(value) => updateValue(field, value)}
-                                onConfirm={() => confirmField(field)}
-                                onViewSource={() => viewSource(field)}
-                                onToggleInclude={() => toggleInclude(field)}
-                              />
-                            ))}
-                          </ul>
+                          {rowGroups.map((rowGroup) => (
+                            <div key={rowGroup.rowKey}>
+                              {rowGroup.legacyFormat ? (
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50/60 px-2 py-1.5 text-[12.5px] text-amber-800">
+                                  <span>{t('summary.legacyFormatBanner')}</span>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary btn-sm"
+                                    onClick={() => reExtractDocument(docGroup.documentId)}
+                                    disabled={retryingDocId === docGroup.documentId}
+                                  >
+                                    {retryingDocId === docGroup.documentId ? <Spinner size={13} /> : null}
+                                    {t('summary.reExtractDocument')}
+                                  </button>
+                                </div>
+                              ) : rowGroup.rowLabel ? (
+                                <p className="border-b border-line/70 bg-white px-2 py-1 text-[12px] font-medium text-ink-600">
+                                  {rowGroup.rowLabel}
+                                </p>
+                              ) : null}
+                              <ul>
+                                {rowGroup.fields.map((field) => (
+                                  <CompactFieldRow
+                                    key={fieldKey(field)}
+                                    innerRef={(el) => {
+                                      fieldRefs.current[fieldKey(field)] = el
+                                    }}
+                                    field={field}
+                                    showDocument={false}
+                                    saving={busyKey === fieldKey(field)}
+                                    togglingInclude={togglingKey === fieldKey(field)}
+                                    viewingSource={viewingKey === fieldKey(field)}
+                                    onChange={(value) => updateValue(field, value)}
+                                    onConfirm={() => confirmField(field)}
+                                    onViewSource={() => viewSource(field)}
+                                    onToggleInclude={() => toggleInclude(field)}
+                                  />
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <div key={docGroup.documentId} className="space-y-2 rounded-xl bg-sand/40 p-3">
                           <p className="px-1 text-[12.5px] font-medium text-ink-500">{docGroup.fileName}</p>
-                          <ul className="space-y-3">
-                            {docGroup.fields.map((field) => (
-                              <ExtractedFieldRow
-                                key={field.field_key}
-                                innerRef={(el) => {
-                                  fieldRefs.current[fieldKey(field)] = el
-                                }}
-                                field={field}
-                                showDocument={false}
-                                saving={busyKey === fieldKey(field)}
-                                togglingInclude={togglingKey === fieldKey(field)}
-                                viewingSource={viewingKey === fieldKey(field)}
-                                onChange={(value) => updateValue(field, value)}
-                                onConfirm={() => confirmField(field)}
-                                onViewSource={() => viewSource(field)}
-                                onToggleInclude={() => toggleInclude(field)}
-                              />
-                            ))}
-                          </ul>
+                          {rowGroups.map((rowGroup) => (
+                            <div key={rowGroup.rowKey} className="space-y-2">
+                              {rowGroup.legacyFormat ? (
+                                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[12.5px] text-amber-800">
+                                  <span>{t('summary.legacyFormatBanner')}</span>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary btn-sm"
+                                    onClick={() => reExtractDocument(docGroup.documentId)}
+                                    disabled={retryingDocId === docGroup.documentId}
+                                  >
+                                    {retryingDocId === docGroup.documentId ? <Spinner size={13} /> : null}
+                                    {t('summary.reExtractDocument')}
+                                  </button>
+                                </div>
+                              ) : rowGroup.rowLabel ? (
+                                <p className="px-1 text-[12px] font-medium text-ink-600">{rowGroup.rowLabel}</p>
+                              ) : null}
+                              <ul className="space-y-3">
+                                {rowGroup.fields.map((field) => (
+                                  <ExtractedFieldRow
+                                    key={fieldKey(field)}
+                                    innerRef={(el) => {
+                                      fieldRefs.current[fieldKey(field)] = el
+                                    }}
+                                    field={field}
+                                    showDocument={false}
+                                    saving={busyKey === fieldKey(field)}
+                                    togglingInclude={togglingKey === fieldKey(field)}
+                                    viewingSource={viewingKey === fieldKey(field)}
+                                    onChange={(value) => updateValue(field, value)}
+                                    onConfirm={() => confirmField(field)}
+                                    onViewSource={() => viewSource(field)}
+                                    onToggleInclude={() => toggleInclude(field)}
+                                  />
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
                         </div>
                       )
-                    )}
+                    })}
                   </div>
                 ))}
               </div>
@@ -1632,7 +1720,12 @@ export default function TaxSummary() {
                   const key = fieldKey(c)
                   const busy = decidingKey === key
                   const resolved = Boolean(c.decision)
-                  const original = fields.find((f) => f.document_id === c.document_id && f.field_key === c.field_key)
+                  const original = fields.find(
+                    (f) =>
+                      f.document_id === c.document_id &&
+                      f.field_key === c.field_key &&
+                      (f.row_key || '') === (c.row_key || '')
+                  )
 
                   return (
                     <div
@@ -1680,7 +1773,17 @@ export default function TaxSummary() {
 
                       {hasSource ? (
                         <div className="mt-2 flex flex-wrap items-end gap-2">
-                          {kind === 'foreignCurrency' ? (
+                          {kind === 'legacyFormat' ? (
+                            <button
+                              type="button"
+                              className="btn-primary btn-sm"
+                              onClick={() => reExtractDocument(c.document_id)}
+                              disabled={retryingDocId === c.document_id}
+                            >
+                              {retryingDocId === c.document_id ? <Spinner size={14} /> : null}
+                              {t('summary.reExtractDocument')}
+                            </button>
+                          ) : kind === 'foreignCurrency' ? (
                             <>
                               <Field label={t('summary.uncertaintyExchangeRate')} className="w-[150px]">
                                 <TextInput

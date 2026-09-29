@@ -621,6 +621,8 @@ export default {
     incompleteProcessingDoc: '"{name}" is still being processed — its data isn\'t in the totals below yet.',
     incompleteChildrenMismatch: 'The personal details document states {extracted} child(ren), but only {registered} are on the client’s record.',
     retryExtraction: 'Retry extraction',
+    reExtractDocument: 'Re-extract this document',
+    legacyFormatBanner: 'Extracted with an old format — each row needs to be re-extracted to be identified correctly.',
     fixChildren: 'Review & apply',
     incompleteOrphanedDoc: '"{name}" was extracted but none of its data appears in the calculation below — verify it manually.',
     incompleteViewDocument: 'View document',

@@ -58,16 +58,26 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
 
   if (!doc) return null
 
+  // A row_key ('' for a document-level field) makes the identity now — a
+  // row-based category can have several rows sharing the same field_key
+  // (e.g. "annual_premium" once per insured person), so field_key alone is
+  // no longer unique within this document.
+  const rowKeyOf = (field) => field.row_key || ''
+  const identityOf = (field) => `${field.field_key}:${rowKeyOf(field)}`
+  const sameField = (a, b) => a.field_key === b.field_key && rowKeyOf(a) === rowKeyOf(b)
+
   const updateValue = (key, value) => {
-    setFields((list) => list.map((f) => (f.field_key === key ? { ...f, field_value: value } : f)))
+    setFields((list) => list.map((f) => (identityOf(f) === key ? { ...f, field_value: value } : f)))
   }
 
   const saveField = async (field) => {
     if (!field.field_value.trim()) return
-    setSavingKey(field.field_key)
+    const key = identityOf(field)
+    setSavingKey(key)
     try {
       const saved = await api.saveExtractedField(doc.id, {
         field_key: field.field_key,
+        row_key: rowKeyOf(field),
         field_value: field.field_value.trim(),
         confidence: field.confidence,
         source_quote: field.source_quote,
@@ -78,7 +88,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
       })
       setFields((list) =>
         list.map((f) =>
-          f.field_key === field.field_key
+          sameField(f, field)
             ? { ...f, verified_by_specialist: true, verified_at: saved.verified_at || new Date().toISOString() }
             : f
         )
@@ -95,7 +105,8 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
   }
 
   const toggleInclude = async (field) => {
-    setTogglingKey(field.field_key)
+    const key = identityOf(field)
+    setTogglingKey(key)
     try {
       // Toggling include/exclude is itself an explicit, per-field
       // specialist action — same as editing the value — so it also counts
@@ -103,6 +114,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
       // safeguard.
       const saved = await api.saveExtractedField(doc.id, {
         field_key: field.field_key,
+        row_key: rowKeyOf(field),
         field_value: field.field_value,
         confidence: field.confidence,
         source_quote: field.source_quote,
@@ -114,7 +126,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
       })
       setFields((list) =>
         list.map((f) =>
-          f.field_key === field.field_key
+          sameField(f, field)
             ? {
                 ...f,
                 included_in_calculation: saved.included_in_calculation,
@@ -133,6 +145,23 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
     }
   }
 
+  const reExtract = async () => {
+    setSavingKey('__reextract__')
+    try {
+      await api.retryExtraction(doc.id, { force: true })
+      toast.success(t('common.saved'))
+      const [defs, extracted] = await Promise.all([api.listFieldDefinitions(), api.listExtractedFields(doc.id)])
+      const categoryDefs = defs.filter((d) => d.category_code === doc.category_code)
+      setFields(mergeFieldsWithDefinitions(categoryDefs, extracted, doc))
+      recalculateInBackground(clientId, taxYear, lang)
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
   const viewSource = (field) => {
     setSourceField(field)
     setView('source')
@@ -140,7 +169,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
 
   const backToList = () => {
     setView('list')
-    const key = sourceField?.field_key
+    const key = sourceField ? identityOf(sourceField) : null
     requestAnimationFrame(() => {
       fieldRefs.current[key]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     })
@@ -193,23 +222,50 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
           <Spinner size={22} />
         </div>
       ) : fields.length ? (
-        <ul className="space-y-3">
-          {fields.map((field) => (
-            <ExtractedFieldRow
-              key={field.field_key}
-              innerRef={(el) => {
-                fieldRefs.current[field.field_key] = el
-              }}
-              field={field}
-              saving={savingKey === field.field_key}
-              togglingInclude={togglingKey === field.field_key}
-              onChange={(value) => updateValue(field.field_key, value)}
-              onConfirm={() => saveField(field)}
-              onViewSource={() => viewSource(field)}
-              onToggleInclude={() => toggleInclude(field)}
-            />
-          ))}
-        </ul>
+        (() => {
+          const rowGroups = []
+          for (const field of fields) {
+            const last = rowGroups[rowGroups.length - 1]
+            if (last && last.rowKey === (field.row_key || '')) last.fields.push(field)
+            else rowGroups.push({ rowKey: field.row_key || '', rowLabel: field.row_label || null, legacyFormat: Boolean(field.legacyFormat), fields: [field] })
+          }
+          return (
+            <div className="space-y-4">
+              {rowGroups.map((rowGroup) => (
+                <div key={rowGroup.rowKey} className="space-y-2">
+                  {rowGroup.legacyFormat ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[12.5px] text-amber-800">
+                      <span>{t('summary.legacyFormatBanner')}</span>
+                      <button type="button" className="btn-secondary btn-sm" onClick={reExtract} disabled={savingKey === '__reextract__'}>
+                        {savingKey === '__reextract__' ? <Spinner size={13} /> : null}
+                        {t('summary.reExtractDocument')}
+                      </button>
+                    </div>
+                  ) : rowGroup.rowLabel ? (
+                    <p className="px-1 text-[12px] font-medium text-ink-600">{rowGroup.rowLabel}</p>
+                  ) : null}
+                  <ul className="space-y-3">
+                    {rowGroup.fields.map((field) => (
+                      <ExtractedFieldRow
+                        key={identityOf(field)}
+                        innerRef={(el) => {
+                          fieldRefs.current[identityOf(field)] = el
+                        }}
+                        field={field}
+                        saving={savingKey === identityOf(field)}
+                        togglingInclude={togglingKey === identityOf(field)}
+                        onChange={(value) => updateValue(identityOf(field), value)}
+                        onConfirm={() => saveField(field)}
+                        onViewSource={() => viewSource(field)}
+                        onToggleInclude={() => toggleInclude(field)}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )
+        })()
       ) : (
         <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
           {t('extraction.noFieldDefs')}
