@@ -16,6 +16,7 @@ import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions, verifiedFieldsByDocument } from '../lib/extraction'
 import { formatAmountSwiss, formatChfSwiss, formatDate, formatDateTime, fullName } from '../lib/format'
+import { resolvePersonDisplayOrder } from '../lib/personOrder'
 import {
   recalculateInBackground, syncChildSuggestionsInBackground, syncPersonalDetailsInBackground,
   syncPropertySuggestionInBackground
@@ -170,6 +171,7 @@ export default function TaxSummary() {
   const [deletingManualEntryId, setDeletingManualEntryId] = useState(null)
   const [confirmDeleteManualEntry, setConfirmDeleteManualEntry] = useState(null)
   const [decidingKey, setDecidingKey] = useState(null)
+  const [invertingOrder, setInvertingOrder] = useState(false)
   const [amountEdits, setAmountEdits] = useState({})
 
   useEffect(() => {
@@ -308,6 +310,42 @@ export default function TaxSummary() {
     () => (questionnaire?.persons || []).find((p) => p.person_type === 'spouse') || null,
     [questionnaire]
   )
+  // Husband-first presentation order (src/lib/personOrder.js) — used
+  // wherever both people are shown together on this page and in the PDF;
+  // never changes which figures are attributed to whom.
+  const personOrder = useMemo(
+    () =>
+      resolvePersonDisplayOrder({
+        primaryPerson: registryPrimary,
+        spousePerson: registrySpouse,
+        overrideOrder: caseRow?.client?.person_order_override || null
+      }),
+    [registryPrimary, registrySpouse, caseRow]
+  )
+  // Both names, husband first, for the header/PDF — never just the account
+  // holder's own name or email (that's whoever has the login, not
+  // necessarily either spouse's own identity). Falls back to the account
+  // name/email only when the registry has no named person at all yet.
+  const coupleDisplayName =
+    personOrder.ordered.map((o) => fullName(o.person)).filter(Boolean).join(' & ') ||
+    fullName(caseRow?.client) ||
+    caseRow?.client?.email ||
+    ''
+
+  const invertPersonOrder = async () => {
+    if (!caseRow?.client_id) return
+    const next = personOrder.ordered[0]?.kind === 'primary' ? 'spouse_first' : 'primary_first'
+    setInvertingOrder(true)
+    try {
+      const updatedClient = await api.updateClient(caseRow.client_id, { person_order_override: next })
+      setCaseRow((row) => (row ? { ...row, client: { ...row.client, ...updatedClient } } : row))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setInvertingOrder(false)
+    }
+  }
 
   // A document extracted successfully, categorized under a group that
   // normally produces income/wealth (not just reference data), with at
@@ -830,7 +868,7 @@ export default function TaxSummary() {
       // generates a PDF, not on every page load — same reasoning as the
       // lazy-loaded PdfSourceViewer above.
       const { exportTaxSummaryPdf } = await import('../lib/pdfExport')
-      await exportTaxSummaryPdf({ caseRow, sections, result, lang, t })
+      await exportTaxSummaryPdf({ caseRow, sections, result, lang, t, clientName: coupleDisplayName })
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -909,7 +947,7 @@ export default function TaxSummary() {
         <div>
           <p className="eyebrow">{t('summary.title')}</p>
           <h1 className="display mt-1 text-[30px] leading-tight sm:text-[36px]">
-            {t('summary.subtitle', { name: fullName(caseRow.client) || caseRow.client?.email, year: caseRow.tax_year })}
+            {t('summary.subtitle', { name: coupleDisplayName, year: caseRow.tax_year })}
           </h1>
         </div>
         {view === 'list' ? (
@@ -1043,38 +1081,59 @@ export default function TaxSummary() {
                 </p>
               ) : null}
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.taxpayer')}</p>
-                  {registryPrimary ? (
-                    <div className="mt-1 space-y-0.5 text-[14.5px] text-ink-800">
-                      <p className="font-medium">{fullName(registryPrimary) || t('summary.registryUnnamed')}</p>
-                      {registryPrimary.date_of_birth ? (
-                        <p className="text-ink-500">{formatDate(registryPrimary.date_of_birth, lang)}</p>
-                      ) : null}
-                      <p className="text-ink-500">
-                        {registryPrimary.marital_status ? t(`marital.${registryPrimary.marital_status}`) : t('summary.registryUnknown')}
-                      </p>
-                      {registryPrimary.current_address ? <p className="text-ink-500">{registryPrimary.current_address}</p> : null}
-                    </div>
-                  ) : (
-                    <p className="mt-1 text-[13.5px] text-ink-400">{t('common.notProvided')}</p>
-                  )}
+              {registrySpouse && personOrder.needsVerification ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[13px] text-amber-800">
+                  <span>{t('data.personOrderUnknown')}</span>
+                  <button type="button" className="btn-secondary btn-sm" onClick={invertPersonOrder} disabled={invertingOrder}>
+                    {invertingOrder ? <Spinner size={13} /> : null}
+                    {t('data.personOrderInvert', { name: fullName(personOrder.ordered[1]?.person) || t('data.spouse') })}
+                  </button>
                 </div>
+              ) : null}
 
-                <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.spouse')}</p>
-                  {registrySpouse ? (
-                    <div className="mt-1 space-y-0.5 text-[14.5px] text-ink-800">
-                      <p className="font-medium">{fullName(registrySpouse) || t('summary.registryUnnamed')}</p>
-                      {registrySpouse.date_of_birth ? (
-                        <p className="text-ink-500">{formatDate(registrySpouse.date_of_birth, lang)}</p>
-                      ) : null}
+              {/* Husband-first order (src/lib/personOrder.js) — the grid
+                  always has a taxpayer column and a spouse column, each
+                  keeping its own label/data; only their left-to-right
+                  sequence changes. */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(personOrder.ordered.some((o) => o.kind === 'spouse')
+                  ? personOrder.ordered.map((o) => o.kind)
+                  : [...personOrder.ordered.map((o) => o.kind), 'spouse']
+                ).map((kind) =>
+                  kind === 'primary' ? (
+                    <div key="primary">
+                      <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.taxpayer')}</p>
+                      {registryPrimary ? (
+                        <div className="mt-1 space-y-0.5 text-[14.5px] text-ink-800">
+                          <p className="font-medium">{fullName(registryPrimary) || t('summary.registryUnnamed')}</p>
+                          {registryPrimary.date_of_birth ? (
+                            <p className="text-ink-500">{formatDate(registryPrimary.date_of_birth, lang)}</p>
+                          ) : null}
+                          <p className="text-ink-500">
+                            {registryPrimary.marital_status ? t(`marital.${registryPrimary.marital_status}`) : t('summary.registryUnknown')}
+                          </p>
+                          {registryPrimary.current_address ? <p className="text-ink-500">{registryPrimary.current_address}</p> : null}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-[13.5px] text-ink-400">{t('common.notProvided')}</p>
+                      )}
                     </div>
                   ) : (
-                    <p className="mt-1 text-[13.5px] text-ink-400">{t('common.notProvided')}</p>
-                  )}
-                </div>
+                    <div key="spouse">
+                      <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.spouse')}</p>
+                      {registrySpouse ? (
+                        <div className="mt-1 space-y-0.5 text-[14.5px] text-ink-800">
+                          <p className="font-medium">{fullName(registrySpouse) || t('summary.registryUnnamed')}</p>
+                          {registrySpouse.date_of_birth ? (
+                            <p className="text-ink-500">{formatDate(registrySpouse.date_of_birth, lang)}</p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-[13.5px] text-ink-400">{t('common.notProvided')}</p>
+                      )}
+                    </div>
+                  )
+                )}
 
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t('data.children')}</p>

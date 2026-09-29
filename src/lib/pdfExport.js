@@ -32,7 +32,7 @@ function loadImage(url) {
   })
 }
 
-export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }) {
+export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t, clientName: clientNameOverride }) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
@@ -65,7 +65,10 @@ export async function exportTaxSummaryPdf({ caseRow, sections, result, lang, t }
   doc.line(marginX, y, pageWidth - marginX, y)
   y += 10
 
-  const clientName = fullName(caseRow.client) || caseRow.client?.email || ''
+  // Husband-first, both names (src/lib/personOrder.js) — the caller
+  // (TaxSummary.jsx) already resolves this; falls back to the account
+  // holder's own name/email only if that wasn't passed at all.
+  const clientName = clientNameOverride || fullName(caseRow.client) || caseRow.client?.email || ''
 
   doc.setFontSize(18)
   doc.setTextColor(...INK)

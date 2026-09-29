@@ -152,7 +152,29 @@ function normalizeMaritalStatus(raw) {
 // extraction carried no confidence at all, the normal suggest-on-conflict
 // path still applies.
 const FORCE_APPLY_THRESHOLD = 0.75
-const FORCE_APPLY_FIELDS = new Set(['marital_status', 'first_name', 'last_name', 'date_of_birth', 'current_address'])
+const FORCE_APPLY_FIELDS = new Set(['marital_status', 'first_name', 'last_name', 'date_of_birth', 'current_address', 'gender'])
+
+// Same reasoning as normalizeMaritalStatus below — extraction can come back
+// in any of the app's four languages, matched whole-word so surrounding
+// context ("Sesso: M") doesn't prevent it. Used for the husband-first
+// display order (src/lib/personOrder.js), never for anything the client
+// can't correct later — an unmatched value is simply left blank.
+const GENDER_SYNONYMS = {
+  male: ['male', 'm', 'mann', 'männlich', 'mannlich', 'homme', 'masculin', 'uomo', 'maschio', 'maschile'],
+  female: ['female', 'f', 'frau', 'weiblich', 'femme', 'féminin', 'feminin', 'donna', 'femmina', 'femminile']
+}
+
+function normalizeGender(raw) {
+  if (!raw) return null
+  const v = raw.trim().toLowerCase()
+  for (const [key, synonyms] of Object.entries(GENDER_SYNONYMS)) {
+    if (synonyms.includes(v)) return key
+  }
+  for (const [key, synonyms] of Object.entries(GENDER_SYNONYMS)) {
+    if (synonyms.some((syn) => new RegExp(`(?:^|[^\\p{L}])${syn}(?:$|[^\\p{L}])`, 'iu').test(v))) return key
+  }
+  return null
+}
 
 function isValidCalendarDate(year, month, day) {
   if (month < 1 || month > 12 || day < 1 || day > 31) return false
@@ -250,6 +272,10 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
     'client_persons', 'primary', 'religious_denomination', 'Religious denomination',
     byKey.religious_affiliation, primary?.religious_denomination
   )
+  consider(
+    'client_persons', 'primary', 'gender', 'Gender',
+    normalizeGender(byKey.gender), primary?.gender, 'gender'
+  )
 
   if (byKey.partner_full_name) {
     const { first, last } = splitFullName(byKey.partner_full_name)
@@ -263,6 +289,10 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
   consider(
     'client_persons', 'spouse', 'religious_denomination', "Partner's religious denomination",
     byKey.partner_religious_affiliation, spouse?.religious_denomination
+  )
+  consider(
+    'client_persons', 'spouse', 'gender', "Partner's gender",
+    normalizeGender(byKey.partner_gender), spouse?.gender
   )
 
   return { autoFill, suggestions, resolved }

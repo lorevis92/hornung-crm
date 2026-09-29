@@ -76,3 +76,8 @@ export function pricingLabel(item, lang = 'en') {
   if (!item) return ''
   return item[`label_${lang}`] || item.label_en || item.code
 }
+
+export function pricingDescription(item, lang = 'en') {
+  if (!item) return ''
+  return item[`description_${lang}`] || item.description_en || ''
+}

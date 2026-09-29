@@ -13,6 +13,7 @@ import {
   computePersonalDetailsSync, buildPropertySuggestionPayload, buildChildSuggestionCandidates,
   normalizePropertyAddress
 } from '../personalDetails'
+import { validateClientCaseCreation } from '../caseCreation'
 
 const KEY = 'hornung.demo.v2'
 const blobs = new Map() // document id -> object URL (this session only)
@@ -235,7 +236,8 @@ function seed() {
     taxAggregateComponents: [],
     fieldSuggestions: [],
     fieldDecisions: [],
-    manualAggregateEntries: []
+    manualAggregateEntries: [],
+    pricingItems: JSON.parse(JSON.stringify(PRICING_ITEMS))
   }
 }
 
@@ -265,6 +267,8 @@ function load() {
       // manual "how this was calculated" entries existed.
       parsed.fieldDecisions ||= []
       parsed.manualAggregateEntries ||= []
+      // Same for sessions started before the price list became editable.
+      parsed.pricingItems ||= JSON.parse(JSON.stringify(PRICING_ITEMS))
       return parsed
     }
   } catch {
@@ -312,7 +316,41 @@ export const demoApi = {
   },
 
   async listPricing() {
-    return wait(PRICING_ITEMS)
+    const s = store()
+    return wait(
+      [...s.pricingItems].filter((p) => p.active).sort((a, b) => a.sort_order - b.sort_order)
+    )
+  },
+
+  async listPricingItemsForStaff() {
+    const s = store()
+    return wait([...s.pricingItems].sort((a, b) => a.sort_order - b.sort_order))
+  },
+
+  async createPricingItem(payload) {
+    const s = store()
+    const row = { id: uid('price'), app_id: 'hornung_crm', active: true, ...payload }
+    s.pricingItems.push(row)
+    commit()
+    return wait(row)
+  },
+
+  async updatePricingItem(id, patch) {
+    const s = store()
+    const row = s.pricingItems.find((p) => p.id === id)
+    if (!row) throw new Error('Pricing item not found.')
+    Object.assign(row, patch)
+    commit()
+    return wait(row)
+  },
+
+  async deletePricingItem(id) {
+    const s = store()
+    const row = s.pricingItems.find((p) => p.id === id)
+    if (!row) throw new Error('Pricing item not found.')
+    row.active = false
+    commit()
+    return wait(row)
   },
 
   async getMyClient(profileId) {
@@ -497,6 +535,43 @@ export const demoApi = {
       due_date: null,
       delivery_by_post: false,
       express: false,
+      created_at: iso(Date.now()),
+      updated_at: iso(Date.now())
+    }
+    s.cases.push(row)
+    commit()
+    return wait(row)
+  },
+
+  // Demo mirror of createOwnCase (see supabaseData.js) — demo mode has no
+  // real RLS, so validateClientCaseCreation (src/lib/caseCreation.js)
+  // enforces the exact same rule here that the "cases: client insert own"
+  // policy enforces for real: no future year, no duplicate. requestedClientId
+  // and sessionClientId are always the same value here (demo has no
+  // separate notion of "the caller's own client_id" to compare against —
+  // the frontend already only ever passes the signed-in client's own id).
+  async createOwnCase(clientId, taxYear) {
+    const s = store()
+    const existingYears = s.cases.filter((c) => c.client_id === clientId).map((c) => c.tax_year)
+    const validation = validateClientCaseCreation({
+      requestedClientId: clientId,
+      sessionClientId: clientId,
+      taxYear,
+      existingYears
+    })
+    if (!validation.ok) throw new Error(validation.reason)
+    const row = {
+      id: uid('case'),
+      client_id: clientId,
+      tax_year: Number(taxYear),
+      status: 'opened',
+      status_updated_at: iso(Date.now()),
+      client_message: '',
+      specialist_notes: '',
+      due_date: null,
+      delivery_by_post: false,
+      express: false,
+      created_by_client: true,
       created_at: iso(Date.now()),
       updated_at: iso(Date.now())
     }

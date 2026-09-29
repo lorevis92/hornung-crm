@@ -370,6 +370,11 @@ export default function SpecialistClient() {
                       <span className="display text-2xl text-ink-900">{c.tax_year}</span>
                       <StatusBadge status={c.status} size="sm" />
                     </div>
+                    {c.created_by_client ? (
+                      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-sand px-2 py-0.5 text-[11px] font-medium text-ink-500 ring-1 ring-inset ring-line">
+                        {t('specialist.createdByClient')}
+                      </span>
+                    ) : null}
                     <p className="text-[13.5px] text-ink-400">
                       {t('home.documentsUploaded', { count: c.client_documents ?? 0 })} ·{' '}
                       {t('home.documentsFromUs', { count: c.specialist_documents ?? 0 })}

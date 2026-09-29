@@ -8,7 +8,7 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { currentTaxYear, FEATURES } from '../lib/config'
 import { formatChf } from '../lib/format'
-import { pricingLabel } from '../lib/pricing'
+import { pricingDescription, pricingLabel } from '../lib/pricing'
 
 function PriceTable({ items, lang, t }) {
   return (
@@ -23,9 +23,14 @@ function PriceTable({ items, lang, t }) {
         <tbody className="divide-y divide-line bg-white">
           {items.map((item) => (
             <tr key={item.code}>
-              <td className="table-cell text-ink-700">{pricingLabel(item, lang)}</td>
+              <td className="table-cell text-ink-700">
+                {pricingLabel(item, lang)}
+                {pricingDescription(item, lang) ? (
+                  <p className="mt-0.5 text-[12.5px] text-ink-400">{pricingDescription(item, lang)}</p>
+                ) : null}
+              </td>
               <td className="table-cell whitespace-nowrap text-right font-semibold tabular-nums text-ink-900">
-                {Number(item.price) > 0 ? formatChf(item.price, lang) : t('pricing.onRequest')}
+                {item.on_request ? t('pricing.onRequest') : formatChf(item.price, lang)}
               </td>
             </tr>
           ))}
@@ -108,9 +113,14 @@ export default function Pricing() {
                   key={item.code}
                   className="flex items-center justify-between gap-3 rounded-xl bg-sand px-4 py-3 text-[15px]"
                 >
-                  <span className="text-ink-700">{pricingLabel(item, lang)}</span>
+                  <span className="text-ink-700">
+                    {pricingLabel(item, lang)}
+                    {pricingDescription(item, lang) ? (
+                      <p className="mt-0.5 text-[12.5px] font-normal text-ink-400">{pricingDescription(item, lang)}</p>
+                    ) : null}
+                  </span>
                   <span className="shrink-0 text-[13px] font-medium uppercase tracking-wide text-gold-700">
-                    {t('pricing.onRequest')}
+                    {item.on_request ? t('pricing.onRequest') : formatChf(item.price, lang)}
                   </span>
                 </li>
               ))}

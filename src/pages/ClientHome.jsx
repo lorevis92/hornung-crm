@@ -1,20 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarClock, FileCheck2, FolderOpen, Mail, Phone, Upload } from 'lucide-react'
+import { ArrowRight, CalendarClock, CalendarPlus, FileCheck2, FolderOpen, Mail, Phone, Upload } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import StatusStepper from '../components/StatusStepper'
-import { EmptyState, PageLoader } from '../components/ui'
+import { EmptyState, Field, PageLoader, Select, Spinner } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { CONTACT, currentTaxYear } from '../lib/config'
+import { selectableClientTaxYears } from '../lib/caseCreation'
 import { formatDate } from '../lib/format'
 
 export default function ClientHome() {
   const { t, lang } = useI18n()
   const { client, profile } = useAuth()
+  const toast = useToast()
   const [cases, setCases] = useState([])
   const [loading, setLoading] = useState(true)
+  const yearOptions = useMemo(() => selectableClientTaxYears(), [])
+  const [newYear, setNewYear] = useState(String(yearOptions[0]))
+  const [addingYear, setAddingYear] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -56,6 +62,22 @@ export default function ClientHome() {
   )
 
   const firstName = client?.first_name || profile?.full_name?.split(' ')[0] || ''
+
+  const addYear = async () => {
+    if (!client?.id) return
+    setAddingYear(true)
+    try {
+      const created = await api.createOwnCase(client.id, newYear)
+      setCases((list) => [...list, created])
+      toast.success(t('common.saved'))
+    } catch (error) {
+      toast.error(
+        error.message === 'YEAR_EXISTS' ? t('specialist.yearExists') : error.message || t('common.error')
+      )
+    } finally {
+      setAddingYear(false)
+    }
+  }
 
   if (loading) return <PageLoader label={t('common.loading')} />
 
@@ -144,6 +166,22 @@ export default function ClientHome() {
           description={t('home.noCasesHelp')}
         />
       )}
+
+      <section className="card flex flex-wrap items-end gap-3 p-4">
+        <Field label={t('home.addYear')} htmlFor="new-tax-year" className="w-[150px]">
+          <Select id="new-tax-year" value={newYear} onChange={(e) => setNewYear(e.target.value)}>
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <button type="button" className="btn-primary" onClick={addYear} disabled={addingYear}>
+          {addingYear ? <Spinner size={17} /> : <CalendarPlus size={17} aria-hidden="true" />}
+          {t('common.add')}
+        </button>
+      </section>
 
       <section>
         <h2 className="section-title mb-4 text-xl">{t('home.previousYears')}</h2>

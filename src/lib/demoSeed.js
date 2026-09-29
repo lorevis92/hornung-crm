@@ -211,7 +211,13 @@ export const PRICING_ITEMS = [
   { code: 'svc_tax_advice', kind: 'service', sort_order: 250, price: 0, label_en: 'Tax advice', label_fr: 'Conseil fiscal', label_de: 'Steuerberatung', label_it: 'Consulenza fiscale' },
   { code: 'svc_investments', kind: 'service', sort_order: 260, price: 0, label_en: 'Investments', label_fr: 'Investissements', label_de: 'Anlagen', label_it: 'Investimenti' },
   { code: 'svc_brokerage', kind: 'service', sort_order: 270, price: 0, label_en: 'Real estate brokerage', label_fr: 'Courtage immobilier', label_de: 'Immobilienvermittlung', label_it: 'Intermediazione immobiliare' }
-].map((item, index) => ({ id: `price-${index}`, app_id: 'hornung_crm', active: true, ...item }))
+].map((item, index) => ({
+  id: `price-${index}`,
+  app_id: 'hornung_crm',
+  active: true,
+  on_request: item.kind === 'service',
+  ...item
+}))
 
 // A small representative sample (not the full real dataset, seeded in
 // supabase/migrations/20260101000013_tax_parameters_data.sql) — just enough

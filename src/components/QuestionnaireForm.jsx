@@ -1,15 +1,19 @@
-import { useEffect, useState } from 'react'
-import { Plus, Save, Trash2, Users, Car, Home, User, Info, MessageSquare } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeftRight, Plus, Save, Trash2, Users, Car, Home, User, Info, MessageSquare } from 'lucide-react'
 import { Checkbox, Field, PageLoader, Select, Spinner, TextInput, Textarea } from './ui'
 import { useI18n } from '../i18n'
+import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { api } from '../lib/data'
 import { MARITAL_STATUSES, PERMIT_TYPES } from '../lib/constants'
+import { fullName } from '../lib/format'
+import { resolvePersonDisplayOrder } from '../lib/personOrder'
 
 const emptyPerson = (type) => ({
   person_type: type,
   first_name: '',
   last_name: '',
+  gender: '',
   mobile_phone: '',
   email: '',
   marital_status: '',
@@ -62,6 +66,13 @@ function PersonFields({ person, onChange, disabled, idPrefix }) {
       </Field>
       <Field label={t('data.f.lastName')} htmlFor={`${idPrefix}-last`}>
         <TextInput id={`${idPrefix}-last`} value={person.last_name || ''} onChange={set('last_name')} disabled={disabled} />
+      </Field>
+      <Field label={t('data.f.gender')} htmlFor={`${idPrefix}-gender`} hint={t('data.f.genderHelp')}>
+        <Select id={`${idPrefix}-gender`} value={person.gender || ''} onChange={set('gender')} disabled={disabled}>
+          <option value="">{t('common.none')}</option>
+          <option value="male">{t('data.f.genderMale')}</option>
+          <option value="female">{t('data.f.genderFemale')}</option>
+        </Select>
       </Field>
       <Field label={t('data.f.dateOfBirth')} htmlFor={`${idPrefix}-dob`}>
         <TextInput id={`${idPrefix}-dob`} type="date" value={person.date_of_birth || ''} onChange={set('date_of_birth')} disabled={disabled} />
@@ -151,6 +162,7 @@ function RowCard({ children, onRemove, disabled, label }) {
 
 export default function QuestionnaireForm({ clientId, client, readOnly = false, onSaved }) {
   const { t } = useI18n()
+  const { isStaff } = useAuth()
   const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -160,6 +172,35 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
   const [children, setChildren] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [properties, setProperties] = useState([])
+  const [orderOverride, setOrderOverride] = useState(client?.person_order_override || null)
+  const [invertingOrder, setInvertingOrder] = useState(false)
+
+  useEffect(() => {
+    setOrderOverride(client?.person_order_override || null)
+  }, [client?.person_order_override])
+
+  // Husband-first presentation order (src/lib/personOrder.js) — the
+  // Taxpayer/Spouse sections below are re-sequenced by this, never by
+  // renaming which one is "primary" in the database.
+  const personOrder = useMemo(
+    () => resolvePersonDisplayOrder({ primaryPerson: primary, spousePerson: spouse, overrideOrder: orderOverride }),
+    [primary, spouse, orderOverride]
+  )
+
+  const invertPersonOrder = async () => {
+    if (!clientId) return
+    const next = personOrder.ordered[0]?.kind === 'primary' ? 'spouse_first' : 'primary_first'
+    setInvertingOrder(true)
+    try {
+      await api.updateClient(clientId, { person_order_override: next })
+      setOrderOverride(next)
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setInvertingOrder(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -285,32 +326,58 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
         </div>
       </SectionCard>
 
-      {/* ----------------------------------------------------- taxpayer --- */}
-      <SectionCard icon={User} title={t('data.taxpayer')}>
-        <PersonFields person={primary} onChange={setPrimary} disabled={disabled} idPrefix="primary" />
-      </SectionCard>
-
-      {/* ------------------------------------------------------- spouse --- */}
-      <SectionCard
-        icon={Users}
-        title={t('data.spouse')}
-        actions={
-          !disabled ? (
-            <Checkbox
-              id="has-spouse"
-              label={t('data.spouseToggle')}
-              checked={Boolean(spouse)}
-              onChange={(e) => setSpouse(e.target.checked ? emptyPerson('spouse') : null)}
-            />
-          ) : null
-        }
-      >
-        {spouse ? (
-          <PersonFields person={spouse} onChange={setSpouse} disabled={disabled} idPrefix="spouse" />
+      {/* ------------------------------------------- taxpayer / spouse --- */}
+      {/* Rendered in husband-first order (src/lib/personOrder.js) — which
+          section appears FIRST changes; the section's own identity
+          (Taxpayer = primary, Spouse = the other client_persons row) never
+          does, so data is never moved between people, only re-sequenced. */}
+      {spouse && personOrder.needsVerification && isStaff ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-[13.5px] text-amber-800">
+          <span>{t('data.personOrderUnknown')}</span>
+          <button type="button" className="btn-secondary btn-sm" onClick={invertPersonOrder} disabled={invertingOrder}>
+            {invertingOrder ? <Spinner size={14} /> : <ArrowLeftRight size={14} aria-hidden="true" />}
+            {t('data.personOrderInvert', {
+              name: fullName(personOrder.ordered[1]?.person) || t('data.spouse')
+            })}
+          </button>
+        </div>
+      ) : null}
+      {/* The form always offers both slots (the spouse one starts empty,
+          with its own toggle to add one) — personOrder omits a slot
+          entirely once there's no spouse at all, which is right for a
+          read-only summary but would hide the "add spouse" toggle here. */}
+      {(personOrder.ordered.some((o) => o.kind === 'spouse')
+        ? personOrder.ordered.map((o) => o.kind)
+        : [...personOrder.ordered.map((o) => o.kind), 'spouse']
+      ).map((kind) =>
+        kind === 'primary' ? (
+          <SectionCard key="primary" icon={User} title={t('data.taxpayer')}>
+            <PersonFields person={primary} onChange={setPrimary} disabled={disabled} idPrefix="primary" />
+          </SectionCard>
         ) : (
-          <p className="text-[14.5px] text-ink-400">{t('common.notProvided')}</p>
-        )}
-      </SectionCard>
+          <SectionCard
+            key="spouse"
+            icon={Users}
+            title={t('data.spouse')}
+            actions={
+              !disabled ? (
+                <Checkbox
+                  id="has-spouse"
+                  label={t('data.spouseToggle')}
+                  checked={Boolean(spouse)}
+                  onChange={(e) => setSpouse(e.target.checked ? emptyPerson('spouse') : null)}
+                />
+              ) : null
+            }
+          >
+            {spouse ? (
+              <PersonFields person={spouse} onChange={setSpouse} disabled={disabled} idPrefix="spouse" />
+            ) : (
+              <p className="text-[14.5px] text-ink-400">{t('common.notProvided')}</p>
+            )}
+          </SectionCard>
+        )
+      )}
 
       {/* ----------------------------------------------------- children --- */}
       <SectionCard

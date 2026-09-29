@@ -59,6 +59,43 @@ export const supabaseApi = {
     )
   },
 
+  // Staff-only price-list management (/pricing-settings) — includes
+  // inactive (soft-deleted) rows so a specialist can see the full history,
+  // not just what clients currently see.
+  async listPricingItemsForStaff() {
+    return unwrap(
+      await supabase
+        .from('pricing_items')
+        .select('*')
+        .eq('app_id', APP_ID)
+        .order('sort_order', { ascending: true })
+    )
+  },
+
+  async createPricingItem(payload) {
+    return unwrap(
+      await supabase
+        .from('pricing_items')
+        .insert({ app_id: APP_ID, active: true, ...payload })
+        .select()
+        .single()
+    )
+  },
+
+  async updatePricingItem(id, patch) {
+    return unwrap(await supabase.from('pricing_items').update(patch).eq('id', id).select().single())
+  },
+
+  // Soft delete only — pricing_items has no FK pointing at it, but a past
+  // fee estimate's own line items already snapshot label/price at the time,
+  // so nothing downstream needs this row to keep existing; `active: false`
+  // is enough to stop it appearing anywhere (read RLS/listPricing already
+  // filter on it) while keeping it visible in the staff-only management
+  // list above.
+  async deletePricingItem(id) {
+    return unwrap(await supabase.from('pricing_items').update({ active: false }).eq('id', id).select().single())
+  },
+
   async getMyClient(profileId) {
     if (!profileId) return null
     const { data, error } = await supabase
@@ -267,6 +304,29 @@ export const supabaseApi = {
     const { data, error } = await supabase
       .from('tax_cases')
       .insert({ client_id: clientId, tax_year: Number(taxYear), status: 'opened' })
+      .select()
+      .single()
+    if (error) {
+      if (error.code === '23505') throw new Error('YEAR_EXISTS')
+      throw error
+    }
+    return data
+  },
+
+  // The client's own "Add tax year" button (see selectableClientTaxYears/
+  // validateClientCaseCreation in src/lib/caseCreation.js for the picker
+  // range and the client-side mirror of the RLS rule below) — same table,
+  // same row shape as createCase above, just tagged created_by_client so
+  // the specialist's own case list can flag it. The real gate is
+  // "cases: client insert own" (see migration
+  // 20260101000041_client_created_tax_year.sql): client_id must be the
+  // caller's own, and tax_year must not be in the future — a mismatched
+  // clientId or a future year is rejected by Postgres itself, not just by
+  // this app's own UI.
+  async createOwnCase(clientId, taxYear) {
+    const { data, error } = await supabase
+      .from('tax_cases')
+      .insert({ client_id: clientId, tax_year: Number(taxYear), status: 'opened', created_by_client: true })
       .select()
       .single()
     if (error) {
