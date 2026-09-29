@@ -912,3 +912,27 @@ export function computeTaxAggregate({
     cantonMissing: !canton
   }
 }
+
+// Whether an aggregate can honestly be called "ready_for_simulation" —
+// shared by api/_recalc.js (real backend) and the demo data layer, so the
+// rule is defined exactly once instead of copied inline in both places
+// (which is how it drifted out of sync with itself before: a document
+// stuck 'uploaded'/'extracting' was checked, but a real, sized "needs
+// verification" component — an unconverted USD balance, a missing cap
+// parameter — was not, so the aggregate could claim to be final while a
+// known, nonzero gap was still sitting there unresolved).
+//
+// documentsStillProcessing: true if any of this client/year's documents is
+//   still 'uploaded' or 'extracting' — extraction not finished yet.
+// components: the tax_aggregate_components rows (or the pure entries this
+//   module's own `components` return value already shapes the same way) —
+//   needs_verification/needsVerification and amount are read leniently
+//   (either casing) so this works against both the DB row shape and the
+//   camelCase shape computeTaxAggregate() itself returns.
+export function resolveAggregateStatus({ documentsStillProcessing, components }) {
+  const hasUnresolvedVerification = (components || []).some((c) => {
+    const needsVerification = c.needs_verification ?? c.needsVerification
+    return needsVerification && c.amount
+  })
+  return documentsStillProcessing || hasUnresolvedVerification ? 'draft' : 'ready_for_simulation'
+}

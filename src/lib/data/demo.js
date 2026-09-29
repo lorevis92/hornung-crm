@@ -8,7 +8,7 @@ import {
   CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES, FIELD_CALCULATION_RULES,
   PRICING_ITEMS, TAX_PARAMETERS
 } from '../demoSeed'
-import { computeTaxAggregate } from '../taxCalculation'
+import { computeTaxAggregate, resolveAggregateStatus } from '../taxCalculation'
 import {
   computePersonalDetailsSync, buildPropertySuggestionPayload, buildChildSuggestionCandidates,
   normalizePropertyAddress
@@ -1060,11 +1060,10 @@ export const demoApi = {
 
     // Never "ready for simulation" while a document is still mid-pipeline,
     // nor while a component with a real, nonzero amount is still "needs
-    // verification" — see api/_recalc.js for the same check on the real
-    // backend.
+    // verification" — resolveAggregateStatus (src/lib/taxCalculation.js) is
+    // the single shared source of this rule, also used by api/_recalc.js.
     const documentsStillProcessing = allDocuments.some((d) => ['uploaded', 'extracting'].includes(d.status))
-    const hasUnresolvedVerification = result.components.some((c) => c.needsVerification && c.amount)
-    const aggregateStatus = documentsStillProcessing || hasUnresolvedVerification ? 'draft' : 'ready_for_simulation'
+    const aggregateStatus = resolveAggregateStatus({ documentsStillProcessing, components: result.components })
 
     let aggregate = s.taxAggregates.find((a) => a.client_id === clientId && a.tax_year === year)
     const now = iso(Date.now())

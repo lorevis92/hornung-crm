@@ -6,6 +6,7 @@
   "description": "Hornung Consulting — Swiss tax declaration client portal / CRM",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm test",
     "build": "vite build",
     "postbuild": "node scripts/check-bundle-secrets.mjs",
     "preview": "vite preview",

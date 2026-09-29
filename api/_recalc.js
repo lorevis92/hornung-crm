@@ -4,7 +4,7 @@
 // browser side) — one place that reads the calculation inputs, runs
 // computeTaxAggregate, and persists the result to tax_aggregates /
 // tax_aggregate_components.
-import { computeTaxAggregate } from '../src/lib/taxCalculation.js'
+import { computeTaxAggregate, resolveAggregateStatus } from '../src/lib/taxCalculation.js'
 import { syncPersonalDetails } from './_personalDetails.js'
 import { syncPropertySuggestion } from './_propertySuggestion.js'
 import { syncChildSuggestions } from './_childSuggestion.js'
@@ -158,9 +158,11 @@ export async function recalculateAndPersist(admin, clientId, taxYear, lang = 'en
   // finished extracting, but the total above doesn't actually include that
   // money yet, so calling it "ready" would tell the specialist a figure is
   // final when a known, sized gap is still open. A needs-verification row
-  // with amount 0 (nothing to actually add) doesn't block readiness.
-  const hasUnresolvedVerification = result.components.some((c) => c.needsVerification && c.amount)
-  const aggregateStatus = documentsStillProcessing || hasUnresolvedVerification ? 'draft' : 'ready_for_simulation'
+  // with amount 0 (nothing to actually add) doesn't block readiness. See
+  // resolveAggregateStatus in src/lib/taxCalculation.js — shared with
+  // demo.js and covered by test/readiness.test.js so this rule can't drift
+  // out of sync with itself again.
+  const aggregateStatus = resolveAggregateStatus({ documentsStillProcessing, components: result.components })
 
   const { data: aggregate, error: aggregateError } = await admin
     .from('tax_aggregates')
