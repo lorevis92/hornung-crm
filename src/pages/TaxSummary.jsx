@@ -338,7 +338,12 @@ export default function TaxSummary() {
     setMarkingNotRelevantId(doc.id)
     try {
       await api.updateClientDocumentStatus(doc.id, 'rejected')
-      setAllDocuments((list) => list.map((d) => (d.id === doc.id ? { ...d, status: 'rejected' } : d)))
+      // orphanedDocuments (and every other completeness check) reads from
+      // `documents`, not `allDocuments` — both need the new status or the
+      // banner keeps citing a document that was just resolved.
+      const applyRejected = (list) => list.map((d) => (d.id === doc.id ? { ...d, status: 'rejected' } : d))
+      setAllDocuments(applyRejected)
+      setDocuments(applyRejected)
       toast.success(t('common.saved'))
     } catch (error) {
       console.error(error)

@@ -287,7 +287,7 @@ function makeManualEntry(row) {
     documentId: null,
     fileName: null,
     categoryCode: null,
-    categoryLabel: null,
+    categoryLabel: 'Manual entry',
     groupKey: CONTRIBUTION_TO_SECTION[contributionType] || null,
     fieldKey: null,
     fieldLabel: row.description,
