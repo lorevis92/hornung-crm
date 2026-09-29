@@ -616,6 +616,26 @@ export const supabaseApi = {
     return callApi('/api/save-field-decision', payload)
   },
 
+  // Tax Summary's "ask about this case" chat bubble — see
+  // api/case-assistant.js (staff-only, rebuilds the case's context from the
+  // database on every call) and case_assistant_messages (staff-only RLS,
+  // never client-visible). Read directly (RLS already scopes it to staff),
+  // the question itself goes through the serverless function since it's
+  // the one holding the Anthropic key.
+  async listCaseAssistantMessages(caseId) {
+    return unwrap(
+      await supabase
+        .from('case_assistant_messages')
+        .select('*')
+        .eq('case_id', caseId)
+        .order('created_at', { ascending: true })
+    )
+  },
+
+  async askCaseAssistant(caseId, message) {
+    return callApi('/api/case-assistant', { caseId, message })
+  },
+
   async listManualAggregateEntries(clientId, taxYear) {
     return unwrap(
       await supabase

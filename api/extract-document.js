@@ -24,7 +24,7 @@ import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL } from 
 // import.meta.env) — keep this in sync with that file.
 const STORAGE_BUCKET = 'client-documents'
 
-const MODEL = 'claude-sonnet-5'
+const MODEL = process.env.ANTHROPIC_EXTRACTION_MODEL || 'claude-sonnet-5'
 const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 
 function requireWebhookSecret(req) {

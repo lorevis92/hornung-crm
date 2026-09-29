@@ -5,6 +5,7 @@ import {
   AlertTriangle, AlignJustify, ArrowLeft, Calculator, Eye, FileDown, FileText, FolderOpen, Info, Landmark, List,
   Pencil, PiggyBank, Plus, Receipt, Trash2
 } from 'lucide-react'
+import CaseAssistant from '../components/CaseAssistant'
 import CompactFieldRow from '../components/CompactFieldRow'
 import ExtractedFieldRow from '../components/ExtractedFieldRow'
 import Modal from '../components/Modal'
@@ -2021,6 +2022,8 @@ export default function TaxSummary() {
           </div>
         </section>
       ) : null}
+
+      <CaseAssistant caseId={caseId} onViewDocument={viewDocumentGroupSource} />
     </div>
   )
 }

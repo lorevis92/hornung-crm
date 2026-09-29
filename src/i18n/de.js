@@ -320,6 +320,18 @@ export default {
     }
   },
 
+  assistant: {
+    open: 'Fragen zu diesem Fall',
+    title: 'Fall-Assistent',
+    close: 'Schliessen',
+    expandSize: 'Vollbild',
+    collapseSize: 'Kompakte Ansicht',
+    empty: 'Fragen Sie, woher ein Wert stammt, wem er gehört, warum etwas ausgeschlossen ist, oder wie eine Summe zustande kam.',
+    placeholder: 'Stellen Sie eine Frage zu diesem Fall…',
+    send: 'Senden',
+    thinking: 'Denkt nach…'
+  },
+
   pricing: {
     title: 'Tarife',
     subtitle: 'Transparente Pauschalhonorare für die Erstellung Ihrer Steuererklärung.',

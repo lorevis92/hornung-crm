@@ -237,7 +237,8 @@ function seed() {
     fieldSuggestions: [],
     fieldDecisions: [],
     manualAggregateEntries: [],
-    pricingItems: JSON.parse(JSON.stringify(PRICING_ITEMS))
+    pricingItems: JSON.parse(JSON.stringify(PRICING_ITEMS)),
+    caseAssistantMessages: []
   }
 }
 
@@ -269,6 +270,8 @@ function load() {
       parsed.manualAggregateEntries ||= []
       // Same for sessions started before the price list became editable.
       parsed.pricingItems ||= JSON.parse(JSON.stringify(PRICING_ITEMS))
+      // Same for sessions started before the case assistant existed.
+      parsed.caseAssistantMessages ||= []
       return parsed
     }
   } catch {
@@ -1344,6 +1347,41 @@ export const demoApi = {
     }
     commit()
     return wait(row)
+  },
+
+  // Demo mirror of listCaseAssistantMessages/askCaseAssistant (see
+  // supabaseData.js and api/case-assistant.js) — demo mode has no server to
+  // hold an Anthropic key, so this can't make a real call; it still
+  // exercises the same persisted-history shape (case_assistant_messages),
+  // just with a fixed explanatory reply instead of a real answer.
+  async listCaseAssistantMessages(caseId) {
+    const s = store()
+    return wait(s.caseAssistantMessages.filter((m) => m.case_id === caseId).sort((a, b) => a.created_at.localeCompare(b.created_at)))
+  },
+
+  async askCaseAssistant(caseId, message) {
+    const s = store()
+    const now = Date.now()
+    const userRow = {
+      id: uid('assistant-msg'),
+      case_id: caseId,
+      role: 'user',
+      content: message,
+      created_at: iso(now)
+    }
+    const reply =
+      "L'assistente AI richiede il backend reale (chiave Anthropic lato server) — non disponibile in modalità demo. " +
+      'In produzione risponde usando i dati effettivi di questo caso (documenti, calcolo, decisioni).'
+    const assistantRow = {
+      id: uid('assistant-msg'),
+      case_id: caseId,
+      role: 'assistant',
+      content: reply,
+      created_at: iso(now + 1)
+    }
+    s.caseAssistantMessages.push(userRow, assistantRow)
+    commit()
+    return wait({ reply })
   },
 
   async listManualAggregateEntries(clientId, taxYear) {

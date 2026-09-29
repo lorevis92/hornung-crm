@@ -321,6 +321,18 @@ export default {
     }
   },
 
+  assistant: {
+    open: 'Poser une question sur ce dossier',
+    title: 'Assistant du dossier',
+    close: 'Fermer',
+    expandSize: 'Plein écran',
+    collapseSize: 'Vue compacte',
+    empty: "Demandez d'où vient une valeur, à qui elle appartient, pourquoi quelque chose est exclu, ou comment un total a été obtenu.",
+    placeholder: 'Posez une question sur ce dossier…',
+    send: 'Envoyer',
+    thinking: 'Réflexion en cours…'
+  },
+
   pricing: {
     title: 'Tarifs',
     subtitle: 'Honoraires forfaitaires transparents pour votre déclaration d’impôt.',

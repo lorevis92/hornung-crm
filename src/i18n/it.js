@@ -319,6 +319,18 @@ export default {
     }
   },
 
+  assistant: {
+    open: 'Fai una domanda su questo caso',
+    title: 'Assistente del caso',
+    close: 'Chiudi',
+    expandSize: 'Schermo intero',
+    collapseSize: 'Vista compatta',
+    empty: 'Chiedi da dove viene un valore, a chi si riferisce, perché è escluso, o come si è arrivati a un totale.',
+    placeholder: 'Fai una domanda su questo caso…',
+    send: 'Invia',
+    thinking: 'Sto pensando…'
+  },
+
   pricing: {
     title: 'Tariffe',
     subtitle: 'Onorari forfettari trasparenti per la preparazione della dichiarazione.',

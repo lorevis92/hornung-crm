@@ -321,6 +321,18 @@ export default {
     }
   },
 
+  assistant: {
+    open: 'Ask about this case',
+    title: 'Case assistant',
+    close: 'Close',
+    expandSize: 'Full screen',
+    collapseSize: 'Compact view',
+    empty: 'Ask where a value comes from, who it belongs to, why something is excluded, or how a total was reached.',
+    placeholder: 'Ask a question about this case…',
+    send: 'Send',
+    thinking: 'Thinking…'
+  },
+
   pricing: {
     title: 'Pricing',
     subtitle: 'Transparent flat fees for the preparation of your tax return.',
