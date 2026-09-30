@@ -54,7 +54,7 @@ function HomeRedirect() {
 }
 
 // Tax Summary is the densest page in the app (personal-details registry,
-// per-document breakdown, calculation totals, ...) and so the most likely
+// per-document breakdown, data-quality findings, ...) and so the most likely
 // to break from a single bad assumption about the data — a missing import,
 // an unexpected null, one client whose data reaches a code path no other
 // client's ever has (see the "formatDate is not defined" incident: it only

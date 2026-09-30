@@ -3,9 +3,11 @@ import { Check, ChevronDown, ChevronUp, ListChecks, Pencil } from 'lucide-react'
 import clsx from 'clsx'
 import Modal from './Modal'
 import { useI18n } from '../i18n'
+import { useAuth } from '../context/AuthContext'
 import { docTypeLabel, groupByCategory } from '../lib/labels'
 import { DOC_CATEGORIES } from '../lib/constants'
 import { FEATURES } from '../lib/config'
+import { viewerCopy } from '../lib/viewerCopy'
 
 function DocTypeList({ grouped, uploadedTypes, lang, t }) {
   return (
@@ -52,6 +54,11 @@ export default function ChecklistPanel({
   onSave
 }) {
   const { t, lang } = useI18n()
+  // This panel sits inside the client's own upload zone, so its wording
+  // spoke to the client ("your tax return") even when a specialist was the
+  // one reading it — src/lib/viewerCopy.js picks the right side.
+  const { isStaff } = useAuth()
+  const copy = viewerCopy(isStaff)
   const grouped = useMemo(() => groupByCategory(documentTypes), [documentTypes])
   const uploadedTypes = useMemo(
     () => new Set(documents.map((d) => d.document_type_id).filter(Boolean)),
@@ -69,8 +76,8 @@ export default function ChecklistPanel({
         <div className="flex items-start gap-2.5 border-b border-line px-4 py-3">
           <ListChecks size={19} className="mt-0.5 shrink-0 text-gold-600" aria-hidden="true" />
           <div>
-            <p className="text-[15px] font-semibold text-ink-900">{t('case.possibleDocs')}</p>
-            <p className="text-[13px] text-ink-400">{t('case.possibleDocsHelp')}</p>
+            <p className="text-[15px] font-semibold text-ink-900">{t(copy.casePossibleDocs)}</p>
+            <p className="text-[13px] text-ink-400">{t(copy.casePossibleDocsHelp)}</p>
           </div>
         </div>
         <div className="px-4 py-3">
@@ -173,7 +180,7 @@ function RequestedChecklist({ documentTypes, requested, grouped, uploadedTypes, 
             })}
           </ul>
         ) : (
-          <p className="text-[14.5px] text-ink-400">{t('case.noChecklist')}</p>
+          <p className="text-[14.5px] text-ink-400">{t(copy.caseNoChecklist)}</p>
         )}
 
         <button

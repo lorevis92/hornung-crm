@@ -132,6 +132,13 @@ export default {
       in_process: 'Votre déclaration est en cours de préparation.',
       review: 'Votre déclaration est complète et en contrôle final.',
       finished: 'Votre déclaration est terminée — les documents sont ci-dessous.'
+    },
+    staffDesc: {
+      opened: 'Le dossier du client pour cette année est ouvert — des documents peuvent être téléversés.',
+      waiting_client: 'Il manque encore un élément de la part du client avant de pouvoir continuer.',
+      in_process: 'La déclaration du client est en cours de préparation.',
+      review: 'La déclaration du client est complète et en contrôle final.',
+      finished: 'La déclaration du client est terminée — les documents sont ci-dessous.'
     }
   },
 
@@ -141,18 +148,23 @@ export default {
     reprocessAll: 'Tout recharger depuis les documents',
     reprocessConfirmTitle: 'Tout recharger depuis les documents ?',
     reprocessConfirmBody:
-      "Relance l'extraction pour chaque document de cette année — y compris ceux déjà traités — et actualise le questionnaire, les suggestions et le calcul en conséquence. Fait de nouveau appel à l'IA pour chaque document et peut prendre un moment.",
+      "Relance l'extraction pour chaque document de cette année — y compris ceux déjà traités — et actualise le questionnaire et les suggestions en conséquence. Fait de nouveau appel à l'IA pour chaque document et peut prendre un moment.",
     reprocessDone: '{processed} document(s) retraité(s).',
     reprocessPartial: '{processed} document(s) retraité(s), {failed} en échec — à vérifier individuellement.',
     yourDocuments: 'Vos documents',
+    clientDocuments: 'Documents du client',
     yourDocumentsHelp: 'Téléversez les documents convenus lors de notre entretien.',
+    clientDocumentsHelp: 'Les documents téléversés par le client — vous pouvez aussi en ajouter un en son nom.',
     checklist: 'Liste de documents convenue',
     checklistHelp: 'Les éléments cochés sont ceux que nous attendons.',
     noChecklist: 'Aucune liste spécifique convenue. Téléversez ce qui vous concerne.',
+    noChecklistStaff: "Aucune liste spécifique n'a encore été convenue avec ce client.",
     showAllTypes: 'Afficher la liste complète des documents possibles',
     hideAllTypes: 'Masquer la liste complète',
     possibleDocs: "Documents possibles pour l'établissement de votre déclaration d'impôt",
+    possibleDocsStaff: "Documents possibles pour l'établissement de la déclaration d'impôt du client",
     possibleDocsHelp: "Cette liste n'est qu'un aide-mémoire — il n'est pas obligatoire de tout téléverser.",
+    possibleDocsStaffHelp: "Cette liste n'est qu'un aide-mémoire — tous les documents ne concernent pas chaque client.",
     preview: 'Aperçu',
     previewUnavailable: 'Aperçu non disponible pour ce type de fichier.',
     viewList: 'Vue liste',
@@ -172,7 +184,9 @@ export default {
     noDocuments: 'Aucun document téléversé.',
     fromSpecialist: 'Documents de Hornung Consulting',
     fromSpecialistHelp: 'Votre déclaration terminée et les documents associés.',
+    fromSpecialistHelpStaff: 'La déclaration terminée et les documents associés envoyés au client.',
     noSpecialistDocs: 'Rien pour l’instant — apparaîtra dès que votre déclaration sera prête.',
+    noSpecialistDocsStaff: "Rien pour l'instant — téléversez la déclaration terminée dès qu'elle est prête.",
     uploadedOn: 'Téléversé le {date}',
     deleteConfirm: 'Retirer ce document ?',
     deleteConfirmBody: 'Ceci supprimera définitivement « {name} ». Cette action est irréversible.',
@@ -321,6 +335,7 @@ export default {
   pricing: {
     title: 'Tarifs',
     subtitle: 'Honoraires forfaitaires transparents pour votre déclaration d’impôt.',
+    staffSubtitle: "Honoraires forfaitaires transparents pour la préparation d'une déclaration d'impôt.",
     service: 'Prestation',
     price: 'Prix',
     base: 'Déclaration d’impôt',

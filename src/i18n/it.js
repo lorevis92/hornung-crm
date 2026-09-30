@@ -131,6 +131,13 @@ export default {
       in_process: 'La tua dichiarazione è in preparazione.',
       review: 'La dichiarazione è completa ed è in revisione finale.',
       finished: 'La tua dichiarazione è pronta — trovi i documenti qui sotto.'
+    },
+    staffDesc: {
+      opened: 'La pratica del cliente per questo anno è aperta — i documenti possono essere caricati.',
+      waiting_client: 'Serve ancora qualcosa dal cliente prima di proseguire.',
+      in_process: 'La dichiarazione del cliente è in preparazione.',
+      review: 'La dichiarazione del cliente è completa ed è in revisione finale.',
+      finished: 'La dichiarazione del cliente è pronta — i documenti sono qui sotto.'
     }
   },
 
@@ -140,18 +147,23 @@ export default {
     reprocessAll: 'Ricarica tutto dai documenti',
     reprocessConfirmTitle: 'Ricaricare tutto dai documenti?',
     reprocessConfirmBody:
-      "Rilancia l'estrazione su ogni documento di quest'anno — inclusi quelli già elaborati — e aggiorna Questionario, suggerimenti e calcolo in base a quanto scritto nei documenti. Richiama l'AI per ogni documento e può richiedere qualche minuto.",
+      "Rilancia l'estrazione su ogni documento di quest'anno — inclusi quelli già elaborati — e aggiorna Questionario e suggerimenti in base a quanto scritto nei documenti. Richiama l'AI per ogni documento e può richiedere qualche minuto.",
     reprocessDone: '{processed} documento/i rielaborato/i.',
     reprocessPartial: '{processed} documento/i rielaborato/i, {failed} falliti — verifica singolarmente.',
     yourDocuments: 'I tuoi documenti',
+    clientDocuments: 'I documenti del cliente',
     yourDocumentsHelp: 'Carica i documenti concordati durante la chiamata.',
+    clientDocumentsHelp: 'I documenti caricati dal cliente — puoi aggiungerne uno anche tu per suo conto.',
     checklist: 'Elenco documenti concordato',
     checklistHelp: 'Le voci selezionate sono quelle che stiamo aspettando.',
     noChecklist: 'Nessun elenco specifico concordato. Carica ciò che ti riguarda.',
+    noChecklistStaff: 'Con questo cliente non è ancora stato concordato un elenco specifico.',
     showAllTypes: "Mostra l'elenco completo dei documenti possibili",
     hideAllTypes: "Nascondi l'elenco completo",
     possibleDocs: 'Documenti possibili per la compilazione della tua dichiarazione dei redditi',
+    possibleDocsStaff: 'Documenti possibili per la compilazione della dichiarazione dei redditi del cliente',
     possibleDocsHelp: 'Questo elenco è solo un promemoria — non è obbligatorio caricare tutti i documenti.',
+    possibleDocsStaffHelp: 'Questo elenco è solo un promemoria — non tutti i documenti riguardano ogni cliente.',
     preview: 'Anteprima',
     previewUnavailable: 'Anteprima non disponibile per questo tipo di file.',
     viewList: 'Vista elenco',
@@ -171,7 +183,9 @@ export default {
     noDocuments: 'Nessun documento caricato.',
     fromSpecialist: 'Documenti da Hornung Consulting',
     fromSpecialistHelp: 'La dichiarazione completata e i documenti collegati.',
+    fromSpecialistHelpStaff: 'La dichiarazione completata e i documenti collegati inviati al cliente.',
     noSpecialistDocs: 'Ancora nulla — comparirà quando la dichiarazione sarà pronta.',
+    noSpecialistDocsStaff: 'Ancora nulla — carica la dichiarazione completata quando è pronta.',
     uploadedOn: 'Caricato il {date}',
     deleteConfirm: 'Rimuovere questo documento?',
     deleteConfirmBody: 'Il file «{name}» verrà eliminato definitivamente. L\'azione non può essere annullata.',
@@ -319,6 +333,7 @@ export default {
   pricing: {
     title: 'Tariffe',
     subtitle: 'Onorari forfettari trasparenti per la preparazione della dichiarazione.',
+    staffSubtitle: 'Onorari forfettari trasparenti per la preparazione di una dichiarazione dei redditi.',
     service: 'Prestazione',
     price: 'Prezzo',
     base: 'Dichiarazione fiscale',

@@ -4,6 +4,7 @@ import { Receipt, Sparkle } from 'lucide-react'
 import { PageLoader } from '../components/ui'
 import FeeEstimatePanel from '../components/FeeEstimatePanel'
 import { useAuth } from '../context/AuthContext'
+import { viewerCopy } from '../lib/viewerCopy'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { currentTaxYear, FEATURES } from '../lib/config'
@@ -43,6 +44,9 @@ function PriceTable({ items, lang, t }) {
 export default function Pricing() {
   const { t, lang } = useI18n()
   const { client, isStaff } = useAuth()
+  // The price list itself is the same for both; only the subtitle spoke of
+  // "your tax return" — see src/lib/viewerCopy.js.
+  const copy = viewerCopy(isStaff)
   const [loading, setLoading] = useState(true)
   const [pricing, setPricing] = useState([])
   const [questionnaire, setQuestionnaire] = useState(null)
@@ -84,7 +88,7 @@ export default function Pricing() {
       <header>
         <p className="eyebrow">{t('common.appName')}</p>
         <h1 className="display mt-1 text-[32px] leading-tight sm:text-[38px]">{t('pricing.title')}</h1>
-        <p className="mt-1 max-w-2xl text-[16px] text-ink-500">{t('pricing.subtitle')}</p>
+        <p className="mt-1 max-w-2xl text-[16px] text-ink-500">{t(copy.pricingSubtitle)}</p>
       </header>
 
       <div className={clsx('grid gap-6', showEstimate && 'lg:grid-cols-[minmax(0,1fr)_340px]')}>

@@ -131,6 +131,13 @@ export default {
       in_process: 'Your declaration is being prepared.',
       review: 'Your declaration is complete and under final review.',
       finished: 'Your declaration is finished — the documents are below.'
+    },
+    staffDesc: {
+      opened: "The client's file for this year is open — documents can be uploaded.",
+      waiting_client: 'Something else is still needed from the client before this can continue.',
+      in_process: "The client's declaration is being prepared.",
+      review: "The client's declaration is complete and under final review.",
+      finished: "The client's declaration is finished — the documents are below."
     }
   },
 
@@ -140,18 +147,23 @@ export default {
     reprocessAll: 'Reload everything from the documents',
     reprocessConfirmTitle: 'Reload everything from the documents?',
     reprocessConfirmBody:
-      'Re-runs extraction on every document for this year — including already-processed ones — and refreshes the Questionnaire, suggestions and calculation from what they actually say. This calls the AI again for each document and can take a while.',
+      'Re-runs extraction on every document for this year — including already-processed ones — and refreshes the Questionnaire and suggestions from what they actually say. This calls the AI again for each document and can take a while.',
     reprocessDone: '{processed} document(s) reprocessed.',
     reprocessPartial: '{processed} document(s) reprocessed, {failed} failed — check them individually.',
     yourDocuments: 'Your documents',
+    clientDocuments: 'Client documents',
     yourDocumentsHelp: 'Upload the documents agreed during our call.',
+    clientDocumentsHelp: 'The documents the client uploaded — you can also add one on their behalf.',
     checklist: 'Agreed document list',
     checklistHelp: 'Ticked items are the ones we are waiting for.',
     noChecklist: 'No specific list was agreed. Upload whatever is relevant to you.',
+    noChecklistStaff: 'No specific list has been agreed with this client yet.',
     showAllTypes: 'Show the full list of possible documents',
     hideAllTypes: 'Hide the full list',
     possibleDocs: 'Possible documents for the preparation of your tax return',
+    possibleDocsStaff: "Possible documents for the preparation of the client's tax return",
     possibleDocsHelp: 'This list is only a reminder — you do not need to upload every document.',
+    possibleDocsStaffHelp: 'This list is only a reminder — not every document applies to every client.',
     preview: 'Preview',
     previewUnavailable: 'Preview not available for this file type.',
     viewList: 'List view',
@@ -171,7 +183,9 @@ export default {
     noDocuments: 'No documents uploaded yet.',
     fromSpecialist: 'Documents from Hornung Consulting',
     fromSpecialistHelp: 'Your completed declaration and any related document.',
+    fromSpecialistHelpStaff: 'The completed declaration and any related document sent to the client.',
     noSpecialistDocs: 'Nothing here yet — it will appear once your declaration is ready.',
+    noSpecialistDocsStaff: 'Nothing here yet — upload the completed declaration once it is ready.',
     uploadedOn: 'Uploaded on {date}',
     deleteConfirm: 'Remove this document?',
     deleteConfirmBody: 'This will permanently delete "{name}". This cannot be undone.',
@@ -321,6 +335,7 @@ export default {
   pricing: {
     title: 'Pricing',
     subtitle: 'Transparent flat fees for the preparation of your tax return.',
+    staffSubtitle: 'Transparent flat fees for the preparation of a tax return.',
     service: 'Service',
     price: 'Price',
     base: 'Tax return',

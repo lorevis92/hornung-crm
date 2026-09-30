@@ -23,6 +23,7 @@ import { fullName } from '../lib/format'
 import { docTypeLabel } from '../lib/labels'
 import { computeQuestionnaireConsistency, computeQuestionnaireCompleteness } from '../lib/questionnaireConsistency'
 import { describeSuggestion } from '../lib/suggestions'
+import { viewerCopy } from '../lib/viewerCopy'
 
 // Maps client_documents.status to its i18n key + a badge tone — the
 // extraction pipeline's own states (see supabase/migrations/
@@ -51,6 +52,9 @@ export default function CasePage() {
   const { t, lang } = useI18n()
   const toast = useToast()
   const { isStaff, profile, client: myClient } = useAuth()
+  // Headings and status sentences written from the client's point of view
+  // ("Your documents") have a staff-side twin — see src/lib/viewerCopy.js.
+  const copy = viewerCopy(isStaff)
   // A link from elsewhere (e.g. Tax Summary's children-count mismatch
   // banner) can ask this page to open the consistency review directly,
   // instead of sending the specialist to type the fix in by hand.
@@ -418,7 +422,7 @@ export default function CasePage() {
         </div>
 
         <p className="mt-5 text-[15px] leading-relaxed text-ink-600">
-          {t(`status.desc.${caseRow.status}`)}
+          {t(`${copy.statusDescPrefix}.${caseRow.status}`)}
         </p>
 
         {caseRow.client_message ? (
@@ -493,8 +497,8 @@ export default function CasePage() {
               aria-hidden="true"
             />
             <div>
-              <h2 className="section-title text-xl">{t('case.yourDocuments')}</h2>
-              <p className="section-sub">{t('case.yourDocumentsHelp')}</p>
+              <h2 className="section-title text-xl">{t(copy.caseDocumentsTitle)}</h2>
+              <p className="section-sub">{t(copy.caseDocumentsHelp)}</p>
             </div>
           </div>
           <div className="mt-1 flex shrink-0 items-center gap-2 text-ink-400">
@@ -586,7 +590,7 @@ export default function CasePage() {
             />
             <div>
               <h2 className="section-title text-xl">{t('case.fromSpecialist')}</h2>
-              <p className="section-sub">{t('case.fromSpecialistHelp')}</p>
+              <p className="section-sub">{t(copy.caseSpecialistDocsHelp)}</p>
             </div>
           </div>
           <div className="mt-1 flex shrink-0 items-center gap-2 text-ink-400">
@@ -624,7 +628,7 @@ export default function CasePage() {
               />
             ) : (
               <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
-                {t('case.noSpecialistDocs')}
+                {t(copy.caseNoSpecialistDocs)}
               </p>
             )}
           </div>

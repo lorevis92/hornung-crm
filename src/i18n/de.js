@@ -132,6 +132,13 @@ export default {
       in_process: 'Ihre Steuererklärung wird erstellt.',
       review: 'Ihre Steuererklärung ist vollständig und in der Schlusskontrolle.',
       finished: 'Ihre Steuererklärung ist fertig — die Dokumente finden Sie unten.'
+    },
+    staffDesc: {
+      opened: 'Das Dossier des Kunden für dieses Jahr ist offen — Dokumente können hochgeladen werden.',
+      waiting_client: 'Vom Kunden wird noch etwas benötigt, bevor es weitergehen kann.',
+      in_process: 'Die Steuererklärung des Kunden wird erstellt.',
+      review: 'Die Steuererklärung des Kunden ist vollständig und in der Schlusskontrolle.',
+      finished: 'Die Steuererklärung des Kunden ist fertig — die Dokumente finden Sie unten.'
     }
   },
 
@@ -141,18 +148,23 @@ export default {
     reprocessAll: 'Alles aus den Dokumenten neu laden',
     reprocessConfirmTitle: 'Alles aus den Dokumenten neu laden?',
     reprocessConfirmBody:
-      'Führt die Extraktion für jedes Dokument dieses Jahres erneut aus — auch bereits verarbeitete — und aktualisiert Fragebogen, Vorschläge und Berechnung entsprechend. Ruft die KI für jedes Dokument erneut auf und kann eine Weile dauern.',
+      'Führt die Extraktion für jedes Dokument dieses Jahres erneut aus — auch bereits verarbeitete — und aktualisiert Fragebogen und Vorschläge entsprechend. Ruft die KI für jedes Dokument erneut auf und kann eine Weile dauern.',
     reprocessDone: '{processed} Dokument(e) neu verarbeitet.',
     reprocessPartial: '{processed} Dokument(e) neu verarbeitet, {failed} fehlgeschlagen — bitte einzeln prüfen.',
     yourDocuments: 'Ihre Dokumente',
+    clientDocuments: 'Dokumente des Kunden',
     yourDocumentsHelp: 'Laden Sie die im Gespräch vereinbarten Dokumente hoch.',
+    clientDocumentsHelp: 'Die vom Kunden hochgeladenen Dokumente — Sie können auch eines im Namen des Kunden hinzufügen.',
     checklist: 'Vereinbarte Dokumentenliste',
     checklistHelp: 'Die markierten Punkte erwarten wir von Ihnen.',
     noChecklist: 'Keine spezifische Liste vereinbart. Laden Sie hoch, was auf Sie zutrifft.',
+    noChecklistStaff: 'Mit diesem Kunden wurde noch keine spezifische Liste vereinbart.',
     showAllTypes: 'Vollständige Liste möglicher Dokumente anzeigen',
     hideAllTypes: 'Vollständige Liste ausblenden',
     possibleDocs: 'Mögliche Unterlagen für die Erstellung Ihrer Steuererklärung',
+    possibleDocsStaff: 'Mögliche Unterlagen für die Erstellung der Steuererklärung des Kunden',
     possibleDocsHelp: 'Diese Liste dient nur als Gedächtnisstütze — Sie müssen nicht alle Dokumente hochladen.',
+    possibleDocsStaffHelp: 'Diese Liste dient nur als Gedächtnisstütze — nicht jedes Dokument trifft auf jeden Kunden zu.',
     preview: 'Vorschau',
     previewUnavailable: 'Für diesen Dateityp ist keine Vorschau verfügbar.',
     viewList: 'Listenansicht',
@@ -172,7 +184,9 @@ export default {
     noDocuments: 'Noch keine Dokumente hochgeladen.',
     fromSpecialist: 'Dokumente von Hornung Consulting',
     fromSpecialistHelp: 'Ihre fertige Steuererklärung und zugehörige Dokumente.',
+    fromSpecialistHelpStaff: 'Die fertige Steuererklärung und zugehörige Dokumente für den Kunden.',
     noSpecialistDocs: 'Noch nichts — erscheint, sobald Ihre Steuererklärung bereit ist.',
+    noSpecialistDocsStaff: 'Noch nichts — laden Sie die fertige Steuererklärung hoch, sobald sie bereit ist.',
     uploadedOn: 'Hochgeladen am {date}',
     deleteConfirm: 'Dieses Dokument entfernen?',
     deleteConfirmBody: '„{name}" wird endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.',
@@ -320,6 +334,7 @@ export default {
   pricing: {
     title: 'Tarife',
     subtitle: 'Transparente Pauschalhonorare für die Erstellung Ihrer Steuererklärung.',
+    staffSubtitle: 'Transparente Pauschalhonorare für die Erstellung einer Steuererklärung.',
     service: 'Leistung',
     price: 'Preis',
     base: 'Steuererklärung',
