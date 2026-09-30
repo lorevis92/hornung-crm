@@ -16,7 +16,6 @@ import Pricing from './pages/Pricing'
 import SpecialistHome from './pages/SpecialistHome'
 import SpecialistClient from './pages/SpecialistClient'
 import TaxSettings from './pages/TaxSettings'
-import Diagnostics from './pages/Diagnostics'
 import TaxSummary from './pages/TaxSummary'
 import Account from './pages/Account'
 import NotFound from './pages/NotFound'
@@ -149,14 +148,6 @@ export default function App() {
         element={
           <Protected staffOnly>
             <TaxSettings />
-          </Protected>
-        }
-      />
-      <Route
-        path="/diagnostics"
-        element={
-          <Protected staffOnly>
-            <Diagnostics />
           </Protected>
         }
       />

@@ -16,7 +16,7 @@ import { currentTaxYear, IS_DEMO } from '../lib/config'
 import { CANTONS, LANGUAGES } from '../lib/constants'
 import { formatDate, fullName } from '../lib/format'
 import { describeSuggestion } from '../lib/suggestions'
-import { catchUpRegistrySyncInBackground, recalculateInBackground } from '../lib/recalc'
+import { catchUpRegistrySyncInBackground } from '../lib/recalc'
 
 export default function SpecialistClient() {
   const { clientId } = useParams()
@@ -140,17 +140,6 @@ export default function SpecialistClient() {
         // up instead of silently sitting on what it loaded before.
         setClient(await api.getClient(clientId))
         setQuestionnaireRefreshToken((n) => n + 1)
-        // The suggestion mechanism only ever wrote the corrected value —
-        // nothing re-ran the tax calculation afterward, so a client-level
-        // fix (marital status, in particular — it directly gates the
-        // wealth exemption amount) left every tax_aggregates row exactly
-        // as stale as before the fix until someone happened to click
-        // "Recalculate" again. Marital status/canton/etc. aren't scoped to
-        // one year, so every year this client has a case for gets
-        // refreshed, not just whichever one was open.
-        for (const c of cases) {
-          recalculateInBackground(clientId, c.tax_year, lang)
-        }
       }
       toast.success(t('common.saved'))
     } catch (error) {

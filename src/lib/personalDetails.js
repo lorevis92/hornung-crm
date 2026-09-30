@@ -1,8 +1,8 @@
 // Maps a "current_tax_sheet" document's extracted fields onto the client's
 // registry data (clients.canton, client_persons primary/spouse) — a pure
 // function with no I/O, shared between api/_personalDetails.js (real
-// Supabase data, server-side) and the demo data layer, same reasoning as
-// src/lib/taxCalculation.js. Given the extraction and the client's current
+// Supabase data, server-side) and the demo data layer. Given the
+// extraction and the client's current
 // registry state, it decides — for each mappable field — whether to fill
 // it in (currently empty) or flag a conflict for the specialist to accept
 // or ignore (currently holds a different value). It never touches the
@@ -23,11 +23,10 @@ function splitFullName(fullName = '') {
 // constrains the AI to the short form. Writing that name straight into
 // clients.canton (autoFill did exactly this, since canton isn't in
 // FORCE_APPLY_FIELDS and the field was empty) silently breaks EVERY cantonal
-// parameter lookup for that client from then on — findParam() in
-// src/lib/taxCalculation.js matches canton_code exactly, and a family with no
-// federal fallback (the wealth-exempt amount; Switzerland has no federal
-// wealth tax) doesn't fall back to a wrong-but-plausible number, it just
-// vanishes from the calculation entirely with no error. Names as this app's
+// tax_parameters lookup for that client from then on — a cantonal
+// parameter row is matched on canton_code exactly, so a canton written as
+// "Vallese" simply matches nothing the consultant then looks up in Tax
+// settings. Names as this app's
 // own i18n canton blocks spell them (src/i18n/{en,de,fr,it}.js) — matched
 // case-insensitively, accents stripped, so "Genève"/"GENEVE"/"geneve" all
 // resolve the same way; an already-valid code passes through unchanged.
@@ -144,10 +143,10 @@ function normalizeMaritalStatus(raw) {
 //                 longer relevant: [{ table, person, field }]
 // Fields where the extraction's own confidence, when high enough, is
 // trusted to overwrite an existing (different) value outright instead of
-// sitting as a pending suggestion. Reserved for structural data the
-// calculation engine itself depends on — marital status directly gates
-// which tax_parameters rows apply (e.g. the wealth-exempt amount, several
-// social deductions) — not for identity fields like a name, which stay
+// sitting as a pending suggestion. Reserved for structural data the rest
+// of the app keys off — marital status decides whether the case is read as
+// a couple at all (person ordering, the household questions) — not for
+// identity fields like a name, which stay
 // conservative even at high confidence. Below this confidence, or when the
 // extraction carried no confidence at all, the normal suggest-on-conflict
 // path still applies.

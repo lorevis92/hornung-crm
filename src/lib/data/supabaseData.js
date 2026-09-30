@@ -526,36 +526,6 @@ export const supabaseApi = {
     return true
   },
 
-  // Tax settings — how each extracted field feeds the (future) taxable
-  // income/wealth calculation. RLS: "calc rules: staff only".
-  async listCalculationRules() {
-    return unwrap(await supabase.from('field_calculation_rules').select('*'))
-  },
-
-  async saveCalculationRule(categoryCode, fieldKey, patch) {
-    return unwrap(
-      await supabase
-        .from('field_calculation_rules')
-        .upsert(
-          { category_code: categoryCode, field_key: fieldKey, ...patch },
-          { onConflict: 'category_code,field_key' }
-        )
-        .select()
-        .single()
-    )
-  },
-
-  // Tax calculation — the actual math runs server-side (api/calculate-
-  // aggregates.js), never in the browser; this just calls it and returns
-  // whatever it persisted.
-  async calculateAggregates(clientId, taxYear, lang) {
-    return callApi('/api/calculate-aggregates', { clientId, taxYear: Number(taxYear), lang })
-  },
-
-  async diagnoseClient({ email, clientId, taxYear }) {
-    return callApi('/api/diagnose-client', { email, clientId, taxYear: Number(taxYear) })
-  },
-
   async retryExtraction(documentId, { force = false } = {}) {
     return callApi('/api/retry-extraction', { documentId, force })
   },
@@ -589,31 +559,6 @@ export const supabaseApi = {
   async fillQuestionnaireFromText(caseId, text, meta = {}) {
     const file = new File([text], `pasted-text-${Date.now()}.txt`, { type: 'text/plain' })
     return this.fillQuestionnaireFromDocument(caseId, file, meta)
-  },
-
-  async getTaxAggregate(clientId, taxYear) {
-    const { data: aggregate, error } = await supabase
-      .from('tax_aggregates')
-      .select('*')
-      .eq('client_id', clientId)
-      .eq('tax_year', Number(taxYear))
-      .maybeSingle()
-    if (error) throw error
-    if (!aggregate) return null
-    const { data: components, error: compError } = await supabase
-      .from('tax_aggregate_components')
-      .select('*')
-      .eq('aggregate_id', aggregate.id)
-    if (compError) throw compError
-    return { aggregate, components: components || [] }
-  },
-
-  // A specialist's include/exclude call on one flagged field — see
-  // api/save-field-decision.js. The caller re-runs calculateAggregates
-  // afterward (same pattern as every other field mutation on Tax Summary),
-  // not this call itself, so the new decision is reflected immediately.
-  async saveFieldDecision(payload) {
-    return callApi('/api/save-field-decision', payload)
   },
 
   // Tax Summary's "ask about this case" chat bubble — see
@@ -654,29 +599,10 @@ export const supabaseApi = {
     )
   },
 
-  async listManualAggregateEntries(clientId, taxYear) {
-    return unwrap(
-      await supabase
-        .from('tax_manual_aggregate_entries')
-        .select('*')
-        .eq('client_id', clientId)
-        .eq('tax_year', Number(taxYear))
-        .order('created_at', { ascending: true })
-    )
-  },
-
-  async saveManualAggregateEntry(payload) {
-    return callApi('/api/save-manual-entry', payload)
-  },
-
-  async deleteManualAggregateEntry(id) {
-    return callApi('/api/delete-manual-entry', { id })
-  },
-
-  // "Personal details" (current_tax_sheet) -> registry sync — same
-  // service-role pattern as calculateAggregates: the AI-extraction path
-  // (api/extract-document.js) triggers this on its own; this call is for
-  // right after a specialist manually corrects a field on such a document.
+  // "Personal details" (current_tax_sheet) -> registry sync — the
+  // AI-extraction path (api/extract-document.js) triggers this on its own;
+  // this call is for right after a specialist manually corrects a field on
+  // such a document.
   async syncPersonalDetails(documentId) {
     return callApi('/api/sync-personal-details', { documentId })
   },

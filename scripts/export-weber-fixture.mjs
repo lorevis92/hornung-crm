@@ -1,9 +1,9 @@
 // One-off (but re-runnable) export: pulls the Weber client's real,
 // specialist-reviewed data out of production and writes it to
 // test/fixtures/weber-2025.json — the "golden case" fixture the regression
-// suite (test/weber-calculation.test.js) runs computeTaxAggregate() against
-// directly, with no live database or AI call involved in the tests
-// themselves. Shared implementation: scripts/export-client-fixture.mjs.
+// suite (test/weber-extraction.test.js) runs the row model and the
+// data-quality checks against directly, with no live database or AI call
+// involved in the tests themselves. Shared implementation: scripts/export-client-fixture.mjs.
 //
 // Reads every credential from the environment — never hardcode a URL, key,
 // email or password here, and never commit a version of this file that does.

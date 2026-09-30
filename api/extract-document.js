@@ -17,7 +17,7 @@
 //      in the document.
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, serviceClient } from './_lib.js'
-import { recalculateAndPersist } from './_recalc.js'
+import { syncRegistryForClientYear } from './_registrySync.js'
 import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL } from '../src/lib/rowBasedFields.js'
 import { resolveModel } from '../src/lib/aiModels.js'
 
@@ -65,7 +65,7 @@ export async function runExtraction(
   admin,
   anthropic,
   documentId,
-  { fromStatuses = ['uploaded'], forcedCategoryCode = null, throwOnRecalcError = false } = {}
+  { fromStatuses = ['uploaded'], forcedCategoryCode = null, throwOnRegistrySyncError = false } = {}
 ) {
   // Atomic claim: only proceed if this row is still in one of the expected
   // starting states. Prevents a duplicate webhook delivery (pg_net can
@@ -280,28 +280,23 @@ export async function runExtraction(
     .eq('id', documentId)
   if (finishError) throw finishError
 
-  // Extracted values feed the calculation as soon as they exist — no
-  // specialist confirmation needed — so the aggregate is kept in sync right
-  // here too, the same as an edit/exclude/delete already does from the
-  // browser. Best-effort by default: a failure here shouldn't mark the
-  // extraction itself (which did succeed) as failed — the manual
-  // "Recalculate" button remains a fallback for the async webhook path.
-  // recalculateAndPersist() also re-syncs the client's registry (personal
-  // details, property, children) for every eligible document of this
-  // client/year as its own first step, not just this one — see
-  // api/_recalc.js — so nothing further is needed here for that.
+  // Push what this (and every other already-extracted) document says into
+  // the client's own registry — personal details, properties, children —
+  // so the Questionnaire reflects a fresh upload without anyone having to
+  // open a specific page first. Best-effort by default: a failure here
+  // must not mark the extraction itself (which did succeed) as failed.
   //
   // The synchronous "fill Questionnaire from a document/pasted text" action
-  // (api/extract-document-now.js) passes throwOnRecalcError instead: that
-  // registry sync IS the whole point of that action (there's no separate
-  // document to browse afterwards, only suggestions to review), so a
-  // failure there must reach the specialist as a real error rather than a
+  // (api/extract-document-now.js) passes throwOnRegistrySyncError instead:
+  // that registry sync IS the whole point of that action (there's no
+  // separate document to browse afterwards, only suggestions to review), so
+  // a failure there must reach the specialist as a real error rather than a
   // silent 200 with nothing to show.
   try {
-    await recalculateAndPersist(admin, claimed.client_id, claimed.tax_year)
-  } catch (recalcError) {
-    console.error(`[extract-document] recalculation failed for document ${documentId}:`, recalcError)
-    if (throwOnRecalcError) throw recalcError
+    await syncRegistryForClientYear(admin, claimed.client_id, claimed.tax_year)
+  } catch (syncError) {
+    console.error(`[extract-document] registry sync failed for document ${documentId}:`, syncError)
+    if (throwOnRegistrySyncError) throw syncError
   }
 }
 

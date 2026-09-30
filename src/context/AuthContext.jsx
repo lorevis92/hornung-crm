@@ -293,8 +293,8 @@ export function AuthProvider({ children }) {
     if (IS_DEMO) {
       // Goes through api.updateClient (the same call the specialist's own
       // "Edit info" modal uses) so it actually lands in the demo store —
-      // not just local React state — and the calculation engine (which
-      // reads client.canton straight from that store) sees it too.
+      // not just local React state — and everything that reads
+      // client.canton straight from that store sees it too.
       if (client) {
         const updated = await api.updateClient(client.id, { canton })
         setClient((c) => (c ? { ...c, ...updated } : c))

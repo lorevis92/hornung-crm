@@ -12,11 +12,12 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions } from '../lib/extraction'
-import { recalculateInBackground, syncPersonalDetailsInBackground } from '../lib/recalc'
+import { syncPersonalDetailsInBackground } from '../lib/recalc'
 
-// Extracted values already feed the calculation as soon as they exist — no
-// bulk "confirm all" step needed here either. This panel is for reviewing,
-// correcting, excluding, or manually adding a value on a single document.
+// Reviewing, correcting, excluding or manually adding an extracted value on
+// a single document. There is no bulk "confirm all" step: an extracted value
+// is usable as soon as it exists, and a specialist only touches the ones
+// that are actually wrong.
 export default function DocumentVerificationPanel({ open, onClose, doc, categories = [], clientId, taxYear }) {
   const { t, lang } = useI18n()
   const { profile } = useAuth()
@@ -94,7 +95,6 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
         )
       )
       toast.success(t('common.saved'))
-      recalculateInBackground(clientId, taxYear, lang)
       if (doc.category_code === 'current_tax_sheet') syncPersonalDetailsInBackground(doc.id)
     } catch (error) {
       console.error(error)
@@ -108,10 +108,9 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
     const key = identityOf(field)
     setTogglingKey(key)
     try {
-      // Toggling include/exclude is itself an explicit, per-field
-      // specialist action — same as editing the value — so it also counts
-      // as "this field has been reviewed" for the tax-parameter-missing
-      // safeguard.
+      // Marking a value as not relevant is itself an explicit, per-field
+      // specialist action — same as editing it — so it also counts as
+      // "this field has been reviewed".
       const saved = await api.saveExtractedField(doc.id, {
         field_key: field.field_key,
         row_key: rowKeyOf(field),
@@ -136,7 +135,6 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
             : f
         )
       )
-      recalculateInBackground(clientId, taxYear, lang)
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -153,7 +151,6 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
       const [defs, extracted] = await Promise.all([api.listFieldDefinitions(), api.listExtractedFields(doc.id)])
       const categoryDefs = defs.filter((d) => d.category_code === doc.category_code)
       setFields(mergeFieldsWithDefinitions(categoryDefs, extracted, doc))
-      recalculateInBackground(clientId, taxYear, lang)
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))

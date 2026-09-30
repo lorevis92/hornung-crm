@@ -6,7 +6,10 @@
 //  - the context built for one client's case never contains another
 //    client's data, checked both at the pure-builder level and at the
 //    handler level (by asserting on the exact system prompt sent to the
-//    model).
+//    model);
+//  - the context describes documents, extracted rows and open data-quality
+//    questions only — never a taxable total or any other computed tax
+//    figure, which this app no longer produces at all.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { buildCaseAssistantContext, parseAssistantMessage } from '../src/lib/caseAssistantContext.js'
 
@@ -28,33 +31,41 @@ describe('buildCaseAssistantContext', () => {
     ],
     categories: [{ code: 'salary_statement', label_en: 'Salary statement' }],
     fieldDefs: [{ category_code: 'salary_statement', field_key: 'gross_salary', field_label: 'Gross salary' }],
-    aggregate: { taxable_income_cantonal: 80000, taxable_wealth_cantonal: 0, taxable_income_federal: 80000, status: 'ready_for_simulation' },
-    components: [
-      { label: 'Gross salary — 02_certificato_salario.pdf', field_label: 'Gross salary', amount: 95000, section_key: 'income', document_id: 'doc-1', needs_verification: false, decision: null, is_manual: false }
-    ],
-    fieldDecisions: [],
-    manualEntries: []
+    qualityFindings: []
   }
 
-  it('includes the client, documents (with a clickable-marker reference) and the calculation breakdown', () => {
+  it('includes the client, the documents (with a clickable-marker reference) and their extracted values', () => {
     const context = buildCaseAssistantContext(baseArgs)
     expect(context).toContain('Sara Bianchi')
     expect(context).toContain('[[doc:doc-1|02_certificato_salario.pdf]]')
-    expect(context).toContain('95')
-    expect(context).toContain('income')
+    expect(context).toContain('Gross salary: 95000')
   })
 
-  it('flags a needs-verification component and a specialist decision distinctly', () => {
+  it('never describes a taxable total or any other computed tax figure — this app computes none', () => {
+    const context = buildCaseAssistantContext(baseArgs)
+    expect(context).not.toMatch(/taxable income/i)
+    expect(context).not.toMatch(/taxable wealth/i)
+    expect(context).not.toMatch(/deduction/i)
+    expect(context).not.toMatch(/calculation breakdown/i)
+  })
+
+  it('lists the open data-quality questions, each pointing at its own document', () => {
     const context = buildCaseAssistantContext({
       ...baseArgs,
-      components: [
-        { label: 'Foreign dividend', field_label: 'Foreign dividend', amount: 500, section_key: 'income', document_id: 'doc-1', needs_verification: true, decision: null, is_manual: false }
-      ],
-      fieldDecisions: [{ field_key: 'dividend_income', document_id: 'doc-1', decision: 'exclude', note: 'foreign currency' }]
+      qualityFindings: [
+        { kind: 'unidentifiedRow', documentId: 'doc-1', fileName: '02_certificato_salario.pdf', rowKey: 'row-2', detail: {} },
+        {
+          kind: 'reportedTotalMismatch',
+          documentId: 'doc-1',
+          fileName: '02_certificato_salario.pdf',
+          rowKey: '',
+          detail: { reportedTotal: 1000, rowsSum: 800 }
+        }
+      ]
     })
-    expect(context).toContain('NEEDS VERIFICATION')
-    expect(context).toContain('exclude')
-    expect(context).toContain('foreign currency')
+    expect(context).toContain('row key "row-2"')
+    expect(context).toContain('[[doc:doc-1|02_certificato_salario.pdf]]')
+    expect(context).toMatch(/a row may be missing/i)
   })
 
   it('never contains another client\'s data — only what was explicitly passed in', () => {
@@ -245,10 +256,6 @@ describe('api/case-assistant handler', () => {
       extracted_document_fields: { data: [{ document_id: 'doc-1', field_key: 'gross_salary', field_value: '95000', row_key: '' }], error: null },
       document_categories: { data: [{ code: 'salary_statement', label_en: 'Salary statement' }], error: null },
       category_field_definitions: { data: [{ category_code: 'salary_statement', field_key: 'gross_salary', field_label: 'Gross salary' }], error: null },
-      tax_aggregates: { data: { id: 'agg-1', taxable_income_cantonal: 80000, taxable_wealth_cantonal: 0, taxable_income_federal: 80000, status: 'ready_for_simulation' }, error: null },
-      tax_aggregate_components: { data: [], error: null },
-      tax_field_decisions: { data: [], error: null },
-      tax_manual_aggregate_entries: { data: [], error: null },
       ai_model_settings: { data: null, error: null },
       ...overrides
     }

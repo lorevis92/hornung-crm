@@ -44,7 +44,7 @@ export default async function handler(req, res) {
       // on — the registry sync (suggestions/autoFill) is the only visible
       // outcome, so a failure there must surface as a real error instead of
       // the usual "log it, keep the 200" leniency (see extract-document.js).
-      throwOnRecalcError: true
+      throwOnRegistrySyncError: true
     })
     return res.status(200).json({ ok: true })
   } catch (error) {

@@ -2,8 +2,8 @@
 //   { caseId, message }
 //
 // The Tax Summary chat bubble — lets a specialist ask about the ONE case
-// currently open (where a value came from, why it's excluded, which
-// document to check, how a total was reached). Staff only (requireStaff),
+// currently open (what a document says, where a value came from, whose row
+// it is, which document to open). Staff only (requireStaff),
 // same as every other case-scoped endpoint in this app — there is no
 // per-specialist case assignment here, so "authorized for this case" means
 // "is Hornung staff at all", exactly like /api/calculate-aggregates,
@@ -32,6 +32,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
 import { buildCaseAssistantContext } from '../src/lib/caseAssistantContext.js'
+import { buildQualityFindings } from '../src/lib/extractionQuality.js'
 import { resolveModel } from '../src/lib/aiModels.js'
 
 // A specialist's choice on the Tax settings "AI" tab (ai_model_settings,
@@ -45,22 +46,25 @@ const MAX_TOKENS = 1200
 
 // Bounds both the cost and the context-window size of a long-running
 // conversation: only the most recent turns are ever sent to the model — the
-// case's own context (documents, calculation, decisions) is always rebuilt
-// fresh on every call regardless, so truncating history never makes it
-// stale, only shortens how far back the model can "remember" the chat
-// itself. Full history still persists in case_assistant_messages for the
-// specialist to scroll back through on screen.
+// case's own context (documents, extracted rows, open data-quality
+// questions) is always rebuilt fresh on every call regardless, so
+// truncating history never makes it stale, only shortens how far back the
+// model can "remember" the chat itself. Full history still persists in
+// case_assistant_messages for the specialist to scroll back through.
 const MAX_HISTORY_MESSAGES = 20
 
-const SYSTEM_PROMPT_HEADER = `You are a tax-case assistant embedded in Tax Summary, a Swiss tax-declaration tool used by a professional consultant (never the client). The consultant asks you questions about the ONE case described in the context below, to understand where a figure comes from, who it belongs to, why something is excluded, which document to check, or how a total was reached.
+const SYSTEM_PROMPT_HEADER = `You are a document assistant embedded in a Swiss tax-document tool used by a professional tax consultant (never the client). This app COLLECTS the client's documents and EXTRACTS their data; it does NOT compute the tax declaration — the consultant does that elsewhere, in their own software.
+
+The consultant asks you about the ONE case described in the context below: what a document says, where a specific value came from, who a row belongs to, which document to open to check something, or what is still unclear about the extracted data.
 
 Rules:
 - Always answer in Italian, regardless of what language the question is asked in.
 - Base every factual claim about THIS case strictly on the context below — never invent a number, a document, or a detail that isn't there. If something is asked about but isn't in the context, say so plainly instead of guessing.
-- Whenever you refer to a specific source document, use the exact marker "[[doc:<id>|<file name>]]" exactly as it appears in the context (copy it verbatim) so the consultant can click through to verify it themselves. Never invent a marker for a document not listed in the context.
-- A question about general Swiss tax law (not about this specific case) may be answered from your own general knowledge, but you must clearly say the answer is general and should be verified — never present it as a fact about this case.
-- You can only answer questions. You have no ability to change any data, save a decision, or take any action — never claim otherwise.
-- Be concise and concrete: point at the exact document/row/value, not a vague description.
+- Whenever you refer to a specific source document, use the exact marker "[[doc:<id>|<file name>]]" exactly as it appears in the context (copy it verbatim) so the consultant can click through and verify it themselves. Never invent a marker for a document not listed in the context.
+- This app computes NOTHING: there is no taxable income, no taxable wealth, no deduction total, no assessment for this case, and you must never present one. If asked "how much is taxable", "what is the total deduction", or anything else that would require computing the declaration, say plainly that this app only collects documents and their extracted data, and that the calculation is done outside it. You may still add up figures the consultant explicitly asks you to add up, but say clearly it is a plain sum of the extracted values, not a tax result.
+- A question about Swiss tax law in general (not about this case's data) may be answered from your own general knowledge, but you must clearly say it is general information to be verified — never present it as a fact about this case or its documents.
+- You can only answer questions. You have no ability to change any data or take any action — never claim otherwise.
+- Be concise and concrete: point at the exact document, row and value, not a vague description.
 
 === CASE CONTEXT (rebuilt fresh from the database for this request) ===
 `
@@ -110,45 +114,26 @@ export default async function handler(req, res) {
     const documents = documentsRes.data || []
     const documentIds = documents.map((d) => d.id)
 
-    const [extractedFieldsRes, categoriesRes, fieldDefsRes, aggregateRes, decisionsRes, manualRes] = await Promise.all([
+    const [extractedFieldsRes, categoriesRes, fieldDefsRes] = await Promise.all([
       documentIds.length
         ? admin.from('extracted_document_fields').select('*').in('document_id', documentIds)
         : Promise.resolve({ data: [] }),
       admin.from('document_categories').select('code, group_key, label_en, label_de, label_fr, label_it'),
-      admin.from('category_field_definitions').select('category_code, field_key, field_label'),
-      admin
-        .from('tax_aggregates')
-        .select('*')
-        .eq('client_id', caseRow.client_id)
-        .eq('tax_year', caseRow.tax_year)
-        .maybeSingle(),
-      admin
-        .from('tax_field_decisions')
-        .select('*')
-        .eq('client_id', caseRow.client_id)
-        .eq('tax_year', caseRow.tax_year),
-      admin
-        .from('tax_manual_aggregate_entries')
-        .select('*')
-        .eq('client_id', caseRow.client_id)
-        .eq('tax_year', caseRow.tax_year)
+      admin.from('category_field_definitions').select('category_code, field_key, field_label')
     ])
     if (extractedFieldsRes.error) throw extractedFieldsRes.error
     if (categoriesRes.error) throw categoriesRes.error
     if (fieldDefsRes.error) throw fieldDefsRes.error
-    if (aggregateRes.error) throw aggregateRes.error
-    if (decisionsRes.error) throw decisionsRes.error
-    if (manualRes.error) throw manualRes.error
 
-    let components = []
-    if (aggregateRes.data) {
-      const { data, error } = await admin
-        .from('tax_aggregate_components')
-        .select('*')
-        .eq('aggregate_id', aggregateRes.data.id)
-      if (error) throw error
-      components = data || []
-    }
+    const extractedFields = extractedFieldsRes.data || []
+    // The same findings Tax Summary shows the specialist — computed here
+    // rather than read from a table, so the assistant can never describe a
+    // question as open after it has actually been resolved.
+    const qualityFindings = buildQualityFindings({
+      documents,
+      extractedFields,
+      fieldDefs: fieldDefsRes.data || []
+    })
 
     const context = buildCaseAssistantContext({
       client,
@@ -157,13 +142,10 @@ export default async function handler(req, res) {
       spousePerson,
       children: childrenRes.data || [],
       documents,
-      extractedFields: extractedFieldsRes.data || [],
+      extractedFields,
       categories: categoriesRes.data || [],
       fieldDefs: fieldDefsRes.data || [],
-      aggregate: aggregateRes.data || null,
-      components,
-      fieldDecisions: decisionsRes.data || [],
-      manualEntries: manualRes.data || []
+      qualityFindings
     })
 
     const { error: insertUserError } = await admin

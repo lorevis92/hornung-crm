@@ -1,11 +1,22 @@
-import { isMarriedHousehold } from './taxCalculation'
-
 // Compares what the Questionnaire declares (marital status, children,
 // properties, employment) against what the uploaded documents actually
 // show for the same client/tax year, for a specialist reviewing a case.
-// Pure function, no I/O — same shape as taxCalculation.js/personalDetails.js
-// so it can be unit-tested and shared between the demo and Supabase data
-// layers without duplicating the comparison logic in either.
+// Pure function, no I/O — same shape as personalDetails.js so it can be
+// unit-tested and shared between the demo and Supabase data layers without
+// duplicating the comparison logic in either.
+
+// A couple filing together: either the primary person says so, or a spouse
+// record with any identity at all exists. (Used to live in the tax
+// calculation engine; it is a plain household question, so it stayed here
+// when that engine was removed.)
+const MARRIED_STATUSES = new Set(['married', 'registered_partnership'])
+
+function isMarriedHousehold(primaryPerson, spousePerson) {
+  const hasSpouse = Boolean(
+    spousePerson && (spousePerson.first_name || spousePerson.last_name || spousePerson.date_of_birth)
+  )
+  return MARRIED_STATUSES.has(primaryPerson?.marital_status) || hasSpouse
+}
 //
 // Two kinds of findings, deliberately kept separate:
 //  - discrepancies: a document says something different from (or additional

@@ -26,8 +26,7 @@ export default function Layout({ children }) {
     ? [
         { to: '/clients', label: t('nav.clients') },
         { to: '/pricing', label: t('nav.pricing') },
-        { to: '/tax-settings', label: t('nav.taxSettings') },
-        { to: '/diagnostics', label: t('nav.diagnostics') }
+        { to: '/tax-settings', label: t('nav.taxSettings') }
       ]
     : [
         { to: '/', label: t('nav.home') },

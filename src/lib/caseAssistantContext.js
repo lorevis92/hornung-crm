@@ -1,11 +1,16 @@
 // Builds the plain-text context fed to the case assistant (api/case-assistant.js)
-// — a pure function with no I/O, same reasoning as taxCalculation.js/
-// personalDetails.js: the endpoint does every DB read, this only turns
-// already-fetched rows into text, so it's testable without a live database
-// and can never accidentally reach past what it was explicitly given. The
-// caller is responsible for scoping every query to exactly this case's
-// client_id/tax_year — this function has no way to fetch more even if it
-// wanted to.
+// — a pure function with no I/O, same reasoning as personalDetails.js: the
+// endpoint does every DB read, this only turns already-fetched rows into
+// text, so it's testable without a live database and can never accidentally
+// reach past what it was explicitly given. The caller is responsible for
+// scoping every query to exactly this case's client_id/tax_year — this
+// function has no way to fetch more even if it wanted to.
+//
+// The app no longer computes a tax declaration, so this context is strictly
+// "what the documents say and where each value came from": documents, their
+// extracted rows, and the open data-quality questions. It deliberately
+// contains no taxable totals, deductions or fiscal treatment of any kind —
+// there are none to report, and the assistant must not imply otherwise.
 import { ROW_KEY_DOCUMENT_LEVEL } from './rowBasedFields.js'
 
 function fullName(person) {
@@ -38,11 +43,9 @@ function groupFieldsByRow(fields, fieldLabelByKey, categoryCode) {
 // extractedFields: extracted_document_fields rows for those documents.
 // categories/fieldDefs: the full document_categories / category_field_definitions
 //   tables (for human-readable labels).
-// aggregate/components: this client/year's tax_aggregates row and its
-//   tax_aggregate_components rows (the persisted "how this was calculated"
-//   breakdown — exactly what Tax Summary itself shows).
-// fieldDecisions/manualEntries: tax_field_decisions / tax_manual_aggregate_entries
-//   rows for this client/tax_year.
+// qualityFindings: buildQualityFindings(...) output (src/lib/extractionQuality.js)
+//   — the open questions about the extracted data, the same ones Tax
+//   Summary shows the specialist.
 // primaryPerson/spousePerson/children: client_persons/client_children rows.
 export function buildCaseAssistantContext({
   client,
@@ -54,10 +57,7 @@ export function buildCaseAssistantContext({
   extractedFields,
   categories,
   fieldDefs,
-  aggregate,
-  components,
-  fieldDecisions,
-  manualEntries
+  qualityFindings
 }) {
   const categoryByCode = Object.fromEntries((categories || []).map((c) => [c.code, c]))
   const fieldLabelByKey = Object.fromEntries(
@@ -115,61 +115,37 @@ export function buildCaseAssistantContext({
   }
   lines.push('')
 
-  lines.push('=== CALCULATION BREAKDOWN (income, deductions, wealth, debts) ===')
-  if (aggregate) {
-    lines.push(
-      `Taxable income (cantonal): ${formatAmount(aggregate.taxable_income_cantonal)}, ` +
-        `taxable wealth (cantonal): ${formatAmount(aggregate.taxable_wealth_cantonal)}, ` +
-        `taxable income (federal): ${formatAmount(aggregate.taxable_income_federal)}. ` +
-        `Status: ${aggregate.status}.`
-    )
-  } else {
-    lines.push('No calculation has been run yet for this case.')
+  lines.push('=== OPEN DATA-QUALITY QUESTIONS (see src/lib/extractionQuality.js) ===')
+  lines.push(
+    'These are the only open questions this app tracks. They are about the extracted data itself ' +
+      '(whose row is this, was a line read twice, is a row missing), never about how a figure should be taxed.'
+  )
+  if (!qualityFindings?.length) {
+    lines.push('None — nothing is currently flagged on this case.')
   }
-  const bySection = {}
-  for (const c of components || []) {
-    ;(bySection[c.section_key || 'other'] ||= []).push(c)
-  }
-  for (const [section, rows] of Object.entries(bySection)) {
-    lines.push(`-- ${section} --`)
-    for (const c of rows) {
-      const docRef = c.document_id
-        ? (() => {
-            const doc = (documents || []).find((d) => d.id === c.document_id)
-            return doc ? ` (source: [[doc:${doc.id}|${doc.file_name}]])` : ''
-          })()
-        : c.is_manual
-          ? ' (manual entry, no source document)'
-          : ''
-      const flag = c.needs_verification
-        ? ' — NEEDS VERIFICATION, not counted in the total yet'
-        : c.decision === 'exclude'
-          ? ' — resolved by the specialist as EXCLUDED'
-          : c.decision === 'include'
-            ? ' — resolved by the specialist as INCLUDED'
-            : ''
-      lines.push(`  ${c.label || c.field_label}: ${formatAmount(c.amount)}${docRef}${flag}`)
+  for (const finding of qualityFindings || []) {
+    const docRef = `[[doc:${finding.documentId}|${finding.fileName}]]`
+    if (finding.kind === 'unidentifiedRow') {
+      lines.push(
+        `  ${docRef}: one of its rows (internal row key "${finding.rowKey}") states nothing about whose it is ` +
+          '— no account holder, insured person, creditor or similar. A specialist still has to say who it belongs to.'
+      )
+    } else if (finding.kind === 'duplicateSource') {
+      lines.push(
+        `  ${docRef}: "${finding.fieldKey}" was extracted ${finding.detail?.count ?? 2} times from the exact same ` +
+          `line of the document ("${finding.detail?.quote ?? ''}") — probably one line read twice, not several real rows.`
+      )
+    } else if (finding.kind === 'reportedTotalMismatch') {
+      lines.push(
+        `  ${docRef}: the document states a total of ${formatAmount(finding.detail?.reportedTotal)} but the rows ` +
+          `extracted from it add up to ${formatAmount(finding.detail?.rowsSum)} — a row may be missing.`
+      )
+    } else if (finding.kind === 'legacyFormat') {
+      lines.push(
+        `  ${docRef}: extracted before the row model existed, so its values cannot be grouped into rows at all. ` +
+          'It needs re-extracting before anything can be said about its rows.'
+      )
     }
-  }
-  lines.push('')
-
-  lines.push('=== SPECIALIST DECISIONS (include/exclude on flagged fields) ===')
-  if (fieldDecisions?.length) {
-    for (const d of fieldDecisions) {
-      lines.push(`  field ${d.field_key} on document ${d.document_id}: ${d.decision}${d.note ? ` (${d.note})` : ''}`)
-    }
-  } else {
-    lines.push('No explicit decisions recorded.')
-  }
-  lines.push('')
-
-  lines.push('=== MANUAL "HOW THIS WAS CALCULATED" ENTRIES (no source document) ===')
-  if (manualEntries?.length) {
-    for (const m of manualEntries) {
-      lines.push(`  ${m.description}: ${formatAmount(m.amount)} (${m.component_type})${m.note ? ` — ${m.note}` : ''}`)
-    }
-  } else {
-    lines.push('None.')
   }
 
   return lines.join('\n')

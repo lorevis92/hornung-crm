@@ -1,5 +1,5 @@
-import { docTypeLabel } from './labels'
-import { ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL, isRowBasedCategory, legacySuffixBaseKey } from './rowBasedFields.js'
+import { ROW_KEY_DOCUMENT_LEVEL, isRowBasedCategory, legacySuffixBaseKey } from './rowBasedFields.js'
+import { buildRowIdentityLabel } from './rowIdentity.js'
 
 // Shared between DocumentVerificationPanel (single document) and TaxSummary
 // (every document of a client/tax year): merges the field dictionary for a
@@ -26,14 +26,15 @@ export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
   ).sort((a, b) => (a === ROW_KEY_DOCUMENT_LEVEL ? -1 : b === ROW_KEY_DOCUMENT_LEVEL ? 1 : 0))
   const rows_ = rowKeysPresent.length ? rowKeysPresent : [ROW_KEY_DOCUMENT_LEVEL]
 
+  // One shared implementation with src/lib/extractionQuality.js (see
+  // rowIdentity.js): a row labelled here and a row judged "unidentified"
+  // there must always be answering the same question the same way.
   const rowLabelFor = (rowKey) => {
     if (rowKey === ROW_KEY_DOCUMENT_LEVEL) return null
-    const identityFields = ROW_IDENTITY_FIELDS[categoryCode]
-    if (!identityFields) return null
-    const parts = identityFields
-      .map((key) => byKeyAndRow.get(`${key}:${rowKey}`)?.field_value)
-      .filter(Boolean)
-    return parts.length ? parts.join(' — ') : null
+    return buildRowIdentityLabel({
+      categoryCode,
+      fieldAt: (key) => byKeyAndRow.get(`${key}:${rowKey}`)?.field_value
+    })
   }
 
   const makeRow = (def, e, rowKey) => ({
@@ -86,54 +87,4 @@ export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
   }
 
   return rows
-}
-
-// Every field of a tax-summary section that has a value, grouped by
-// document (one heading per document instead of repeating it on every row)
-// — the "raw reference" reading used by the results card and the exported
-// PDF's "Document data" section, as opposed to the "how this was
-// calculated" breakdown which only lists fields that actually feed the
-// total. Not gated on verified_by_specialist — extracted values are
-// reference data as soon as they exist, whether or not a specialist has
-// touched them.
-export function verifiedFieldsByDocument(section, lang) {
-  const groups = []
-  section.categories.forEach(({ category, documents }) => {
-    documents.forEach((docGroup) => {
-      const withValue = docGroup.fields.filter((f) => f.field_value)
-      if (!withValue.length) return
-      const categoryLabel = docTypeLabel(category, lang) || ''
-      const baseHeading = `${categoryLabel} — ${docGroup.fileName}`
-      // One row (an account, an insurance premium, a mortgage) becomes its
-      // own group, headed by that row's own identifier, instead of every
-      // row's fields interleaved into one flat list under the document.
-      // withValue is already in row order (see mergeFieldsWithDefinitions),
-      // so this only needs to chunk on row_key changing.
-      const rowGroups = []
-      for (const field of withValue) {
-        const rowKey = field.row_key || ''
-        const last = rowGroups[rowGroups.length - 1]
-        if (last && last.rowKey === rowKey) last.fields.push(field)
-        else rowGroups.push({ rowKey, rowLabel: field.row_label || null, fields: [field] })
-      }
-      for (const rowGroup of rowGroups) {
-        groups.push({
-          documentId: docGroup.documentId,
-          // `heading` is the plain-text, non-interactive version (used by
-          // the PDF export, which has no concept of a clickable source
-          // link) — categoryLabel/fileName/rowLabel are the same three
-          // parts, kept separate so the on-screen Tax Summary can render
-          // just the file name as a link back to the source document
-          // without also making the category label or row identifier
-          // clickable.
-          heading: rowGroup.rowLabel ? `${baseHeading} — ${rowGroup.rowLabel}` : baseHeading,
-          categoryLabel,
-          fileName: docGroup.fileName,
-          rowLabel: rowGroup.rowLabel || null,
-          fields: rowGroup.fields.map((f) => ({ label: f.field_label, value: f.field_value || '—' }))
-        })
-      }
-    })
-  })
-  return groups
 }

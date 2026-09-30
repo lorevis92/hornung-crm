@@ -1,9 +1,9 @@
 // Shared implementation behind scripts/export-weber-fixture.mjs and
 // scripts/export-sara-fixture.mjs — pulls one client's real,
 // specialist-reviewed data out of production and writes it to a
-// test/fixtures/*.json golden-case fixture, the same JSON shape both
-// weber-calculation.test.js and sara-bianchi-fixes.test.js (or their JSON
-// equivalents) run computeTaxAggregate() against directly, with no live
+// test/fixtures/*.json golden-case fixture, the same JSON shape the
+// golden-case tests (test/weber-extraction.test.js) run the row model and
+// the data-quality checks against directly, with no live
 // database or AI call involved in the tests themselves. This is the ONLY
 // place that talks to the real backend; re-run it (deliberately, not
 // automatically) if a golden case is ever re-reviewed and its fixture needs
@@ -89,7 +89,9 @@ export async function exportClientFixture({ clientEmail, taxYear, outFile }) {
 
   const categories = must('document_categories', await supabase.from('document_categories').select('*').eq('active', true))
   const fieldDefs = must('category_field_definitions', await supabase.from('category_field_definitions').select('*'))
-  const rules = must('field_calculation_rules', await supabase.from('field_calculation_rules').select('*'))
+  // tax_parameters only: reference data the consultant reads in Tax
+  // settings. field_calculation_rules is deprecated (nothing computes from
+  // it any more), so it is no longer exported into golden-case fixtures.
   const parameters = must(
     'tax_parameters',
     await supabase.from('tax_parameters').select('*').eq('tax_year', taxYear)
@@ -112,7 +114,6 @@ export async function exportClientFixture({ clientEmail, taxYear, outFile }) {
     extractedFields,
     categories,
     fieldDefs,
-    rules,
     parameters
   }
 

@@ -21,7 +21,6 @@ import { api } from '../lib/data'
 import { CANTONS, CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES, MARITAL_STATUSES } from '../lib/constants'
 import { fullName } from '../lib/format'
 import { docTypeLabel } from '../lib/labels'
-import { recalculateInBackground } from '../lib/recalc'
 import { computeQuestionnaireConsistency, computeQuestionnaireCompleteness } from '../lib/questionnaireConsistency'
 import { describeSuggestion } from '../lib/suggestions'
 
@@ -202,14 +201,6 @@ export default function CasePage() {
         // this same `questionnaire` state, so it has to be refetched or the
         // banner would keep citing a gap this exact action just closed.
         setQuestionnaire(await api.getQuestionnaire(caseRow.client_id))
-        // Same reasoning as the recalculation already triggered elsewhere
-        // in this file after a document delete/category change: the
-        // suggestion mechanism only ever wrote the corrected value, it
-        // never re-ran the tax calculation — a marital-status fix in
-        // particular directly gates the wealth exemption amount, so
-        // leaving the aggregate stale here is exactly what made that look
-        // unfixed even after accepting the correction.
-        recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
       }
       toast.success(t('common.saved'))
     } catch (error) {
@@ -278,9 +269,6 @@ export default function CasePage() {
     await api.deleteDocument(doc)
     setDocuments((list) => list.filter((d) => d.id !== doc.id))
     toast.success(t('common.saved'))
-    // A deleted document may have been feeding the tax calculation — keep
-    // it in sync even though this page doesn't show the total itself.
-    recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
   }
 
   const changeDocumentCategory = async (doc, categoryCode) => {
@@ -289,10 +277,6 @@ export default function CasePage() {
       list.map((d) => (d.id === doc.id ? { ...d, category_code: categoryCode } : d))
     )
     toast.success(t('common.saved'))
-    // Fields only enter the calculation once their document has a category
-    // — correcting a wrong AI classification changes the total just as
-    // directly as editing a value would.
-    recalculateInBackground(caseRow.client_id, caseRow.tax_year, lang)
   }
 
   const saveChecklist = async (ids) => {

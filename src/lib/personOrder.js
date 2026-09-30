@@ -3,8 +3,8 @@
 // exported PDF, ...). The consultant's rule: husband first — regardless of
 // which one happens to be `person_type = 'primary'` in the database (that's
 // an internal identity, never a presentation order) or which one holds the
-// client login. A pure function, no I/O, mirroring src/lib/personalDetails.js
-// and src/lib/taxCalculation.js's own "no side effects" convention.
+// client login. A pure function, no I/O, mirroring src/lib/personalDetails.js's
+// own "no side effects" convention.
 //
 // primaryPerson/spousePerson: client_persons rows (or null/undefined).
 // overrideOrder: clients.person_order_override ('primary_first' |

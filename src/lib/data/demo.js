@@ -5,10 +5,9 @@
 // ---------------------------------------------------------------------------
 import { currentTaxYear } from '../config'
 import {
-  CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES, FIELD_CALCULATION_RULES,
+  CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES,
   PRICING_ITEMS, TAX_PARAMETERS
 } from '../demoSeed'
-import { computeTaxAggregate, resolveAggregateStatus } from '../taxCalculation'
 import {
   computePersonalDetailsSync, buildPropertySuggestionPayload, buildChildSuggestionCandidates,
   normalizePropertyAddress
@@ -231,12 +230,7 @@ function seed() {
     fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS)),
     extractedDocumentFields,
     taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS)),
-    calculationRules: JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES)),
-    taxAggregates: [],
-    taxAggregateComponents: [],
     fieldSuggestions: [],
-    fieldDecisions: [],
-    manualAggregateEntries: [],
     pricingItems: JSON.parse(JSON.stringify(PRICING_ITEMS)),
     caseAssistantMessages: [],
     aiModelSettings: []
@@ -257,18 +251,9 @@ function load() {
       parsed.extractedDocumentFields ||= []
       // Same for sessions started before "Tax parameters" existed.
       parsed.taxParameters ||= JSON.parse(JSON.stringify(TAX_PARAMETERS))
-      // Same for sessions started before "Calculation rules" existed.
-      parsed.calculationRules ||= JSON.parse(JSON.stringify(FIELD_CALCULATION_RULES))
-      // Same for sessions started before the tax calculation engine existed.
-      parsed.taxAggregates ||= []
-      parsed.taxAggregateComponents ||= []
       // Same for sessions started before the personal-details auto-fill
       // feature existed.
       parsed.fieldSuggestions ||= []
-      // Same for sessions started before per-field specialist decisions and
-      // manual "how this was calculated" entries existed.
-      parsed.fieldDecisions ||= []
-      parsed.manualAggregateEntries ||= []
       // Same for sessions started before the price list became editable.
       parsed.pricingItems ||= JSON.parse(JSON.stringify(PRICING_ITEMS))
       // Same for sessions started before the case assistant existed.
@@ -1060,152 +1045,6 @@ export const demoApi = {
     return wait(true)
   },
 
-  async listCalculationRules() {
-    const s = store()
-    return wait(s.calculationRules)
-  },
-
-  async saveCalculationRule(categoryCode, fieldKey, patch) {
-    const s = store()
-    const existing = s.calculationRules.find(
-      (r) => r.category_code === categoryCode && r.field_key === fieldKey
-    )
-    let row
-    if (existing) {
-      Object.assign(existing, patch)
-      row = existing
-    } else {
-      row = { id: uid('calcrule'), category_code: categoryCode, field_key: fieldKey, ...patch }
-      s.calculationRules.push(row)
-    }
-    commit()
-    return wait(row)
-  },
-
-  async calculateAggregates(clientId, taxYear, lang = 'en') {
-    const s = store()
-    const year = Number(taxYear)
-    const client = s.clients.find((c) => c.id === clientId)
-    const caseIds = new Set(
-      s.cases.filter((c) => c.client_id === clientId && c.tax_year === year).map((c) => c.id)
-    )
-    // Sorted by creation order — see api/_recalc.js's own uploaded_at
-    // ordering for why the catch-up loop below needs a deterministic
-    // oldest-first order, not just whatever s.documents happens to be in.
-    const allDocuments = s.documents
-      .filter((d) => caseIds.has(d.case_id))
-      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-    const documents = allDocuments.filter((d) => d.category_code)
-    const documentIds = new Set(documents.map((d) => d.id))
-    const extractedFields = s.extractedDocumentFields.filter((f) => documentIds.has(f.document_id))
-    const parameters = s.taxParameters.filter((p) => p.tax_year === year)
-
-    let canton = (client?.canton || '').trim() || null
-    if (!canton) {
-      const sheetDoc = documents.find((d) => d.category_code === 'current_tax_sheet')
-      if (sheetDoc) {
-        const cantonField = extractedFields.find(
-          (f) =>
-            f.document_id === sheetDoc.id &&
-            f.field_key === 'canton' &&
-            f.included_in_calculation !== false
-        )
-        if (cantonField?.field_value) canton = cantonField.field_value.trim() || null
-      }
-    }
-
-    // Registry catch-up on every recalculation — see api/_recalc.js for
-    // the real-backend equivalent and why this can't be left to only run
-    // as a side effect of a fresh extraction or of a specialist happening
-    // to open a page that also triggers it.
-    for (const doc of allDocuments) {
-      if (doc.status !== 'extracted') continue
-      if (doc.category_code === 'current_tax_sheet') await this.syncPersonalDetails(doc.id)
-      else if (doc.category_code === 'property_tax_value') await this.syncPropertySuggestion(doc.id)
-    }
-    if (allDocuments.some((d) => d.status === 'extracted' && ['current_tax_sheet', 'childcare_costs'].includes(d.category_code))) {
-      await this.syncChildSuggestions(clientId, year)
-    }
-
-    const primaryPerson = s.persons.find((p) => p.client_id === clientId && p.person_type === 'primary') || null
-    const spousePerson = s.persons.find((p) => p.client_id === clientId && p.person_type === 'spouse') || null
-    const children = s.children.filter((c) => c.client_id === clientId)
-    const fieldDecisions = s.fieldDecisions.filter((d) => d.client_id === clientId && d.tax_year === year)
-    const manualEntries = s.manualAggregateEntries.filter((m) => m.client_id === clientId && m.tax_year === year)
-
-    const result = computeTaxAggregate({
-      canton,
-      documents,
-      extractedFields,
-      rules: s.calculationRules,
-      fieldDefs: s.fieldDefinitions,
-      categories: DOCUMENT_CATEGORIES,
-      parameters,
-      taxYear: year,
-      primaryPerson,
-      spousePerson,
-      children,
-      fieldDecisions,
-      manualEntries,
-      lang
-    })
-
-    // Never "ready for simulation" while a document is still mid-pipeline,
-    // nor while a component with a real, nonzero amount is still "needs
-    // verification" — resolveAggregateStatus (src/lib/taxCalculation.js) is
-    // the single shared source of this rule, also used by api/_recalc.js.
-    const documentsStillProcessing = allDocuments.some((d) => ['uploaded', 'extracting'].includes(d.status))
-    const aggregateStatus = resolveAggregateStatus({ documentsStillProcessing, components: result.components })
-
-    let aggregate = s.taxAggregates.find((a) => a.client_id === clientId && a.tax_year === year)
-    const now = iso(Date.now())
-    if (aggregate) {
-      Object.assign(aggregate, {
-        taxable_income_cantonal: result.taxableIncomeCantonal,
-        taxable_wealth_cantonal: result.taxableWealthCantonal,
-        taxable_income_federal: result.taxableIncomeFederal,
-        uncertain_parameters: result.uncertainParameterNotes || [],
-        status: aggregateStatus,
-        computed_at: now
-      })
-    } else {
-      aggregate = {
-        id: uid('agg'),
-        client_id: clientId,
-        tax_year: year,
-        taxable_income_cantonal: result.taxableIncomeCantonal,
-        taxable_wealth_cantonal: result.taxableWealthCantonal,
-        taxable_income_federal: result.taxableIncomeFederal,
-        uncertain_parameters: result.uncertainParameterNotes || [],
-        status: aggregateStatus,
-        computed_at: now
-      }
-      s.taxAggregates.push(aggregate)
-    }
-    s.taxAggregateComponents = s.taxAggregateComponents.filter((c) => c.aggregate_id !== aggregate.id)
-    const components = result.components.map((c) => ({
-      id: uid('aggcomp'),
-      aggregate_id: aggregate.id,
-      document_id: c.documentId,
-      field_key: c.fieldKey || null,
-      row_key: c.rowKey || '',
-      component_type: c.componentType,
-      section_key: c.sectionKey,
-      amount: c.amount,
-      needs_verification: c.needsVerification || false,
-      decision: c.decision || null,
-      is_manual: c.isManual || false,
-      manual_entry_id: c.manualEntryId || null,
-      currency_code: c.currencyCode || null,
-      label: c.label,
-      field_label: c.fieldLabel,
-      source_label: c.sourceLabel
-    }))
-    s.taxAggregateComponents.push(...components)
-    commit()
-    return wait({ aggregate, components, warnings: result.warnings, cantonUsed: canton, cantonMissing: !canton })
-  },
-
   // Demo mode has no real AI extraction to retry — simulates the same
   // outcome a real retry has when it succeeds (status flips back to
   // 'extracted', the error clears) so the completeness banner's "Retry"
@@ -1234,9 +1073,9 @@ export const demoApi = {
   // The "reload everything" safety net (see api/reprocess-client-year.js
   // for the real-backend equivalent) — no actual AI call in demo mode
   // (documents are pre-seeded with their extracted fields already), so
-  // this just re-runs the same side effects a fresh extraction would:
-  // marks every document 'extracted', then recalculates and re-syncs the
-  // registry for all of them, in one action instead of one at a time.
+  // this just re-runs the same side effect a fresh extraction would: marks
+  // every document 'extracted', then re-syncs the client registry from all
+  // of them, in one action instead of one at a time.
   async reprocessClientYear(clientId, taxYear) {
     const s = store()
     const year = Number(taxYear)
@@ -1252,7 +1091,6 @@ export const demoApi = {
     }
     commit()
 
-    await this.calculateAggregates(clientId, year)
     for (const doc of docs.filter((d) => d.category_code === 'current_tax_sheet')) {
       await this.syncPersonalDetails(doc.id)
     }
@@ -1302,54 +1140,6 @@ export const demoApi = {
       commit()
     }
     return wait({ merged })
-  },
-
-  async getTaxAggregate(clientId, taxYear) {
-    const s = store()
-    const year = Number(taxYear)
-    const aggregate = s.taxAggregates.find((a) => a.client_id === clientId && a.tax_year === year)
-    if (!aggregate) return wait(null)
-    const components = s.taxAggregateComponents.filter((c) => c.aggregate_id === aggregate.id)
-    return wait({ aggregate, components })
-  },
-
-  // A specialist's include/exclude call on one flagged field — persists
-  // independently of tax_aggregate_components (which is wiped and rebuilt
-  // on every recalculation), keyed by (document_id, field_key, row_key) so
-  // a second decision on the same field+row replaces the first rather than
-  // piling up, and a decision on one row of a repeated field never leaks
-  // onto another row sharing the same field_key. decidedAmount is the raw
-  // extracted amount at decision time; a later recalculation ignores the
-  // decision once that no longer matches (see src/lib/taxCalculation.js).
-  async saveFieldDecision({ clientId, taxYear, documentId, fieldKey, rowKey, decision, decidedAmount, note }) {
-    const s = store()
-    const year = Number(taxYear)
-    const resolvedRowKey = rowKey || ''
-    let row = s.fieldDecisions.find(
-      (d) => d.document_id === documentId && d.field_key === fieldKey && (d.row_key || '') === resolvedRowKey
-    )
-    const now = iso(Date.now())
-    if (row) {
-      Object.assign(row, { decision, decided_amount: decidedAmount, note: note || null, decided_at: now, updated_at: now })
-    } else {
-      row = {
-        id: uid('decision'),
-        client_id: clientId,
-        tax_year: year,
-        document_id: documentId,
-        field_key: fieldKey,
-        row_key: resolvedRowKey,
-        decision,
-        decided_amount: decidedAmount,
-        note: note || null,
-        decided_at: now,
-        created_at: now,
-        updated_at: now
-      }
-      s.fieldDecisions.push(row)
-    }
-    commit()
-    return wait(row)
   },
 
   // Demo mirror of listCaseAssistantMessages/askCaseAssistant (see
@@ -1423,160 +1213,6 @@ export const demoApi = {
     }
     commit()
     return wait(row)
-  },
-
-  async listManualAggregateEntries(clientId, taxYear) {
-    const s = store()
-    const year = Number(taxYear)
-    return wait(s.manualAggregateEntries.filter((m) => m.client_id === clientId && m.tax_year === year))
-  },
-
-  async saveManualAggregateEntry({ id, clientId, taxYear, componentType, description, amount, currencyCode, originalAmount, note }) {
-    const s = store()
-    const year = Number(taxYear)
-    const now = iso(Date.now())
-    if (id) {
-      const row = s.manualAggregateEntries.find((m) => m.id === id)
-      if (!row) throw new Error('MANUAL_ENTRY_NOT_FOUND')
-      Object.assign(row, {
-        component_type: componentType,
-        description,
-        amount,
-        currency_code: currencyCode || null,
-        original_amount: originalAmount ?? null,
-        note: note || null,
-        updated_at: now
-      })
-      commit()
-      return wait(row)
-    }
-    const row = {
-      id: uid('manual'),
-      client_id: clientId,
-      tax_year: year,
-      component_type: componentType,
-      description,
-      amount,
-      currency_code: currencyCode || null,
-      original_amount: originalAmount ?? null,
-      note: note || null,
-      created_at: now,
-      updated_at: now
-    }
-    s.manualAggregateEntries.push(row)
-    commit()
-    return wait(row)
-  },
-
-  async deleteManualAggregateEntry(id) {
-    const s = store()
-    s.manualAggregateEntries = s.manualAggregateEntries.filter((m) => m.id !== id)
-    commit()
-    return true
-  },
-
-  // Demo-mode mirror of api/diagnose-client.js — same output shape, so the
-  // admin diagnostics page renders identically against demo data.
-  async diagnoseClient({ email, clientId, taxYear }) {
-    const s = store()
-    const year = Number(taxYear)
-    const client = clientId
-      ? s.clients.find((c) => c.id === clientId)
-      : s.clients.find((c) => (c.email || '').toLowerCase() === (email || '').trim().toLowerCase())
-    if (!client) {
-      const err = new Error('No client matches that email/id.')
-      err.code = 'CLIENT_NOT_FOUND'
-      throw err
-    }
-
-    const persons = s.persons.filter((p) => p.client_id === client.id)
-    const children = s.children.filter((c) => c.client_id === client.id)
-    const documents = s.documents.filter((d) => d.case_id && s.cases.some((cs) => cs.id === d.case_id && cs.client_id === client.id && cs.tax_year === year))
-    const documentIds = new Set(documents.map((d) => d.id))
-    const fields = s.extractedDocumentFields.filter((f) => documentIds.has(f.document_id))
-    const fieldsByDoc = {}
-    for (const f of fields) (fieldsByDoc[f.document_id] ||= []).push(f)
-    const categoryLabel = Object.fromEntries(DOCUMENT_CATEGORIES.map((c) => [c.code, c.label_en]))
-    const fieldLabelMap = Object.fromEntries(
-      s.fieldDefinitions.map((f) => [`${f.category_code}:${f.field_key}`, f.field_label])
-    )
-
-    const documentsOut = documents.map((doc) => ({
-      documentId: doc.id,
-      fileName: doc.file_name,
-      categoryCode: doc.category_code,
-      categoryLabel: doc.category_code ? categoryLabel[doc.category_code] || doc.category_code : null,
-      status: doc.status || 'uploaded',
-      extractionError: doc.extraction_error || null,
-      uploadedAt: doc.created_at,
-      processedAt: doc.processed_at || null,
-      fields: (fieldsByDoc[doc.id] || []).map((f) => ({
-        fieldKey: f.field_key,
-        fieldLabel: doc.category_code ? fieldLabelMap[`${doc.category_code}:${f.field_key}`] || f.field_key : f.field_key,
-        value: f.field_value,
-        confidence: f.confidence,
-        includedInCalculation: f.included_in_calculation !== false,
-        handEditedBySpecialist: f.verified_by_specialist === true,
-        verifiedAt: f.verified_at,
-        verifiedBy: f.verified_by
-      }))
-    }))
-
-    const aggregate = s.taxAggregates.find((a) => a.client_id === client.id && a.tax_year === year)
-    const components = aggregate ? s.taxAggregateComponents.filter((c) => c.aggregate_id === aggregate.id) : []
-
-    const componentsOut = components.map((c) => ({
-      documentId: c.document_id,
-      sourceDocument: documentsOut.find((d) => d.documentId === c.document_id)?.fileName || null,
-      componentType: c.component_type,
-      sectionKey: c.section_key,
-      amount: c.amount,
-      includedInTotal: !c.needs_verification,
-      needsVerification: c.needs_verification,
-      currencyCode: c.currency_code,
-      fieldLabel: c.field_label,
-      sourceLabel: c.source_label,
-      label: c.label
-    }))
-
-    return wait({
-      generatedAt: new Date().toISOString(),
-      client: {
-        id: client.id,
-        email: client.email,
-        firstName: client.first_name,
-        lastName: client.last_name,
-        canton: client.canton,
-        status: client.status
-      },
-      persons: persons.map((p) => ({
-        personType: p.person_type,
-        firstName: p.first_name,
-        lastName: p.last_name,
-        maritalStatus: p.marital_status,
-        dateOfBirth: p.date_of_birth,
-        workPercentage: p.work_percentage
-      })),
-      children: children.map((c) => ({ fullName: c.full_name, dateOfBirth: c.date_of_birth, untilWhen: c.until_when })),
-      taxYear: year,
-      documents: documentsOut,
-      aggregate: aggregate
-        ? {
-            computedAt: aggregate.computed_at,
-            status: aggregate.status,
-            taxableIncomeCantonal: aggregate.taxable_income_cantonal,
-            taxableWealthCantonal: aggregate.taxable_wealth_cantonal,
-            taxableIncomeFederal: aggregate.taxable_income_federal,
-            uncertainParameters: aggregate.uncertain_parameters || []
-          }
-        : null,
-      components: componentsOut,
-      handEditedFields: documentsOut.flatMap((doc) =>
-        doc.fields
-          .filter((f) => f.handEditedBySpecialist)
-          .map((f) => ({ document: doc.fileName, category: doc.categoryLabel, field: f.fieldLabel, value: f.value, verifiedAt: f.verifiedAt }))
-      )
-    })
   },
 
   async listFieldDefinitions() {
