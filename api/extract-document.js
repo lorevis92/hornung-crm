@@ -19,12 +19,18 @@ import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, serviceClient } from './_lib.js'
 import { recalculateAndPersist } from './_recalc.js'
 import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL } from '../src/lib/rowBasedFields.js'
+import { resolveModel } from '../src/lib/aiModels.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
 // import.meta.env) — keep this in sync with that file.
 const STORAGE_BUCKET = 'client-documents'
 
-const MODEL = process.env.ANTHROPIC_EXTRACTION_MODEL || 'claude-sonnet-5'
+// A specialist's choice on the Tax settings "AI" tab (ai_model_settings,
+// see migration 20260101000044) wins when present; ANTHROPIC_EXTRACTION_MODEL
+// is the fallback for an install that never touches that screen — resolved
+// fresh on every call (below, via `admin`), never cached at module load,
+// since the database value can change without a redeploy.
+const ENV_MODEL = process.env.ANTHROPIC_EXTRACTION_MODEL
 const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 
 function requireWebhookSecret(req) {
@@ -81,6 +87,13 @@ export async function runExtraction(
   if (!isPdf && !isImage && !isText) {
     throw new Error(`Unsupported mime type for AI extraction: "${mimeType}"`)
   }
+
+  const { data: modelSetting } = await admin
+    .from('ai_model_settings')
+    .select('model')
+    .eq('key', 'extraction_model')
+    .maybeSingle()
+  const MODEL = resolveModel({ dbValue: modelSetting?.model, envValue: ENV_MODEL })
 
   const { data: fileBlob, error: downloadError } = await admin.storage
     .from(STORAGE_BUCKET)

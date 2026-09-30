@@ -574,6 +574,13 @@ export default {
     noParameters: 'No tax parameters yet — add the first one.',
 
     pricingTab: 'Pricing',
+    aiTab: 'AI',
+    aiExtractionTitle: 'Document extraction',
+    aiExtractionHelp: 'The model that reads an uploaded document and pulls out its fields. Favors accuracy on varied, sometimes messy documents.',
+    aiAssistantTitle: 'Case assistant',
+    aiAssistantHelp: 'The model behind the chat bubble on Tax Summary. Favors quick, well-reasoned answers over a large, already-summarized case context.',
+    aiModel: 'Model',
+    aiModelDefault: '(default — from server configuration)',
     pricingBaseTitle: 'Price list',
     pricingBaseHelp: 'Name, description and price of each item — the fee estimate itself still matches these by their fixed role (base fee, per property, ...).',
     pricingServicesTitle: 'Further services',

@@ -238,7 +238,8 @@ function seed() {
     fieldDecisions: [],
     manualAggregateEntries: [],
     pricingItems: JSON.parse(JSON.stringify(PRICING_ITEMS)),
-    caseAssistantMessages: []
+    caseAssistantMessages: [],
+    aiModelSettings: []
   }
 }
 
@@ -272,6 +273,8 @@ function load() {
       parsed.pricingItems ||= JSON.parse(JSON.stringify(PRICING_ITEMS))
       // Same for sessions started before the case assistant existed.
       parsed.caseAssistantMessages ||= []
+      // Same for sessions started before the AI model choice was editable.
+      parsed.aiModelSettings ||= []
       return parsed
     }
   } catch {
@@ -1354,19 +1357,33 @@ export const demoApi = {
   // hold an Anthropic key, so this can't make a real call; it still
   // exercises the same persisted-history shape (case_assistant_messages),
   // just with a fixed explanatory reply instead of a real answer.
+  //
+  // created_by is still set and filtered on here (even though the demo
+  // dataset only ever seeds one specialist profile, so there is no second
+  // user to isolate from in practice) purely to keep the row shape and the
+  // read path identical to the real backend's per-user scoping (migration
+  // 20260101000043) — a demo session should never look more permissive
+  // than production.
   async listCaseAssistantMessages(caseId) {
     const s = store()
-    return wait(s.caseAssistantMessages.filter((m) => m.case_id === caseId).sort((a, b) => a.created_at.localeCompare(b.created_at)))
+    const specialist = s.profiles.find((p) => p.role === 'specialist')
+    return wait(
+      s.caseAssistantMessages
+        .filter((m) => m.case_id === caseId && m.created_by === specialist?.id)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    )
   },
 
   async askCaseAssistant(caseId, message) {
     const s = store()
+    const specialist = s.profiles.find((p) => p.role === 'specialist')
     const now = Date.now()
     const userRow = {
       id: uid('assistant-msg'),
       case_id: caseId,
       role: 'user',
       content: message,
+      created_by: specialist?.id || null,
       created_at: iso(now)
     }
     const reply =
@@ -1377,11 +1394,35 @@ export const demoApi = {
       case_id: caseId,
       role: 'assistant',
       content: reply,
+      created_by: specialist?.id || null,
       created_at: iso(now + 1)
     }
     s.caseAssistantMessages.push(userRow, assistantRow)
     commit()
     return wait({ reply })
+  },
+
+  // Demo mirror of listAiModelSettings/saveAiModelSetting (see
+  // supabaseData.js) — same shape, kept in the store so a choice made on
+  // the Tax settings "AI" tab persists across a demo session like every
+  // other setting there.
+  async listAiModelSettings() {
+    const s = store()
+    return wait([...s.aiModelSettings])
+  },
+
+  async saveAiModelSetting(key, model) {
+    const s = store()
+    let row = s.aiModelSettings.find((r) => r.key === key)
+    if (row) {
+      row.model = model || null
+      row.updated_at = iso(Date.now())
+    } else {
+      row = { key, model: model || null, updated_at: iso(Date.now()), updated_by: null }
+      s.aiModelSettings.push(row)
+    }
+    commit()
+    return wait(row)
   },
 
   async listManualAggregateEntries(clientId, taxYear) {

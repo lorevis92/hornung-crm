@@ -574,6 +574,13 @@ export default {
     noParameters: "Aucun paramètre fiscal pour l'instant — ajoutez le premier.",
 
     pricingTab: 'Tarifs',
+    aiTab: 'IA',
+    aiExtractionTitle: 'Extraction des documents',
+    aiExtractionHelp: "Le modèle qui lit un document téléversé et en extrait les champs. Privilégie la précision sur des documents variés, parfois peu soignés.",
+    aiAssistantTitle: 'Assistant du dossier',
+    aiAssistantHelp: "Le modèle derrière la bulle de discussion dans Tax Summary. Privilégie des réponses rapides et bien argumentées plutôt qu'un large contexte déjà résumé.",
+    aiModel: 'Modèle',
+    aiModelDefault: '(par défaut — depuis la configuration serveur)',
     pricingBaseTitle: 'Grille tarifaire',
     pricingBaseHelp: "Nom, description et prix de chaque poste — l'estimation d'honoraires elle-même continue de les associer à leur rôle fixe (forfait de base, par immeuble, ...).",
     pricingServicesTitle: 'Prestations supplémentaires',

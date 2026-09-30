@@ -19,14 +19,28 @@
 // The assistant only ever responds — no tool use, no function calling, no
 // write access of any kind is wired to it, so it structurally cannot take
 // an action on the case even if asked to.
+//
+// The conversation is scoped per CASE and per STAFF USER
+// (case_assistant_messages.created_by, see migration
+// 20260101000043_case_assistant_per_user.sql) — this app has no
+// per-specialist case assignment, so more than one specialist can open the
+// same case, and each must see and continue only their own conversation,
+// never a colleague's. RLS enforces this for the direct client-side read
+// (listCaseAssistantMessages); this endpoint runs on the service-role
+// client, which bypasses RLS entirely, so the history query and both
+// inserts below filter/tag by created_by explicitly.
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
 import { buildCaseAssistantContext } from '../src/lib/caseAssistantContext.js'
+import { resolveModel } from '../src/lib/aiModels.js'
 
-// Configurable the same way as the extraction model (api/extract-document.js)
-// — a plain env var with a sane default, so either can be pointed at a
-// different Claude model without a code change.
-const MODEL = process.env.ANTHROPIC_ASSISTANT_MODEL || 'claude-sonnet-5'
+// A specialist's choice on the Tax settings "AI" tab (ai_model_settings,
+// see migration 20260101000044) wins when present; ANTHROPIC_ASSISTANT_MODEL
+// is the fallback for an install that never touches that screen — resolved
+// fresh on every request (below), never cached at module load, since the
+// database value can change without a redeploy but a warm serverless
+// instance can stay alive across many requests.
+const ENV_MODEL = process.env.ANTHROPIC_ASSISTANT_MODEL
 const MAX_TOKENS = 1200
 
 // Bounds both the cost and the context-window size of a long-running
@@ -157,27 +171,47 @@ export default async function handler(req, res) {
       .insert({ case_id: caseId, role: 'user', content: message, created_by: profile.id })
     if (insertUserError) throw insertUserError
 
+    // Scoped to case_id AND created_by: this query runs on the service-role
+    // client (requireStaff's `admin`), which bypasses RLS entirely — the
+    // "case assistant: own conversation only" policy (migration
+    // 20260101000043) protects the direct client-side read
+    // (listCaseAssistantMessages) but does nothing here, so the filter has
+    // to be explicit in the query itself. Without it, a second specialist
+    // with access to the same client would see (and have the model
+    // continue) a colleague's conversation instead of their own.
     const { data: historyRows, error: historyError } = await admin
       .from('case_assistant_messages')
       .select('role, content')
       .eq('case_id', caseId)
+      .eq('created_by', profile.id)
       .order('created_at', { ascending: true })
     if (historyError) throw historyError
 
     const recentHistory = (historyRows || []).slice(-MAX_HISTORY_MESSAGES)
 
+    const { data: modelSetting } = await admin
+      .from('ai_model_settings')
+      .select('model')
+      .eq('key', 'assistant_model')
+      .maybeSingle()
+    const model = resolveModel({ dbValue: modelSetting?.model, envValue: ENV_MODEL })
+
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const completion = await anthropic.messages.create({
-      model: MODEL,
+      model,
       max_tokens: MAX_TOKENS,
       system: `${SYSTEM_PROMPT_HEADER}${context}`,
       messages: recentHistory.map((m) => ({ role: m.role, content: m.content }))
     })
     const reply = (completion.content || []).find((block) => block.type === 'text')?.text || ''
 
+    // created_by here is "whose conversation this reply belongs to" (the
+    // asking specialist), not "who wrote it" — same reasoning as the
+    // history filter above: without this, the reply would be an orphan row
+    // no per-user filter could ever attribute back to this conversation.
     const { error: insertAssistantError } = await admin
       .from('case_assistant_messages')
-      .insert({ case_id: caseId, role: 'assistant', content: reply })
+      .insert({ case_id: caseId, role: 'assistant', content: reply, created_by: profile.id })
     if (insertAssistantError) throw insertAssistantError
 
     return res.status(200).json({ reply })

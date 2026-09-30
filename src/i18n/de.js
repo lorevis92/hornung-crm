@@ -573,6 +573,13 @@ export default {
     noParameters: 'Noch keine Steuerparameter — fügen Sie den ersten hinzu.',
 
     pricingTab: 'Preise',
+    aiTab: 'KI',
+    aiExtractionTitle: 'Dokumentenextraktion',
+    aiExtractionHelp: 'Das Modell, das ein hochgeladenes Dokument liest und seine Felder extrahiert. Bevorzugt Genauigkeit bei vielfältigen, teils unordentlichen Dokumenten.',
+    aiAssistantTitle: 'Fall-Assistent',
+    aiAssistantHelp: 'Das Modell hinter der Chat-Blase in Tax Summary. Bevorzugt schnelle, gut begründete Antworten gegenüber einem grossen, bereits zusammengefassten Fallkontext.',
+    aiModel: 'Modell',
+    aiModelDefault: '(Standard — aus der Serverkonfiguration)',
     pricingBaseTitle: 'Preisliste',
     pricingBaseHelp: 'Name, Beschreibung und Preis jeder Position — die Honorarschätzung selbst ordnet diese weiterhin ihrer festen Rolle zu (Grundgebühr, pro Liegenschaft, ...).',
     pricingServicesTitle: 'Weitere Dienstleistungen',

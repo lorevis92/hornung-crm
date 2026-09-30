@@ -636,6 +636,24 @@ export const supabaseApi = {
     return callApi('/api/case-assistant', { caseId, message })
   },
 
+  // Tax settings "AI" tab — which Claude model each AI-backed feature uses
+  // (see src/lib/aiModels.js's resolveModel: this beats the env var, which
+  // beats the hardcoded default). A missing row for a key means "no
+  // override", not an error.
+  async listAiModelSettings() {
+    return unwrap(await supabase.from('ai_model_settings').select('*'))
+  },
+
+  async saveAiModelSetting(key, model, updatedBy) {
+    return unwrap(
+      await supabase
+        .from('ai_model_settings')
+        .upsert({ key, model: model || null, updated_by: updatedBy || null }, { onConflict: 'key' })
+        .select()
+        .single()
+    )
+  },
+
   async listManualAggregateEntries(clientId, taxYear) {
     return unwrap(
       await supabase

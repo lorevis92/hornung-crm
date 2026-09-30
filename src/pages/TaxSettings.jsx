@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import {
-  ArrowDown, ArrowUp, ExternalLink, FileCog, Pencil, Plus, Settings2, Trash2
+  ArrowDown, ArrowUp, Bot, ExternalLink, FileCog, Pencil, Plus, Settings2, Trash2
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import { Checkbox, EmptyState, Field, PageLoader, Select, Spinner, Textarea, TextInput } from '../components/ui'
+import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
+import { AI_MODELS } from '../lib/aiModels'
 import { CANTONS } from '../lib/constants'
 import { currentTaxYear } from '../lib/config'
 import { formatChf, formatDate } from '../lib/format'
@@ -73,6 +75,7 @@ function emptyParamDraft() {
 
 export default function TaxSettings() {
   const { t, lang } = useI18n()
+  const { profile } = useAuth()
   const toast = useToast()
 
   const [loading, setLoading] = useState(true)
@@ -112,15 +115,19 @@ export default function TaxSettings() {
   const [pricingDeleting, setPricingDeleting] = useState(false)
   const [pricingBusyId, setPricingBusyId] = useState(null)
 
+  const [aiModelSettings, setAiModelSettings] = useState([])
+  const [aiModelBusyKey, setAiModelBusyKey] = useState(null)
+
   useEffect(() => {
     let active = true
     const run = async () => {
-      const [cats, defs, params, rules, pricing] = await Promise.all([
+      const [cats, defs, params, rules, pricing, aiModels] = await Promise.all([
         api.listDocumentCategories(),
         api.listFieldDefinitions(),
         api.listTaxParameters(),
         api.listCalculationRules(),
-        api.listPricingItemsForStaff()
+        api.listPricingItemsForStaff(),
+        api.listAiModelSettings()
       ])
       if (!active) return
       setCategories(cats)
@@ -128,6 +135,7 @@ export default function TaxSettings() {
       setParameters(params)
       setCalculationRules(rules)
       setPricingItems(pricing)
+      setAiModelSettings(aiModels)
       setSelectedCategory((prev) => prev || cats[0]?.code || null)
       setLoading(false)
     }
@@ -136,6 +144,29 @@ export default function TaxSettings() {
       active = false
     }
   }, [])
+
+  // ------------------------------------------------------ AI model choice --
+  const aiModelFor = (key) => aiModelSettings.find((m) => m.key === key)?.model || ''
+
+  const setAiModel = async (key, model) => {
+    setAiModelBusyKey(key)
+    try {
+      const saved = await api.saveAiModelSetting(key, model || null, profile?.id)
+      setAiModelSettings((list) => {
+        const idx = list.findIndex((m) => m.key === key)
+        if (idx === -1) return [...list, saved]
+        const copy = [...list]
+        copy[idx] = saved
+        return copy
+      })
+      toast.success(t('common.saved'))
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setAiModelBusyKey(null)
+    }
+  }
 
   const fieldsForSelected = useMemo(
     () =>
@@ -609,7 +640,8 @@ export default function TaxSettings() {
         {[
           ['fields', t('taxSettings.fieldsTab')],
           ['parameters', t('taxSettings.parametersTab')],
-          ['pricing', t('taxSettings.pricingTab')]
+          ['pricing', t('taxSettings.pricingTab')],
+          ['ai', t('taxSettings.aiTab')]
         ].map(([key, label]) => (
           <button
             key={key}
@@ -886,7 +918,7 @@ export default function TaxSettings() {
             <EmptyState icon={Settings2} title={t('taxSettings.noParameters')} />
           )}
         </div>
-      ) : (
+      ) : tab === 'pricing' ? (
         <div className="space-y-6">
           <div className="card card-pad space-y-4">
             <div>
@@ -1018,6 +1050,68 @@ export default function TaxSettings() {
             ) : (
               <EmptyState icon={Settings2} title={t('taxSettings.noServices')} />
             )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <div className="card card-pad space-y-4">
+            <div className="flex items-start gap-2.5">
+              <Bot size={20} className="mt-1 shrink-0 text-gold-600" aria-hidden="true" />
+              <div>
+                <h2 className="section-title text-xl">{t('taxSettings.aiExtractionTitle')}</h2>
+                <p className="section-sub">{t('taxSettings.aiExtractionHelp')}</p>
+              </div>
+            </div>
+            <Field label={t('taxSettings.aiModel')} htmlFor="ai-extraction-model" className="max-w-xs">
+              <Select
+                id="ai-extraction-model"
+                value={aiModelFor('extraction_model')}
+                disabled={aiModelBusyKey === 'extraction_model'}
+                onChange={(e) => setAiModel('extraction_model', e.target.value)}
+              >
+                <option value="">{t('taxSettings.aiModelDefault')}</option>
+                {AI_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {aiModelFor('extraction_model') ? (
+              <p className="text-[12.5px] text-ink-400">
+                {AI_MODELS.find((m) => m.id === aiModelFor('extraction_model'))?.note}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="card card-pad space-y-4">
+            <div className="flex items-start gap-2.5">
+              <Bot size={20} className="mt-1 shrink-0 text-gold-600" aria-hidden="true" />
+              <div>
+                <h2 className="section-title text-xl">{t('taxSettings.aiAssistantTitle')}</h2>
+                <p className="section-sub">{t('taxSettings.aiAssistantHelp')}</p>
+              </div>
+            </div>
+            <Field label={t('taxSettings.aiModel')} htmlFor="ai-assistant-model" className="max-w-xs">
+              <Select
+                id="ai-assistant-model"
+                value={aiModelFor('assistant_model')}
+                disabled={aiModelBusyKey === 'assistant_model'}
+                onChange={(e) => setAiModel('assistant_model', e.target.value)}
+              >
+                <option value="">{t('taxSettings.aiModelDefault')}</option>
+                {AI_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {aiModelFor('assistant_model') ? (
+              <p className="text-[12.5px] text-ink-400">
+                {AI_MODELS.find((m) => m.id === aiModelFor('assistant_model'))?.note}
+              </p>
+            ) : null}
           </div>
         </div>
       )}

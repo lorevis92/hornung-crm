@@ -572,6 +572,13 @@ export default {
     noParameters: 'Nessun parametro fiscale ancora — aggiungi il primo.',
 
     pricingTab: 'Listino prezzi',
+    aiTab: 'IA',
+    aiExtractionTitle: 'Estrazione documenti',
+    aiExtractionHelp: 'Il modello che legge un documento caricato e ne estrae i campi. Privilegia la precisione su documenti vari, a volte disordinati.',
+    aiAssistantTitle: 'Assistente del caso',
+    aiAssistantHelp: 'Il modello dietro la bolla di chat in Tax Summary. Privilegia risposte rapide e ben argomentate rispetto a un contesto del caso ampio e già riassunto.',
+    aiModel: 'Modello',
+    aiModelDefault: '(predefinito — dalla configurazione del server)',
     pricingBaseTitle: 'Listino',
     pricingBaseHelp: 'Nome, descrizione e prezzo di ogni voce — il preventivo indicativo continua ad associarle al loro ruolo fisso (tariffa base, per immobile, ...).',
     pricingServicesTitle: 'Servizi aggiuntivi',
