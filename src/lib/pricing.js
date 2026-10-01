@@ -15,15 +15,37 @@ function labelOf(items, code, lang = 'en') {
   return item[`label_${lang}`] || item.label_en || code
 }
 
+function itemOf(items, code) {
+  return items.find((i) => i.code === code) || null
+}
+
 /**
  * @param {Array}  pricingItems rows from pricing_items
  * @param {Object} input
- *   { persons: [...], properties: [...], deliveryByPost: bool, express: bool }
+ *   { persons, properties, deliveryByPost, express,
+ *     excludedCodes, extraCodes, totalOverride }
+ *
+ *   The last three are the consultant's own edits (migration 47) and are all
+ *   optional — omitting them gives exactly the automatic estimate this
+ *   function has always produced:
+ *     excludedCodes — derived lines switched OFF. Still derived, still
+ *       listed (so the consultant can see what was waived), not counted.
+ *     extraCodes    — lines added by hand, including the "further services"
+ *       that have never fed the automatic estimate and still do not unless
+ *       explicitly added here.
+ *     totalOverride — a total typed by hand. Wins over the sum; null/''
+ *       means "use the sum", which is what every case does by default.
  * @param {string} lang
+ *
+ * Returns { lines, computedTotal, total, isOverridden, ... }. `computedTotal`
+ * is always the sum of the selected lines, kept alongside `total` so the
+ * interface can show both when they differ — an override that hid the number
+ * it replaced would be worse than no override at all.
  */
 export function estimateFee(pricingItems = [], input = {}, lang = 'en') {
   const persons = input.persons || []
   const properties = input.properties || []
+  const excludedCodes = new Set(input.excludedCodes || [])
   const primary = persons.find((p) => p.person_type === 'primary') || {}
   const spouse = persons.find((p) => p.person_type === 'spouse')
 
@@ -36,7 +58,17 @@ export function estimateFee(pricingItems = [], input = {}, lang = 'en') {
   const push = (code, qty, unitPrice) => {
     const amount = Number((qty * unitPrice).toFixed(2))
     if (!qty || !unitPrice) return
-    lines.push({ code, label: labelOf(pricingItems, code, lang), qty, unitPrice, amount })
+    lines.push({
+      code,
+      label: labelOf(pricingItems, code, lang),
+      qty,
+      unitPrice,
+      amount,
+      source: 'auto',
+      // Switched off for this case: shown, struck through, not counted.
+      excluded: excludedCodes.has(code),
+      onRequest: false
+    })
   }
 
   // 1. Base fee
@@ -67,9 +99,46 @@ export function estimateFee(pricingItems = [], input = {}, lang = 'en') {
   if (input.deliveryByPost) push('postal_delivery', 1, priceOf(pricingItems, 'postal_delivery'))
   if (input.express) push('express', 1, priceOf(pricingItems, 'express'))
 
-  const total = Number(lines.reduce((sum, l) => sum + l.amount, 0).toFixed(2))
+  // 7. Anything the consultant added by hand. A "further service" has no
+  //    price (price on request), so it joins the list at 0 and is marked
+  //    onRequest — it has to be visible on the estimate without silently
+  //    pretending to be worth nothing.
+  const autoCodes = new Set(lines.map((l) => l.code))
+  for (const code of input.extraCodes || []) {
+    if (autoCodes.has(code)) continue
+    const item = itemOf(pricingItems, code)
+    if (!item) continue
+    const unitPrice = Number(item.price) || 0
+    lines.push({
+      code,
+      label: labelOf(pricingItems, code, lang),
+      qty: 1,
+      unitPrice,
+      amount: unitPrice,
+      source: 'extra',
+      excluded: excludedCodes.has(code),
+      onRequest: Boolean(item.on_request) || unitPrice === 0
+    })
+  }
 
-  return { lines, total, assetUnits, propertyCount, isMarried }
+  const computedTotal = Number(
+    lines.reduce((sum, l) => sum + (l.excluded ? 0 : l.amount), 0).toFixed(2)
+  )
+
+  const rawOverride = input.totalOverride
+  const override =
+    rawOverride === null || rawOverride === undefined || rawOverride === '' ? null : Number(rawOverride)
+  const isOverridden = override !== null && Number.isFinite(override)
+
+  return {
+    lines,
+    computedTotal,
+    total: isOverridden ? Number(override.toFixed(2)) : computedTotal,
+    isOverridden,
+    assetUnits,
+    propertyCount,
+    isMarried
+  }
 }
 
 export function pricingLabel(item, lang = 'en') {

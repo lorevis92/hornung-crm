@@ -376,6 +376,23 @@ export default function TaxSummary() {
     })
   }
 
+  // Arriving with ?doc=<id> opens that document's source straight away.
+  // This is how a document reference in an assistant answer works when the
+  // chat is opened from the case page, which has no viewer of its own
+  // (CasePage's viewDocumentInSummary) — the consultant lands on the
+  // document itself rather than on the list with the answer lost behind.
+  // Guarded by a ref because viewDocument writes ?view=source back into
+  // the URL, which would otherwise re-run this on every change.
+  const openedDocParam = useRef(null)
+  const requestedDocId = searchParams.get('doc')
+  useEffect(() => {
+    if (!requestedDocId || loading) return
+    if (openedDocParam.current === requestedDocId) return
+    openedDocParam.current = requestedDocId
+    viewDocument(requestedDocId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedDocId, loading, allDocuments])
+
   // A row_key ('' for a document-level field) makes the identity — several
   // rows can legitimately share the same field_key (e.g. "annual_premium"
   // once per insured person), so field_key alone is not unique.

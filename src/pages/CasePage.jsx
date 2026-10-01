@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, FileCheck2, FolderOpen, Info,
-  Mail, MessageSquare, RefreshCw, Save, ShieldCheck, Sparkles, Upload, X
+  Mail, MessageSquare, RefreshCw, Save, ShieldCheck, Upload, X
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import StatusStepper from '../components/StatusStepper'
@@ -11,7 +11,7 @@ import Uploader from '../components/Uploader'
 import DocumentList from '../components/DocumentList'
 import ChecklistPanel from '../components/ChecklistPanel'
 import FeeEstimatePanel from '../components/FeeEstimatePanel'
-import CaseTimeline from '../components/CaseTimeline'
+import CaseAssistant from '../components/CaseAssistant'
 import Modal from '../components/Modal'
 import { EmptyState, Field, PageLoader, Select, Spinner, Textarea, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
@@ -20,31 +20,9 @@ import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { CANTONS, CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES, MARITAL_STATUSES } from '../lib/constants'
 import { fullName } from '../lib/format'
-import { docTypeLabel } from '../lib/labels'
 import { computeQuestionnaireConsistency, computeQuestionnaireCompleteness } from '../lib/questionnaireConsistency'
 import { describeSuggestion } from '../lib/suggestions'
 import { viewerCopy } from '../lib/viewerCopy'
-
-// Maps client_documents.status to its i18n key + a badge tone — the
-// extraction pipeline's own states (see supabase/migrations/
-// 20260101000007_tax_extraction_schema.sql's check constraint), distinct
-// from a case's own status (StatusBadge).
-const EXTRACTION_STATUS_LABEL_KEY = {
-  uploaded: 'extraction.statusUploaded',
-  extracting: 'extraction.statusExtracting',
-  extracted: 'extraction.statusExtracted',
-  extraction_failed: 'extraction.statusExtractionFailed',
-  verified_by_specialist: 'extraction.statusVerifiedBySpecialist',
-  rejected: 'extraction.statusRejected'
-}
-const EXTRACTION_STATUS_TONE = {
-  uploaded: 'text-ink-400',
-  extracting: 'text-gold-700',
-  extracted: 'text-emerald-700',
-  extraction_failed: 'text-red-700',
-  verified_by_specialist: 'text-emerald-700',
-  rejected: 'text-ink-400'
-}
 
 export default function CasePage() {
   const { caseId } = useParams()
@@ -67,11 +45,9 @@ export default function CasePage() {
   const [requested, setRequested] = useState([])
   const [documentTypes, setDocumentTypes] = useState([])
   const [documentCategories, setDocumentCategories] = useState([])
-  const [events, setEvents] = useState([])
   // staff only
   const [pricing, setPricing] = useState([])
   const [questionnaire, setQuestionnaire] = useState(null)
-  const [clientDocuments, setClientDocuments] = useState([])
   const [pendingSuggestions, setPendingSuggestions] = useState([])
   const [currentTaxSheetFields, setCurrentTaxSheetFields] = useState([])
   const [consistencyOpen, setConsistencyOpen] = useState(false)
@@ -111,29 +87,25 @@ export default function CasePage() {
     }
     setNotesDraft(row.specialist_notes || '')
 
-    const [docs, req, types, evts] = await Promise.all([
+    const [docs, req, types] = await Promise.all([
       api.listDocuments(caseId),
       api.listRequested(caseId),
-      api.listDocumentTypes(),
-      api.listEvents(caseId)
+      api.listDocumentTypes()
     ])
     setDocuments(docs)
     setRequested(req)
     setDocumentTypes(types)
-    setEvents(evts)
 
     if (isStaff) {
       const clientId = row.client_id
-      const [prices, quest, clientDocs, cats, suggestions] = await Promise.all([
+      const [prices, quest, cats, suggestions] = await Promise.all([
         api.listPricing(),
         api.getQuestionnaire(clientId),
-        api.listClientDocuments(clientId, row.tax_year),
         api.listDocumentCategories(),
         api.listFieldSuggestions(clientId)
       ])
       setPricing(prices)
       setQuestionnaire(quest)
-      setClientDocuments(clientDocs)
       setDocumentCategories(cats)
       setPendingSuggestions(suggestions)
 
@@ -299,7 +271,6 @@ export default function CasePage() {
         actorId: profile?.id
       })
       setCaseRow((row) => ({ ...row, ...(result.case || {}) }))
-      setEvents(await api.listEvents(caseId))
       toast.success(
         result.emailSent ? `${t('case.statusUpdated')} · ${t('case.emailSent')}` : t('case.statusUpdated')
       )
@@ -322,6 +293,14 @@ export default function CasePage() {
     } finally {
       setSavingNotes(false)
     }
+  }
+
+  // The case page has no source viewer of its own; Tax Summary does. A
+  // document reference in an assistant answer therefore opens Tax Summary
+  // already showing that document (?doc=<id>, see TaxSummary.jsx) rather
+  // than being dead text here.
+  const viewDocumentInSummary = (documentId) => {
+    navigate(`/year/${caseId}/summary?doc=${encodeURIComponent(documentId)}`)
   }
 
   const toggleCaseOption = async (patch) => {
@@ -716,43 +695,19 @@ export default function CasePage() {
               onToggle={toggleCaseOption}
             />
 
-            <CaseTimeline events={events} />
           </div>
 
-          <div className="rounded-xl border border-line bg-white">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
-              <div className="flex items-start gap-2.5">
-                <Sparkles size={19} className="mt-0.5 shrink-0 text-gold-600" aria-hidden="true" />
-                <div>
-                  <p className="text-[15px] font-semibold text-ink-900">{t('case.extractionStatusTitle')}</p>
-                  <p className="text-[13px] text-ink-400">{t('case.extractionStatusHelp')}</p>
-                </div>
-              </div>
-              <Link to={`/year/${caseId}/summary`} className="btn-secondary btn-sm shrink-0">
-                <ClipboardList size={15} aria-hidden="true" />
-                {t('case.taxSummary')}
-              </Link>
-            </div>
-            {clientDocuments.length ? (
-              <ul className="divide-y divide-line">
-                {clientDocuments.map((doc) => {
-                  const category = documentCategories.find((c) => c.code === doc.category_code)
-                  return (
-                    <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[13.5px]">
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-ink-700">{doc.file_name}</span>
-                        {category ? <span className="text-[12px] text-ink-400">{docTypeLabel(category, lang)}</span> : null}
-                      </span>
-                      <span className={clsx('shrink-0 font-medium', EXTRACTION_STATUS_TONE[doc.status] || 'text-ink-400')}>
-                        {t(EXTRACTION_STATUS_LABEL_KEY[doc.status] || doc.status)}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : (
-              <p className="px-4 py-6 text-center text-[13.5px] text-ink-400">{t('case.extractionStatusEmpty')}</p>
-            )}
+          {/* The same assistant as Tax Summary's, on the same case id — so
+              it is the same conversation, not a second one. Placed right
+              before the Tax Summary button so a quick question about the
+              case can be asked without opening that page first. */}
+          <CaseAssistant caseId={caseId} onViewDocument={viewDocumentInSummary} />
+
+          <div className="flex justify-end">
+            <Link to={`/year/${caseId}/summary`} className="btn-secondary btn-sm">
+              <ClipboardList size={15} aria-hidden="true" />
+              {t('case.taxSummary')}
+            </Link>
           </div>
         </section>
       ) : null}
