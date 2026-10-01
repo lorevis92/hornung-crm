@@ -9,17 +9,31 @@
 // instead (same pattern as the existing CRON_SECRET check in
 // api/open-tax-year.js).
 //
-// Two-phase pipeline against the Anthropic API:
+// Three-phase pipeline against the Anthropic API:
 //   1. Classification — pick one of the active document_categories.
 //   2. Extraction — read the field dictionary for that category from
 //      category_field_definitions (kept fresh at call time, since staff can
 //      edit it from /tax-settings) and pull only the values actually present
-//      in the document.
+//      in the document. The same call also returns "other findings": values
+//      worth a consultant's attention that no listed field covers.
+//   3. Coverage check — ONE further call per document (never per field),
+//      handed the document plus everything phase 2 produced, asked only
+//      which amounts, names and dates in the text are not represented in
+//      that output. Whatever it names joins the other findings, so a
+//      document can no longer contain something useful that the whitelist
+//      happened not to anticipate and nobody ever sees. Best-effort: a
+//      failure here leaves the whitelist extraction (which succeeded)
+//      alone.
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, serviceClient } from './_lib.js'
 import { syncRegistryForClientYear } from './_registrySync.js'
 import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL } from '../src/lib/rowBasedFields.js'
 import { resolveModel } from '../src/lib/aiModels.js'
+import {
+  buildOtherFindingRows,
+  capturedValuesOf,
+  describeExtractionForCoverage
+} from '../src/lib/otherFindings.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
 // import.meta.env) — keep this in sync with that file.
@@ -173,8 +187,8 @@ export async function runExtraction(
     .order('sort_order', { ascending: true })
   if (fieldDefsError) throw fieldDefsError
 
-  if (fieldDefs?.length) {
-    const fieldList = fieldDefs
+  {
+    const fieldList = (fieldDefs || [])
       .map((f) => `- ${f.field_key} (${f.value_type}): ${f.field_label || f.field_key}`)
       .join('\n')
     const rowBased = isRowBasedCategory(categoryCode)
@@ -214,10 +228,11 @@ export async function runExtraction(
             {
               type: 'text',
               text:
-                'Extract the following fields from this document, if present. Only include a field ' +
-                "when you actually find its value in the document — never invent, guess, or infer a " +
-                'value that is not written there.\n\n' +
-                `Fields:\n${fieldList}` +
+                (fieldList
+                  ? 'Extract the following fields from this document, if present. Only include a field ' +
+                    "when you actually find its value in the document — never invent, guess, or infer a " +
+                    `value that is not written there.\n\nFields:\n${fieldList}`
+                  : 'No specific fields are defined for this kind of document.') +
                 rowInstruction +
                 '\n\nFor each field you find, also copy its exact source text — verbatim, character-for-' +
                 'character as printed in the document, never paraphrased, summarized or translated ' +
@@ -228,11 +243,25 @@ export async function runExtraction(
                   : 'This has no page numbers — leave source_page null.') +
                 ' If you cannot pin down an exact quote (or, for a PDF, its page) for a field, leave ' +
                 'source_quote/source_page empty for that field rather than guessing — an empty value ' +
-                'is fine, an invented one is not.\n\n' +
-                'Respond with ONLY a JSON array, no other text: ' +
-                '[{"field_key": "<key>", "field_value": "<value as text>", "confidence": <0.0-1.0>, ' +
+                'is fine, an invented one is not.' +
+                // The safety net. The field list above stays exactly as
+                // strict as it was — this is additive, and explicitly NOT a
+                // place to restate a listed field, so a well-modelled
+                // category (bank statements, health premiums, mortgages)
+                // produces the same whitelist rows as before.
+                '\n\nSeparately, list anything ELSE in this document that a Swiss tax consultant would ' +
+                'want to know about and that none of the fields above covers — an unusual clause, a ' +
+                'one-off charge or refund, a condition, a date or amount that matters but has no field ' +
+                'of its own. Give each one a short descriptive label in the language of the document, ' +
+                'its value, and the same kind of verbatim quote. Do NOT repeat anything you already ' +
+                'returned as a field above, and do not pad the list: if the document holds nothing ' +
+                'beyond the fields, return an empty list.\n\n' +
+                'Respond with ONLY a JSON object, no other text:\n' +
+                '{"fields": [{"field_key": "<key>", "field_value": "<value as text>", "confidence": <0.0-1.0>, ' +
                 (rowBased ? '"row_key": "<row-1, row-2, ... or "" for a document-level field>", ' : '') +
-                '"source_quote": "<exact verbatim text, or null>", "source_page": <page number, or null>}, ...] ' +
+                '"source_quote": "<exact verbatim text, or null>", "source_page": <page number, or null>}, ...], ' +
+                '"other_findings": [{"label": "<short descriptive label>", "value": "<value as text>", ' +
+                '"source_quote": "<exact verbatim text, or null>", "source_page": <page number, or null>}, ...]} ' +
                 '— omit any field you did not find at all.'
             }
           ]
@@ -241,8 +270,14 @@ export async function runExtraction(
     })
 
     const extracted = parseJsonFromText(textOf(extractMessage))
-    const definedKeys = new Set(fieldDefs.map((f) => f.field_key))
-    const parsedRows = (Array.isArray(extracted) ? extracted : [])
+    // Tolerates the older bare-array shape as well as the object above: a
+    // model occasionally answers with just the field list, and losing an
+    // entire document's whitelist extraction over the wrapper would be a
+    // far worse failure than losing its other findings.
+    const extractedFieldItems = Array.isArray(extracted) ? extracted : extracted?.fields
+    const extractedOtherItems = Array.isArray(extracted) ? [] : extracted?.other_findings
+    const definedKeys = new Set((fieldDefs || []).map((f) => f.field_key))
+    const parsedRows = (Array.isArray(extractedFieldItems) ? extractedFieldItems : [])
       .filter((row) => row && definedKeys.has(row.field_key) && row.field_value !== null && row.field_value !== '')
       .map((row) => {
         const page = Number(row.source_page)
@@ -271,6 +306,85 @@ export async function runExtraction(
         .from('extracted_document_fields')
         .upsert(rows, { onConflict: 'document_id,field_key,row_key' })
       if (upsertError) throw upsertError
+    }
+
+    // ------------------------------- Phase 3: coverage check -------------
+    // Everything from here on is best-effort. The whitelist extraction
+    // above has already been written and is what the app is built on; a
+    // failure to ALSO catch the long tail must never turn a successfully
+    // extracted document into a failed one.
+    try {
+      let findingRows = buildOtherFindingRows({
+        items: extractedOtherItems,
+        documentId,
+        origin: 'extraction',
+        isPdf,
+        alreadyCaptured: capturedValuesOf(rows)
+      })
+
+      const fieldLabelByKey = Object.fromEntries(
+        (fieldDefs || []).map((f) => [f.field_key, f.field_label || f.field_key])
+      )
+      const coverageMessage = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 2000,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              fileBlock,
+              {
+                type: 'text',
+                text:
+                  'This is everything that has been extracted from the document above:\n\n' +
+                  describeExtractionForCoverage({ fieldRows: rows, findingRows, fieldLabelByKey }) +
+                  '\n\nYour only job now is to check that nothing was missed. Read the document again ' +
+                  'and name every amount, name, date or other concrete piece of information that ' +
+                  'appears in it and is NOT represented anywhere in the list above. Ignore boilerplate, ' +
+                  'page numbers, addresses of the issuing institution and legal footers — report what a ' +
+                  'Swiss tax consultant would want to know. If everything is already represented, ' +
+                  'return an empty list; do not invent gaps.\n\n' +
+                  'If you find something but cannot say confidently what it is, still report it and set ' +
+                  '"ambiguous": true with a short "note" — it will be flagged for a human rather than ' +
+                  'presented as established.\n\n' +
+                  'Quote the exact source text verbatim for each one. ' +
+                  (isPdf
+                    ? 'Also give the page number (starting at 1).'
+                    : 'This has no page numbers — leave source_page null.') +
+                  '\n\nRespond with ONLY a JSON array, no other text: ' +
+                  '[{"label": "<short descriptive label>", "value": "<value as text>", ' +
+                  '"source_quote": "<exact verbatim text>", "source_page": <page number, or null>, ' +
+                  '"ambiguous": <true|false>, "note": "<why, only when ambiguous>"}, ...]'
+              }
+            ]
+          }
+        ]
+      })
+
+      findingRows = findingRows.concat(
+        buildOtherFindingRows({
+          items: parseJsonFromText(textOf(coverageMessage)),
+          documentId,
+          origin: 'coverage_check',
+          isPdf,
+          alreadyCaptured: capturedValuesOf(rows, findingRows)
+        })
+      )
+
+      // Replaced wholesale, never accumulated: re-extracting a document
+      // must leave it with exactly what this run found, the same way the
+      // whitelist rows are upserted rather than appended to.
+      const { error: clearError } = await admin
+        .from('document_other_findings')
+        .delete()
+        .eq('document_id', documentId)
+      if (clearError) throw clearError
+      if (findingRows.length) {
+        const { error: insertError } = await admin.from('document_other_findings').insert(findingRows)
+        if (insertError) throw insertError
+      }
+    } catch (coverageError) {
+      console.error(`[extract-document] coverage check failed for document ${documentId}:`, coverageError)
     }
   }
 

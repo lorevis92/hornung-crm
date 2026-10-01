@@ -43,6 +43,10 @@ function groupFieldsByRow(fields, fieldLabelByKey, categoryCode) {
 // extractedFields: extracted_document_fields rows for those documents.
 // categories/fieldDefs: the full document_categories / category_field_definitions
 //   tables (for human-readable labels).
+// otherFindings: document_other_findings rows — values a document holds
+//   that no whitelist field covers (src/lib/otherFindings.js). Included so
+//   the assistant can answer from what a document ACTUALLY says, not only
+//   from what the schema anticipated.
 // qualityFindings: buildQualityFindings(...) output (src/lib/extractionQuality.js)
 //   — the open questions about the extracted data, the same ones Tax
 //   Summary shows the specialist.
@@ -57,6 +61,7 @@ export function buildCaseAssistantContext({
   extractedFields,
   categories,
   fieldDefs,
+  otherFindings,
   qualityFindings
 }) {
   const categoryByCode = Object.fromEntries((categories || []).map((c) => [c.code, c]))
@@ -66,6 +71,10 @@ export function buildCaseAssistantContext({
   const fieldsByDoc = {}
   for (const field of extractedFields || []) {
     ;(fieldsByDoc[field.document_id] ||= []).push(field)
+  }
+  const otherByDoc = {}
+  for (const finding of otherFindings || []) {
+    ;(otherByDoc[finding.document_id] ||= []).push(finding)
   }
 
   const lines = []
@@ -104,13 +113,23 @@ export function buildCaseAssistantContext({
       `[[doc:${doc.id}|${doc.file_name}]] — category: ${category?.label_en || doc.category_code || 'uncategorized'}, status: ${doc.status}`
     )
     const fields = fieldsByDoc[doc.id] || []
-    if (!fields.length) {
+    const others = otherByDoc[doc.id] || []
+    if (!fields.length && !others.length) {
       lines.push('  (nothing extracted yet, or extraction failed)')
       continue
     }
     const byRow = groupFieldsByRow(fields, fieldLabelByKey, doc.category_code)
     for (const [rowKey, entries] of byRow.entries()) {
       lines.push(rowKey ? `  Row (${rowKey}): ${entries.join('; ')}` : `  ${entries.join('; ')}`)
+    }
+    // Free-form values the category's field list does not cover — as real
+    // as the fields above, just not anticipated by the schema.
+    for (const finding of others) {
+      lines.push(
+        `  Other information found: ${finding.label}: ${finding.finding_value}` +
+          (finding.source_quote ? ` (document says: "${finding.source_quote}")` : '') +
+          (finding.needs_review ? ' — UNCERTAIN, flagged for a specialist to confirm' : '')
+      )
     }
   }
   lines.push('')
@@ -139,6 +158,13 @@ export function buildCaseAssistantContext({
       lines.push(
         `  ${docRef}: the document states a total of ${formatAmount(finding.detail?.reportedTotal)} but the rows ` +
           `extracted from it add up to ${formatAmount(finding.detail?.rowsSum)} — a row may be missing.`
+      )
+    } else if (finding.kind === 'otherFindingNeedsReview') {
+      lines.push(
+        `  ${docRef}: something was found in this document that no defined field covers — ` +
+          `"${finding.detail?.label ?? ''}": ${finding.detail?.value ?? ''} — but it could not be read ` +
+          `with confidence${finding.detail?.note ? ` (${finding.detail.note})` : ''}. Report it as what the ` +
+          'document appears to say, never as established fact.'
       )
     } else if (finding.kind === 'legacyFormat') {
       lines.push(

@@ -59,8 +59,10 @@ export default function CompactFieldRow({
   const hasValue = Boolean(field.field_value)
   const edited = field.verified_by_specialist
 
+  // hasValue is only ever false while an edit is in progress — a field the
+  // document doesn't mention no longer produces a row (src/lib/extraction.js).
   const statusText = !hasValue
-    ? t('extraction.notFound')
+    ? ''
     : edited
       ? t('extraction.editedOn', { date: formatDateTime(field.verified_at, lang) })
       : field.confidence != null
@@ -77,7 +79,7 @@ export default function CompactFieldRow({
             autoFocus
             value={field.field_value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={t('extraction.notFoundPlaceholder')}
+            placeholder={t('extraction.valuePlaceholder')}
           />
           <button
             type="button"
@@ -98,9 +100,7 @@ export default function CompactFieldRow({
             <span className="font-medium text-ink-900">{field.field_label}</span>
             {showDocument && field.file_name ? <span className="text-ink-500"> ({field.file_name})</span> : null}
             <span className="text-ink-900">: </span>
-            <span className={clsx(hasValue ? 'text-ink-900' : 'italic text-ink-500')}>
-              {hasValue ? field.field_value : t('extraction.notFoundPlaceholder')}
-            </span>
+            <span className="text-ink-900">{field.field_value}</span>
           </div>
           <span
             className={clsx(

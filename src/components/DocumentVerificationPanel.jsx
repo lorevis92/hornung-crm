@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import Modal from './Modal'
 import ExtractedFieldRow from './ExtractedFieldRow'
+import OtherFindingsList from './OtherFindingsList'
 import { Spinner } from './ui'
 
 // pdfjs-dist is a large dependency (~1 MB) — only fetched when a specialist
@@ -25,6 +26,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
 
   const [loading, setLoading] = useState(true)
   const [fields, setFields] = useState([])
+  const [otherFindings, setOtherFindings] = useState([])
   const [fileUrl, setFileUrl] = useState(null)
   const [view, setView] = useState('list')
   const [sourceField, setSourceField] = useState(null)
@@ -40,14 +42,16 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
     setLoading(true)
     setView('list')
     const run = async () => {
-      const [defs, extracted, url] = await Promise.all([
+      const [defs, extracted, findings, url] = await Promise.all([
         api.listFieldDefinitions(),
         api.listExtractedFields(doc.id),
+        api.listOtherFindingsForDocument(doc.id),
         api.getDownloadUrl(doc, { download: false })
       ])
       if (!active) return
       const categoryDefs = defs.filter((d) => d.category_code === doc.category_code)
       setFields(mergeFieldsWithDefinitions(categoryDefs, extracted, doc))
+      setOtherFindings(findings)
       setFileUrl(url)
       setLoading(false)
     }
@@ -148,9 +152,14 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
     try {
       await api.retryExtraction(doc.id, { force: true })
       toast.success(t('common.saved'))
-      const [defs, extracted] = await Promise.all([api.listFieldDefinitions(), api.listExtractedFields(doc.id)])
+      const [defs, extracted, findings] = await Promise.all([
+        api.listFieldDefinitions(),
+        api.listExtractedFields(doc.id),
+        api.listOtherFindingsForDocument(doc.id)
+      ])
       const categoryDefs = defs.filter((d) => d.category_code === doc.category_code)
       setFields(mergeFieldsWithDefinitions(categoryDefs, extracted, doc))
+      setOtherFindings(findings)
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -163,6 +172,16 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
     setSourceField(field)
     setView('source')
   }
+
+  // Findings carry no field_key; the viewer only ever reads the quote, the
+  // page and the file type, which they do have.
+  const viewFindingSource = (finding) =>
+    viewSource({
+      source_quote: finding.source_quote,
+      source_page: finding.source_page,
+      isPdf: doc.mime_type === 'application/pdf',
+      isText: doc.mime_type === 'text/plain'
+    })
 
   const backToList = () => {
     setView('list')
@@ -218,7 +237,7 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
         <div className="flex min-h-[30vh] items-center justify-center">
           <Spinner size={22} />
         </div>
-      ) : fields.length ? (
+      ) : fields.length || otherFindings.length ? (
         (() => {
           const rowGroups = []
           for (const field of fields) {
@@ -260,12 +279,13 @@ export default function DocumentVerificationPanel({ open, onClose, doc, categori
                   </ul>
                 </div>
               ))}
+              <OtherFindingsList findings={otherFindings} onViewSource={viewFindingSource} />
             </div>
           )
         })()
       ) : (
         <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
-          {t('extraction.noFieldDefs')}
+          {t('extraction.nothingExtracted')}
         </p>
       )}
     </Modal>

@@ -197,6 +197,25 @@ function seed() {
     { id: uid('exf'), document_id: salaryDoc.id, field_key: 'withholding_tax', field_value: "1'204", confidence: 0.87, source_quote: 'Quellensteuer 1’204.00', source_page: 1, verified_by_specialist: false, verified_at: null, verified_by: null }
   ]
 
+  // One sample "other information found" row (document_other_findings,
+  // migration 46): a real value the salary_statement whitelist has no field
+  // for, so demo mode shows the section the same way production does.
+  const documentOtherFindings = [
+    {
+      id: uid('dof'),
+      document_id: salaryDoc.id,
+      label: 'Jubiläumsgeschenk (25 Jahre)',
+      finding_value: "2'500",
+      source_quote: "Jubilaumsgeschenk 25 Jahre: CHF 2'500.00",
+      source_page: 1,
+      origin: 'coverage_check',
+      confidence: 0.9,
+      needs_review: false,
+      review_note: null,
+      created_at: daysAgo(5)
+    }
+  ]
+
   const requested = [
     ...['salary_statement', 'pillar_3a', 'bank_statements', 'health_insurance', 'property_tax_value'].map((t) => ({ id: uid('req'), case_id: 'case-1', document_type_id: t, required: true })),
     ...['salary_statement', 'pillar_3a', 'bank_statements'].map((t) => ({ id: uid('req'), case_id: 'case-4', document_type_id: t, required: true }))
@@ -229,6 +248,7 @@ function seed() {
     extracted,
     fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS)),
     extractedDocumentFields,
+    documentOtherFindings,
     taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS)),
     fieldSuggestions: [],
     pricingItems: JSON.parse(JSON.stringify(PRICING_ITEMS)),
@@ -249,6 +269,10 @@ function load() {
       // no sample values to backfill here, an empty list just means the
       // specialist starts from a blank sheet for already-existing documents.
       parsed.extractedDocumentFields ||= []
+      // Same for sessions started before "other information found" existed
+      // (migration 46) — an empty list simply means nothing beyond the
+      // whitelist was recorded for those documents.
+      parsed.documentOtherFindings ||= []
       // Same for sessions started before "Tax parameters" existed.
       parsed.taxParameters ||= JSON.parse(JSON.stringify(TAX_PARAMETERS))
       // Same for sessions started before the personal-details auto-fill
@@ -722,6 +746,19 @@ export const demoApi = {
 
   async listExtractedFields(caseDocumentId) {
     return this.listExtractedFieldsForDocument(caseDocumentId)
+  },
+
+  // Read-only, as in supabaseData: only api/extract-document.js writes
+  // these, and demo mode has no extraction pipeline to run.
+  async listOtherFindingsForDocuments(documentIds) {
+    if (!documentIds?.length) return []
+    const s = store()
+    const wanted = new Set(documentIds)
+    return wait(s.documentOtherFindings.filter((f) => wanted.has(f.document_id)))
+  },
+
+  async listOtherFindingsForDocument(documentId) {
+    return this.listOtherFindingsForDocuments([documentId])
   },
 
   async saveExtractedField(caseDocumentId, payload) {

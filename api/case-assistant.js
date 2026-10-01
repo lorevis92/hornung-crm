@@ -63,6 +63,8 @@ Rules:
 - Whenever you refer to a specific source document, use the exact marker "[[doc:<id>|<file name>]]" exactly as it appears in the context (copy it verbatim) so the consultant can click through and verify it themselves. Never invent a marker for a document not listed in the context.
 - This app computes NOTHING: there is no taxable income, no taxable wealth, no deduction total, no assessment for this case, and you must never present one. If asked "how much is taxable", "what is the total deduction", or anything else that would require computing the declaration, say plainly that this app only collects documents and their extracted data, and that the calculation is done outside it. You may still add up figures the consultant explicitly asks you to add up, but say clearly it is a plain sum of the extracted values, not a tax result.
 - A question about Swiss tax law in general (not about this case's data) may be answered from your own general knowledge, but you must clearly say it is general information to be verified — never present it as a fact about this case or its documents.
+- A document's data comes in two forms and both are real: the defined fields of its category, and lines marked "Other information found" — things the document says that no defined field covers. Use both when answering, and never treat an "other information" line as less reliable just because it has no field name. One marked UNCERTAIN is the exception: report it as what the document appears to say, and say it still needs confirming.
+- The absence of a field means only that the document does not state it. Never describe it as missing data, a gap, or something the client failed to provide.
 - You can only answer questions. You have no ability to change any data or take any action — never claim otherwise.
 - Be concise and concrete: point at the exact document, row and value, not a vague description.
 
@@ -114,25 +116,33 @@ export default async function handler(req, res) {
     const documents = documentsRes.data || []
     const documentIds = documents.map((d) => d.id)
 
-    const [extractedFieldsRes, categoriesRes, fieldDefsRes] = await Promise.all([
+    const [extractedFieldsRes, otherFindingsRes, categoriesRes, fieldDefsRes] = await Promise.all([
       documentIds.length
         ? admin.from('extracted_document_fields').select('*').in('document_id', documentIds)
+        : Promise.resolve({ data: [] }),
+      documentIds.length
+        ? admin.from('document_other_findings').select('*').in('document_id', documentIds)
         : Promise.resolve({ data: [] }),
       admin.from('document_categories').select('code, group_key, label_en, label_de, label_fr, label_it'),
       admin.from('category_field_definitions').select('category_code, field_key, field_label')
     ])
     if (extractedFieldsRes.error) throw extractedFieldsRes.error
+    if (otherFindingsRes.error) throw otherFindingsRes.error
     if (categoriesRes.error) throw categoriesRes.error
     if (fieldDefsRes.error) throw fieldDefsRes.error
 
     const extractedFields = extractedFieldsRes.data || []
+    // What the documents hold beyond the whitelist (migration 46) — the
+    // assistant answers from the document, so it has to see this too.
+    const otherFindings = otherFindingsRes.data || []
     // The same findings Tax Summary shows the specialist — computed here
     // rather than read from a table, so the assistant can never describe a
     // question as open after it has actually been resolved.
     const qualityFindings = buildQualityFindings({
       documents,
       extractedFields,
-      fieldDefs: fieldDefsRes.data || []
+      fieldDefs: fieldDefsRes.data || [],
+      otherFindings
     })
 
     const context = buildCaseAssistantContext({
@@ -145,6 +155,7 @@ export default async function handler(req, res) {
       extractedFields,
       categories: categoriesRes.data || [],
       fieldDefs: fieldDefsRes.data || [],
+      otherFindings,
       qualityFindings
     })
 

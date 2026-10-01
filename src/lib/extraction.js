@@ -3,8 +3,20 @@ import { buildRowIdentityLabel } from './rowIdentity.js'
 
 // Shared between DocumentVerificationPanel (single document) and TaxSummary
 // (every document of a client/tax year): merges the field dictionary for a
-// category with whatever was actually extracted for one document, so every
-// defined field shows up even when nothing was found for it. A row-based
+// category with whatever was actually extracted for one document.
+//
+// ONLY fields that actually have a value come back. A defined field the
+// document says nothing about used to be emitted as an empty row reading
+// "Not found — enter it manually if you have it", which meant a bank
+// statement carrying three real values was displayed as fifteen rows,
+// twelve of them saying nothing. What the document does not contain is now
+// simply absent. Note the deliberate asymmetry with
+// src/lib/extractionQuality.js: a field missing from the document is not a
+// problem and is not shown, whereas a value that IS there but cannot be
+// attributed to anyone (an account with no holder and no IBAN) stays
+// flagged — the value exists, so hiding the question would lose it.
+//
+// A row-based
 // category (see rowBasedFields.js — bank accounts, insurance premiums,
 // pillar 3a certificates, ...) can have more than one ROW for the same
 // field definition, each sharing a `row_key` assigned by the extraction
@@ -60,7 +72,11 @@ export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
   const rows = []
   for (const rowKey of rows_) {
     for (const def of sortedDefs) {
-      rows.push(makeRow(def, byKeyAndRow.get(`${def.field_key}:${rowKey}`), rowKey))
+      const extracted = byKeyAndRow.get(`${def.field_key}:${rowKey}`)
+      // Nothing was found for this field on this row — the definition
+      // exists, the value does not, so there is nothing to show.
+      if (!extracted || !String(extracted.field_value ?? '').trim()) continue
+      rows.push(makeRow(def, extracted, rowKey))
     }
   }
 

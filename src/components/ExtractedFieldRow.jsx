@@ -30,6 +30,9 @@ export default function ExtractedFieldRow({
   const { t, lang } = useI18n()
   const canViewSource = field.source_quote || field.isPdf
   const excluded = field.included_in_calculation === false
+  // Since src/lib/extraction.js stopped emitting a row for a field the
+  // document never mentioned, every row that reaches here has a value —
+  // except momentarily, while the specialist is clearing one to retype it.
   const hasValue = Boolean(field.field_value)
   const edited = field.verified_by_specialist
 
@@ -60,9 +63,7 @@ export default function ExtractedFieldRow({
                 : ''}
               {excluded ? ` · ${t('extraction.excludedBadge')}` : ''}
             </p>
-          ) : (
-            <p className="mt-0.5 text-[12.5px] text-ink-400">{t('extraction.notFound')}</p>
-          )}
+          ) : null}
 
           {hasValue && onToggleInclude ? (
             <div className="mt-1">
@@ -96,7 +97,7 @@ export default function ExtractedFieldRow({
           className="min-h-0 py-2"
           value={field.field_value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={t('extraction.notFoundPlaceholder')}
+          placeholder={t('extraction.valuePlaceholder')}
         />
         <button
           type="button"

@@ -143,3 +143,96 @@ describe('Weber 2025 — what the quality checks say about the same data', () =>
     expect(findings.filter((f) => f.kind === 'legacyFormat')).toHaveLength(0)
   })
 })
+
+// The round that added the "other information found" safety net also stopped
+// emitting a row for every whitelist field the document never mentioned.
+// That is a change to what is DISPLAYED, and it must not be a change to what
+// is KNOWN — these assertions exist to prove, on real reviewed data, that
+// the same values are still there and still attributed to the same rows.
+describe('Weber 2025 — dropping the empty rows changed nothing that was extracted', () => {
+  it('shows exactly the extracted values, no more and no fewer', () => {
+    for (const doc of fixture.documents) {
+      const defs = fixture.fieldDefs.filter((d) => d.category_code === doc.category_code)
+      const extracted = fixture.extractedFields.filter((f) => f.document_id === doc.id)
+      const merged = mergeFieldsWithDefinitions(defs, extracted, doc)
+
+      const definedKeys = new Set(defs.map((d) => d.field_key))
+      const realValues = extracted.filter(
+        (f) => definedKeys.has(f.field_key) && String(f.field_value ?? '').trim()
+      )
+      // One displayed row per extracted value: nothing invented, nothing
+      // lost, and no empty row left over.
+      expect(merged, doc.file_name).toHaveLength(realValues.length)
+      expect(merged.every((r) => String(r.field_value).trim()), doc.file_name).toBe(true)
+    }
+  })
+
+  it('keeps every bank account attached to the thing that identifies it', () => {
+    const doc = docByFilePart('10_attestazione_banca_conti')
+    const rows = rowsOf(doc).filter((r) => r.rowKey)
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      // This statement names no holder and no IBAN — what tells the two
+      // accounts apart is the account type ("CONTO COINTESTATO" vs "CONTO
+      // RISPARMIO LINA"), and that is exactly what the row label is built
+      // from. Dropping empty fields must never drop an identity field that
+      // HAS a value.
+      expect(row.values.account_type).toBeTruthy()
+      expect(row.values.account_balance_31_12).toBeTruthy()
+      expect(row.values.interest_income).toBeTruthy()
+      expect(row.rowLabel).toContain(row.values.account_type)
+    }
+    expect(rows.map((r) => r.values.account_balance_31_12).sort()).toEqual(['36420.5', '5980.2'])
+    // dividend_income and capital_gain_loss ARE defined for this category
+    // and this statement says nothing about either. They used to appear as
+    // an empty "Not found" line on every one of its three row groups; now
+    // they appear nowhere.
+    const defs = fixture.fieldDefs.filter((d) => d.category_code === doc.category_code)
+    expect(defs.map((d) => d.field_key)).toEqual(
+      expect.arrayContaining(['dividend_income', 'capital_gain_loss'])
+    )
+    const merged = mergeFieldsWithDefinitions(
+      defs,
+      fixture.extractedFields.filter((f) => f.document_id === doc.id),
+      doc
+    )
+    expect(merged.some((r) => r.field_key === 'dividend_income')).toBe(false)
+    expect(merged.some((r) => r.field_key === 'capital_gain_loss')).toBe(false)
+  })
+
+  it('keeps both mortgages with their creditor, their balance and their interest', () => {
+    const rows = rowsOf(docByFilePart('09_attestazione_ipoteca')).filter((r) => r.rowKey)
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect(row.values.creditor_name).toBeTruthy()
+      expect(row.values.debt_balance).toBeTruthy()
+      expect(row.values.annual_interest_paid).toBeTruthy()
+    }
+  })
+
+  it('keeps every insurance premium amount, including the rows nobody could attribute', () => {
+    const doc = docByFilePart('13_premi_cassa_malati')
+    const rows = rowsOf(doc).filter((r) => r.rowKey)
+    const premiums = rows.map((r) => r.values.annual_premium).filter(Boolean)
+    // Exactly as many premium amounts as the document's own extraction
+    // holds — an unattributed row is still a row with a real value in it.
+    const extractedPremiums = fixture.extractedFields.filter(
+      (f) => f.document_id === doc.id && f.field_key === 'annual_premium' && String(f.field_value ?? '').trim()
+    )
+    expect(premiums).toHaveLength(extractedPremiums.length)
+    expect(premiums.length).toBeGreaterThan(1)
+  })
+
+  it('still asks the same questions — the quality findings are untouched by the display change', () => {
+    const withFindingsArgument = buildQualityFindings({
+      documents: fixture.documents,
+      extractedFields: fixture.extractedFields,
+      fieldDefs: fixture.fieldDefs,
+      otherFindings: []
+    })
+    expect(withFindingsArgument).toEqual(findings)
+    // And no document in this case has an uncertain "other information"
+    // item, because the fixture predates the coverage check entirely.
+    expect(findings.filter((f) => f.kind === 'otherFindingNeedsReview')).toHaveLength(0)
+  })
+})

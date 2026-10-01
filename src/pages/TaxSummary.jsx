@@ -15,6 +15,7 @@ import { api } from '../lib/data'
 import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions } from '../lib/extraction'
 import { buildQualityFindings } from '../lib/extractionQuality'
+import OtherFindingsList from '../components/OtherFindingsList'
 import { formatDate, fullName } from '../lib/format'
 import { resolvePersonDisplayOrder } from '../lib/personOrder'
 import {
@@ -123,6 +124,9 @@ export default function TaxSummary() {
   // told about (api/case-assistant.js) can never disagree.
   const [fields, setFields] = useState([])
   const [rawFields, setRawFields] = useState([])
+  // "Other information found": what the documents hold that no whitelist
+  // field covers (document_other_findings — see src/lib/otherFindings.js).
+  const [otherFindings, setOtherFindings] = useState([])
   const [questionnaire, setQuestionnaire] = useState(null)
   const [childrenCount, setChildrenCount] = useState(0)
 
@@ -175,10 +179,12 @@ export default function TaxSummary() {
       setChildrenCount((questionnaireRow?.children || []).length)
       setQuestionnaire(questionnaireRow)
 
-      const extractedByDoc = await Promise.all(
-        categorized.map((d) => api.listExtractedFieldsForDocument(d.id))
-      )
+      const [extractedByDoc, findings] = await Promise.all([
+        Promise.all(categorized.map((d) => api.listExtractedFieldsForDocument(d.id))),
+        api.listOtherFindingsForDocuments(categorized.map((d) => d.id))
+      ])
       if (!active) return
+      setOtherFindings(findings)
 
       const flat = []
       const raw = []
@@ -200,36 +206,46 @@ export default function TaxSummary() {
     }
   }, [caseId])
 
+  const findingsByDoc = useMemo(() => groupBy(otherFindings, 'document_id'), [otherFindings])
+
+  // Built from the DOCUMENTS, not from the extracted fields: since a field
+  // the document doesn't mention no longer produces a row at all, a
+  // document can legitimately have no whitelist fields and still have
+  // something to show — its other findings. Keying off the fields would
+  // have made exactly that document disappear.
   const sections = useMemo(() => {
     return SECTIONS.map((section) => {
       const sectionCategories = categories
         .filter((c) => section.groups.includes(c.group_key))
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((category) => {
-          const categoryFields = fields.filter((f) => f.category_code === category.code)
-          if (!categoryFields.length) return null
-          const byDoc = groupBy(categoryFields, 'document_id')
-          return {
-            category,
-            documents: Object.entries(byDoc).map(([documentId, docFields]) => ({
-              documentId,
-              fileName: docFields[0].file_name,
-              fields: docFields
-            }))
-          }
+          const fieldsByDoc = groupBy(
+            fields.filter((f) => f.category_code === category.code),
+            'document_id'
+          )
+          const docGroups = documents
+            .filter((d) => d.category_code === category.code)
+            .map((doc) => {
+              const docFields = fieldsByDoc[doc.id] || []
+              const docFindings = findingsByDoc[doc.id] || []
+              if (!docFields.length && !docFindings.length) return null
+              return { documentId: doc.id, fileName: doc.file_name, fields: docFields, findings: docFindings }
+            })
+            .filter(Boolean)
+          return docGroups.length ? { category, documents: docGroups } : null
         })
         .filter(Boolean)
       return { ...section, categories: sectionCategories }
     }).filter((s) => s.categories.length)
-  }, [categories, fields])
+  }, [categories, documents, fields, findingsByDoc])
 
   // Open questions about the extracted data itself — whose row is this, was
   // a line read twice, is a row missing (src/lib/extractionQuality.js).
   // Recomputed from the current data on every render, never stored, so a
   // finding disappears the moment the specialist fixes what caused it.
   const qualityFindings = useMemo(
-    () => buildQualityFindings({ documents, extractedFields: rawFields, fieldDefs }),
-    [documents, rawFields, fieldDefs]
+    () => buildQualityFindings({ documents, extractedFields: rawFields, fieldDefs, otherFindings }),
+    [documents, rawFields, fieldDefs, otherFindings]
   )
 
   // Documents the extraction never finished on — a genuine gap in what this
@@ -304,6 +320,7 @@ export default function TaxSummary() {
     const categorized = docs.filter((d) => d.category_code)
     setDocuments(categorized)
     const extractedByDoc = await Promise.all(categorized.map((d) => api.listExtractedFieldsForDocument(d.id)))
+    setOtherFindings(await api.listOtherFindingsForDocuments(categorized.map((d) => d.id)))
     const allDefs = await api.listFieldDefinitions()
     setFieldDefs(allDefs)
     const flat = []
@@ -488,6 +505,24 @@ export default function TaxSummary() {
     })
   }
 
+  // A finding has no field_key/row_key of its own — it isn't a whitelist
+  // field — so it borrows the same identity shape viewSource expects, with
+  // its own id standing in for the field key.
+  const viewFindingSource = (finding) => {
+    const doc = allDocuments.find((d) => d.id === finding.document_id)
+    return viewSource({
+      document_id: finding.document_id,
+      field_key: finding.id,
+      row_key: '',
+      file_name: doc?.file_name || null,
+      source_quote: finding.source_quote,
+      source_page: finding.source_page,
+      isPdf: doc?.mime_type === 'application/pdf',
+      isText: doc?.mime_type === 'text/plain'
+    })
+  }
+  const findingViewKey = (finding) => `${finding.document_id}:${finding.id}:`
+
   const setFieldLayout = (layout) => {
     setFieldLayoutState(layout)
     storeFieldLayout(layout)
@@ -524,6 +559,12 @@ export default function TaxSummary() {
       })
     }
     if (finding.kind === 'legacyFormat') return t('summary.qualityLegacyFormat')
+    if (finding.kind === 'otherFindingNeedsReview') {
+      return t('summary.qualityOtherFindingNeedsReview', {
+        label: finding.detail?.label || '',
+        value: finding.detail?.value || ''
+      })
+    }
     return ''
   }
 
@@ -809,7 +850,7 @@ export default function TaxSummary() {
                             {retryingDocId === finding.documentId ? <Spinner size={13} /> : null}
                             {t('summary.reExtractDocument')}
                           </button>
-                        ) : (
+                        ) : finding.kind === 'otherFindingNeedsReview' ? null : (
                           <button
                             type="button"
                             className="btn-secondary btn-sm"
@@ -937,6 +978,17 @@ export default function TaxSummary() {
                                   </ul>
                                 </div>
                               ))}
+                              {docGroup.findings.length ? (
+                                <div className="p-2">
+                                  <OtherFindingsList
+                                    findings={docGroup.findings}
+                                    compact
+                                    viewingKey={viewingKey}
+                                    keyOf={findingViewKey}
+                                    onViewSource={viewFindingSource}
+                                  />
+                                </div>
+                              ) : null}
                             </div>
                           ) : (
                             <div key={docGroup.documentId} className="space-y-2 rounded-xl bg-sand/40 p-3">
@@ -990,6 +1042,12 @@ export default function TaxSummary() {
                                   </ul>
                                 </div>
                               ))}
+                              <OtherFindingsList
+                                findings={docGroup.findings}
+                                viewingKey={viewingKey}
+                                keyOf={findingViewKey}
+                                onViewSource={viewFindingSource}
+                              />
                             </div>
                           )
                         })}

@@ -436,6 +436,25 @@ export const supabaseApi = {
     )
   },
 
+  // "Other information found" — values a document holds that no whitelist
+  // field covers (document_other_findings, migration 46). Read-only here:
+  // they are written exclusively by api/extract-document.js and replaced
+  // wholesale whenever the document is re-extracted.
+  async listOtherFindingsForDocuments(documentIds) {
+    if (!documentIds?.length) return []
+    return unwrap(
+      await supabase
+        .from('document_other_findings')
+        .select('*')
+        .in('document_id', documentIds)
+        .order('created_at', { ascending: true })
+    )
+  },
+
+  async listOtherFindingsForDocument(documentId) {
+    return this.listOtherFindingsForDocuments([documentId])
+  },
+
   async saveExtractedFieldForDocument(documentId, payload) {
     return unwrap(
       await supabase

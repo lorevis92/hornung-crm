@@ -41,6 +41,36 @@ describe('buildCaseAssistantContext', () => {
     expect(context).toContain('Gross salary: 95000')
   })
 
+  it('tells the assistant about what a document says beyond the defined fields', () => {
+    const context = buildCaseAssistantContext({
+      ...baseArgs,
+      otherFindings: [
+        {
+          id: 'f-1',
+          document_id: 'doc-1',
+          label: 'Indennità di trasloco',
+          finding_value: '3200.00',
+          source_quote: 'Umzugsentschädigung CHF 3’200.00',
+          needs_review: false
+        },
+        {
+          id: 'f-2',
+          document_id: 'doc-1',
+          label: 'Importo non identificato',
+          finding_value: '450.00',
+          source_quote: 'Rif. 44-A 450.00',
+          needs_review: true
+        }
+      ]
+    })
+    expect(context).toContain('Other information found: Indennità di trasloco: 3200.00')
+    expect(context).toContain('Umzugsentschädigung CHF 3’200.00')
+    // An uncertain one is included too — nothing found is dropped — but it
+    // is never handed over as established fact.
+    expect(context).toContain('Importo non identificato: 450.00')
+    expect(context).toMatch(/UNCERTAIN/)
+  })
+
   it('never describes a taxable total or any other computed tax figure — this app computes none', () => {
     const context = buildCaseAssistantContext(baseArgs)
     expect(context).not.toMatch(/taxable income/i)
