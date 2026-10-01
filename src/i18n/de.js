@@ -627,6 +627,8 @@ export default {
     qualityOpenDocument: 'Dokument öffnen',
     qualityGoToData: 'Zu den Daten',
     rowUnidentified: 'Zeile nicht identifiziert',
+    qualityPossibleSameEntityProbable: 'Alles zu „{a}" und „{b}" stimmt überein, ohne zu beweisen, dass es dasselbe ist. In der Kategorieansicht klären:',
+    mergeSuggestProbable: 'Alles, was diese beiden Dokumente über „{a}" und „{b}" sagen, stimmt überein — beweist aber nicht, dass es dasselbe ist. Bitte prüfen.',
     qualityPossibleSameEntityMissing: 'Ein Eintrag sagt nicht, um welchen es sich handelt — es könnte „{identified}" sein. In der Kategorieansicht klären:',
     qualityPossibleSameEntitySimilar: 'Möglicherweise zweimal dasselbe — „{a}" und „{b}". In der Kategorieansicht klären:',
     mergeKeepSeparate: 'Nein, getrennt lassen',

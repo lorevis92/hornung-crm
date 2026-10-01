@@ -672,12 +672,17 @@ export default function TaxSummary() {
     }
     if (finding.kind === 'legacyFormat') return t('summary.qualityLegacyFormat')
     if (finding.kind === 'possibleSameEntity') {
-      return finding.detail?.reason === 'missingIdentifier'
-        ? t('summary.qualityPossibleSameEntityMissing', { identified: (finding.detail?.labels || []).find(Boolean) || '' })
-        : t('summary.qualityPossibleSameEntitySimilar', {
-            a: finding.detail?.labels?.[0] || '',
-            b: finding.detail?.labels?.[1] || ''
-          })
+      if (finding.detail?.reason === 'missingIdentifier') {
+        return t('summary.qualityPossibleSameEntityMissing', {
+          identified: (finding.detail?.labels || []).find(Boolean) || ''
+        })
+      }
+      return t(
+        finding.detail?.reason === 'probableIdentifier'
+          ? 'summary.qualityPossibleSameEntityProbable'
+          : 'summary.qualityPossibleSameEntitySimilar',
+        { a: finding.detail?.labels?.[0] || '', b: finding.detail?.labels?.[1] || '' }
+      )
     }
     if (finding.kind === 'otherFindingNeedsReview') {
       return t('summary.qualityOtherFindingNeedsReview', {

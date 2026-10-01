@@ -628,6 +628,8 @@ export default {
     qualityOpenDocument: 'Ouvrir le document',
     qualityGoToData: 'Aller aux données',
     rowUnidentified: 'Ligne non identifiée',
+    qualityPossibleSameEntityProbable: "Tout ce qui est indiqué sur « {a} » et « {b} » correspond, sans prouver qu'il s'agit du même. À résoudre dans la vue par catégorie de",
+    mergeSuggestProbable: "Tout ce que ces deux documents indiquent sur « {a} » et « {b} » correspond, sans pour autant prouver qu'il s'agit du même. À vérifier.",
     qualityPossibleSameEntityMissing: "Une entrée ne dit pas de laquelle il s'agit — il pourrait s'agir de « {identified} ». À résoudre dans la vue par catégorie de",
     qualityPossibleSameEntitySimilar: 'Peut-être la même chose écrite de deux façons — « {a} » et « {b} ». À résoudre dans la vue par catégorie de',
     mergeKeepSeparate: 'Non, garder séparés',

@@ -65,10 +65,12 @@ export default function CategoryEntityView({
                               identified: suggestion.labels.find(Boolean) || '',
                               documents: suggestion.documentIds.map(fileNameOf).filter(Boolean).join(', ')
                             })
-                          : t('summary.mergeSuggestSimilar', {
-                              a: suggestion.labels[0] || '',
-                              b: suggestion.labels[1] || ''
-                            })}
+                          : t(
+                              suggestion.reason === 'probableIdentifier'
+                                ? 'summary.mergeSuggestProbable'
+                                : 'summary.mergeSuggestSimilar',
+                              { a: suggestion.labels[0] || '', b: suggestion.labels[1] || '' }
+                            )}
                       </span>
                     </span>
                     <span className="flex shrink-0 flex-wrap items-center gap-2">

@@ -11,6 +11,8 @@
 //    questions only — never a taxable total or any other computed tax
 //    figure, which this app no longer produces at all.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { buildCategoryEntities, sortedPair } from '../src/lib/categoryEntities.js'
 import { buildCaseAssistantContext, parseAssistantMessage } from '../src/lib/caseAssistantContext.js'
 
 // ---------------------------------------------------------------------------
@@ -403,5 +405,121 @@ describe('api/case-assistant handler', () => {
       expect(res.statusCode).toBe(200)
       expect(anthropicCreateMock.mock.calls[0][0].model).toBe('claude-haiku-4-5-20251001')
     })
+  })
+})
+
+// The assistant must not hold its own opinion about how many things a case
+// has. The by-category view already answers that, by merging rows across
+// documents and by decisions a specialist made; a second count worked out
+// from the raw rows would simply contradict the screen the consultant is
+// looking at.
+describe('buildCaseAssistantContext — entities and merge decisions', () => {
+  const PROPERTY_DEFS = [
+    { category_code: 'property_tax_value', field_key: 'property_address', field_label: 'Address', sort_order: 10 },
+    { category_code: 'property_tax_value', field_key: 'tax_value', field_label: 'Tax value', sort_order: 20 },
+    { category_code: 'property_tax_value', field_key: 'maintenance_costs', field_label: 'Maintenance', sort_order: 30 }
+  ]
+  const PROPERTY_CATEGORIES = [{ code: 'property_tax_value', label_en: 'Property tax value', sort_order: 10 }]
+  const propertyDocs = [
+    { id: 'p1', file_name: '07_rendiconto.pdf', category_code: 'property_tax_value', status: 'extracted' },
+    { id: 'p2', file_name: '08_fatture.pdf', category_code: 'property_tax_value', status: 'extracted' }
+  ]
+  const propertyFields = [
+    { document_id: 'p1', field_key: 'property_address', row_key: '', field_value: 'Rue des Finettes 6, 1920 Martigny' },
+    { document_id: 'p1', field_key: 'tax_value', row_key: '', field_value: '395000.00' },
+    { document_id: 'p2', field_key: 'property_address', row_key: '', field_value: 'RUE DES FINETTES 6' },
+    { document_id: 'p2', field_key: 'maintenance_costs', row_key: '', field_value: '4550.00' }
+  ]
+
+  function contextFor(mergeDecisions) {
+    const { groups, suggestions } = buildCategoryEntities({
+      documents: propertyDocs,
+      extractedFields: propertyFields,
+      fieldDefs: PROPERTY_DEFS,
+      categories: PROPERTY_CATEGORIES,
+      mergeDecisions
+    })
+    return {
+      context: buildCaseAssistantContext({
+        client: { id: 'client-1', first_name: 'Giulia', last_name: 'Weber' },
+        caseRow: { tax_year: 2025, status: 'in_process' },
+        primaryPerson: { first_name: 'Giulia', last_name: 'Weber' },
+        children: [],
+        qualityFindings: [],
+        documents: propertyDocs,
+        extractedFields: propertyFields,
+        categories: PROPERTY_CATEGORIES,
+        fieldDefs: PROPERTY_DEFS,
+        categoryGroups: groups,
+        mergeSuggestions: suggestions
+      }),
+      groups,
+      suggestions
+    }
+  }
+
+  it('states the entity count as authoritative and tells the model not to recount', () => {
+    const { context } = contextFor([])
+    expect(context).toContain('HOW MANY OF EACH THING THIS CASE HAS')
+    expect(context).toMatch(/NEVER recount/)
+    expect(context).toContain('Property tax value: 2')
+  })
+
+  it('flags a still-undecided pair as undecided instead of taking a side', () => {
+    const { context, suggestions } = contextFor([])
+    expect(suggestions).toHaveLength(1)
+    expect(context).toContain('ENTITIES THAT MIGHT BE THE SAME THING')
+    expect(context).toContain('may be the same one')
+    expect(context).toMatch(/NO specialist has decided yet/)
+    expect(context).toMatch(/do not pick a side/)
+    // Both documents are named, so the consultant can be pointed at them.
+    expect(context).toContain('[[doc:p1|07_rendiconto.pdf]]')
+    expect(context).toContain('[[doc:p2|08_fatture.pdf]]')
+  })
+
+  it('reports one entity once the specialist has confirmed the merge, agreeing with the view', () => {
+    const { suggestions } = contextFor([])
+    const [a, b] = sortedPair(...suggestions[0].keys)
+    const { context, groups } = contextFor([
+      { category_code: 'property_tax_value', entity_key_a: a, entity_key_b: b, decision: 'merged' }
+    ])
+    // The view says one; so does the context.
+    expect(groups[0].entities).toHaveLength(1)
+    expect(context).toContain('Property tax value: 1')
+    expect(context).toMatch(/a specialist confirmed these documents describe the same one/)
+    // And there is nothing left to warn about.
+    expect(context).toContain('None — every entity above is either settled or genuinely separate.')
+  })
+
+  it('reports two entities and no warning once the specialist has said they are different', () => {
+    const { suggestions } = contextFor([])
+    const [a, b] = sortedPair(...suggestions[0].keys)
+    const { context } = contextFor([
+      { category_code: 'property_tax_value', entity_key_a: a, entity_key_b: b, decision: 'separate' }
+    ])
+    expect(context).toContain('Property tax value: 2')
+    expect(context).toContain('None — every entity above is either settled or genuinely separate.')
+    expect(context).not.toContain('may be the same one')
+  })
+
+  it('says which documents describe each entity, so an answer can point at them', () => {
+    const { context } = contextFor([])
+    expect(context).toMatch(/Rue des Finettes 6, 1920 Martigny — described by \[\[doc:p1\|07_rendiconto\.pdf\]\]/)
+  })
+})
+
+describe('the assistant prompt forbids a second opinion on the count', () => {
+  const source = readFileSync(new URL('../api/case-assistant.js', import.meta.url), 'utf8')
+
+  it('points the model at the authoritative section and nowhere else', () => {
+    expect(source).toMatch(/HOW MANY OF EACH THING THIS CASE HAS/)
+    expect(source).toMatch(/Never recount from the extracted rows/)
+    expect(source).toMatch(/ENTITIES THAT MIGHT BE THE SAME THING/)
+    expect(source).toMatch(/Do not decide it yourself/)
+  })
+
+  it('builds that section from the same grouping the screen uses, including the stored decisions', () => {
+    expect(source).toMatch(/buildCategoryEntities/)
+    expect(source).toMatch(/entity_merge_decisions/)
   })
 })

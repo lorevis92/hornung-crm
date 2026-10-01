@@ -14,9 +14,14 @@
 // equally bad — merging two different properties silently loses one, while
 // leaving one property as two rows is merely untidy and visible:
 //
-//   strong identifier, identical  -> merged automatically, no question
-//   strong identifier, similar    -> NOT merged; raised as a question
-//   no identifier at all          -> never merged with anything
+//   certain identifier, identical  -> merged automatically, no question
+//   certain identifier, similar    -> NOT merged; raised as a question
+//   probable identifier, identical -> NOT merged; raised as a question
+//   no identifier at all           -> never merged with anything
+//
+// And one invariant above all of them: two rows of the SAME document are
+// never merged. The extraction gave them separate row_keys because the
+// document describes two things; nothing downstream may overrule that.
 //
 // A specialist's answer to one of those questions is stored against the
 // derived entity key, not the row id (see migration 48 and entityKeyOf
@@ -26,32 +31,98 @@
 import { ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL, isRowBasedCategory } from './rowBasedFields.js'
 import { buildRowIdentityLabel } from './rowIdentity.js'
 
-// What makes two rows of a category CERTAINLY the same thing. Each entry is
-// a list of candidate field-key tuples, tried in order: the first tuple
-// whose every field has a value on the row becomes that row's identity.
+// Identity comes in two strengths, and the difference decides whether two
+// rows are merged or merely questioned.
 //
-// These are the identifiers the field dictionary actually provides today.
-// Several categories have none — a health-insurance premium row carries
-// only its amount, with the insurer stated once for the document — and
-// those simply never merge, which is the correct outcome rather than a
-// limitation to work around.
+//   certain  — this field (or tuple of fields) names ONE specific thing.
+//              An IBAN is one account. A mortgage contract number is one
+//              debt. An address is one property. Two rows agreeing on it
+//              are the same thing, and are merged with no question asked.
+//
+//   probable — this narrows it down without pinning it. Two different
+//              mortgages from the same bank can BOTH be written "Ipoteca":
+//              creditor + debt type is a strong hint and a bad proof, so it
+//              raises a question instead of merging. Same for a bank
+//              statement that gives an institution and an account type but
+//              no holder and no IBAN.
+//
+// Each tuple is tried in order; the first whose every field has a value on
+// the row wins. A row matching nothing at either strength has no identity
+// at all and never merges with anything — which is the correct outcome, not
+// a limitation to work around.
 export const ENTITY_IDENTIFIERS = {
-  // An IBAN or account number settles it outright; failing that, the
-  // institution plus the account type is what a statement actually prints.
-  bank_securities_crypto_statement: [['account_iban'], ['account_number'], ['institution_name', 'account_type']],
-  debt_certificate: [['creditor_name', 'debt_type']],
-  pillar_3a_certificate: [['policy_number'], ['institution_name', 'policyholder_name']],
-  property_tax_value: [['property_address']],
-  property_sale: [['property_address']],
-  rental_contract_zug: [['property_address']],
-  life_insurance_policy: [['policy_number'], ['insurer_name']],
-  health_insurance_policy: [['insured_person_name', 'policy_type']],
-  medical_costs: [['person_name']],
-  donation_certificate: [['recipient_organization']],
-  childcare_costs: [['child_name', 'provider_name']],
-  private_vehicle: [['description', 'purchase_year']],
-  self_employed_income_statement: [['business_name']],
-  pension_fund_statement: [['institution_name']]
+  bank_securities_crypto_statement: {
+    // An IBAN or an account number IS the account. Institution + the named
+    // holder is the next best thing a statement actually prints.
+    certain: [['account_iban'], ['account_number'], ['institution_name', 'account_holder_name']],
+    // Same bank, same kind of account, nobody named: probably the same
+    // account across two statements, possibly two accounts of one kind.
+    probable: [['institution_name', 'account_type']]
+  },
+  debt_certificate: {
+    // The contract number identifies the debt; the creditor and the type
+    // never did, which is why they were demoted here.
+    certain: [['contract_number'], ['creditor_name', 'contract_number']],
+    probable: [['creditor_name', 'debt_type']]
+  },
+  health_insurance_policy: {
+    // One insurer, one insured person, one kind of cover: one policy.
+    certain: [['insurer_name', 'insured_person_name', 'policy_type'], ['insurer_name', 'policy_number']],
+    probable: [['insurer_name', 'insured_person_name']]
+  },
+  pillar_3a_certificate: {
+    certain: [['institution_name', 'policy_number'], ['institution_name', 'policyholder_name']],
+    probable: [['institution_name']]
+  },
+  life_insurance_policy: {
+    certain: [['insurer_name', 'policy_number'], ['insurer_name', 'policyholder_name']],
+    probable: [['insurer_name']]
+  },
+  pension_fund_statement: {
+    certain: [['institution_name', 'insured_person_name']],
+    probable: [['institution_name']]
+  },
+  property_tax_value: { certain: [['property_address']], probable: [] },
+  property_sale: { certain: [['property_address']], probable: [] },
+  rental_contract_zug: { certain: [['property_address']], probable: [] },
+  medical_costs: { certain: [['person_name']], probable: [] },
+  donation_certificate: { certain: [['recipient_organization']], probable: [] },
+  childcare_costs: { certain: [['child_name', 'provider_name']], probable: [['child_name']] },
+  private_vehicle: { certain: [['description', 'purchase_year']], probable: [['description']] },
+  self_employed_income_statement: { certain: [['business_name']], probable: [] }
+}
+
+// Identifiers that are CODES, not prose. "CH93 0076 2011 6238 5295 7" and
+// "CH9300762011623852957" are one IBAN; "HYP-7781" and "HYP 7781" are one
+// contract. Collapsing their separators to a space (which is right for a
+// street name, where the gaps between words carry meaning) would make two
+// spellings of one account look like two accounts.
+const CODE_IDENTIFIER_FIELDS = new Set([
+  'account_iban',
+  'account_number',
+  'policy_number',
+  'contract_number'
+])
+
+function normalizeIdentifierPart(fieldKey, value) {
+  const normalized = normalizeIdentifier(value)
+  return CODE_IDENTIFIER_FIELDS.has(fieldKey) ? normalized.replace(/ /g, '') : normalized
+}
+
+function matchIdentifier(specs, fieldAt) {
+  for (const spec of specs || []) {
+    const values = spec.map((key) => fieldAt(key))
+    if (values.every((v) => v != null && String(v).trim())) {
+      return {
+        // What a human reads, kept verbatim from the document.
+        value: values.map((v) => String(v).trim()).join(' / '),
+        // What two rows are compared on — see CODE_IDENTIFIER_FIELDS.
+        normalized: spec.map((key, i) => normalizeIdentifierPart(key, values[i])).join(' / '),
+        fields: spec
+      }
+    }
+  }
+  return null
 }
 
 // Comparison form for an identifier: case, accents, punctuation and runs of
@@ -92,8 +163,9 @@ export function looksLikeSameIdentifier(a, b) {
 // falls back to its own document (and row), which is stable for a
 // document-level row and as stable as row_key for a repeated one — such a
 // row never merges automatically anyway.
-export function entityKeyOf({ categoryCode, identifier, documentId, rowKey }) {
-  if (identifier) return `${categoryCode}|id|${normalizeIdentifier(identifier)}`
+export function entityKeyOf({ categoryCode, identifier, normalizedIdentifier, documentId, rowKey }) {
+  const comparable = normalizedIdentifier ?? (identifier ? normalizeIdentifier(identifier) : null)
+  if (comparable) return `${categoryCode}|id|${comparable}`
   return `${categoryCode}|doc|${documentId}|row|${rowKey || ROW_KEY_DOCUMENT_LEVEL}`
 }
 
@@ -182,21 +254,16 @@ function buildRows({ documents, extractedFields, fieldDefs }) {
       const inherited = rowKey === ROW_KEY_DOCUMENT_LEVEL ? [] : documentLevel
       const fieldAt = (key) => valueAt(own, key) ?? valueAt(inherited, key)
 
-      const identifierSpecs = ENTITY_IDENTIFIERS[categoryCode] || []
-      let identifier = null
-      let identifierFields = null
-      for (const spec of identifierSpecs) {
-        const values = spec.map((key) => fieldAt(key))
-        if (values.every((v) => v != null && String(v).trim())) {
-          identifier = values.map((v) => String(v).trim()).join(' / ')
-          identifierFields = spec
-          break
-        }
-      }
+      const specs = ENTITY_IDENTIFIERS[categoryCode] || {}
+      const certain = matchIdentifier(specs.certain, fieldAt)
+      // Only looked for when nothing certain matched: a row that knows
+      // exactly what it is has no use for a weaker hint.
+      const probable = certain ? null : matchIdentifier(specs.probable, fieldAt)
 
       const label =
         buildRowIdentityLabel({ categoryCode, fieldAt }) ||
-        identifier ||
+        certain?.value ||
+        probable?.value ||
         null
 
       rows.push({
@@ -204,10 +271,22 @@ function buildRows({ documents, extractedFields, fieldDefs }) {
         documentId: doc.id,
         fileName: doc.file_name,
         rowKey,
-        identifier,
-        identifierFields,
+        identifier: certain?.value || null,
+        normalizedIdentifier: certain?.normalized || null,
+        identifierFields: certain?.fields || null,
+        // Deliberately NOT part of the key: a probable identifier must
+        // never cause an automatic merge, only a question.
+        probableIdentifier: probable?.value || null,
+        normalizedProbableIdentifier: probable?.normalized || null,
+        probableIdentifierFields: probable?.fields || null,
         label,
-        key: entityKeyOf({ categoryCode, identifier, documentId: doc.id, rowKey }),
+        key: entityKeyOf({
+          categoryCode,
+          identifier: certain?.value || null,
+          normalizedIdentifier: certain?.normalized || null,
+          documentId: doc.id,
+          rowKey
+        }),
         fields: own,
         inheritedFields: inherited,
         defs: defsByCategory[categoryCode] || []
@@ -279,7 +358,38 @@ export function buildCategoryEntities({
     decisionByPair.set(pairKey(decision.entity_key_a, decision.entity_key_b), decision.decision)
   }
 
-  // 1. Rows sharing a key are the same thing by their own identifier.
+  // 1. Rows sharing a certain key are the same thing by their own
+  //    identifier — with one exception. If a single document contributes
+  //    two rows under the same certain key, that identifier evidently does
+  //    not tell things apart even within one file (a 3a certificate naming
+  //    one policy number above two separate contributions), so it cannot be
+  //    trusted across files either. Those rows fall back to their own
+  //    document-and-row key and merge with nothing.
+  const rowsByCertainKey = new Map()
+  for (const row of rows) {
+    if (!row.identifier) continue
+    if (!rowsByCertainKey.has(row.key)) rowsByCertainKey.set(row.key, [])
+    rowsByCertainKey.get(row.key).push(row)
+  }
+  for (const [key, group] of rowsByCertainKey.entries()) {
+    const perDocument = new Map()
+    for (const row of group) perDocument.set(row.documentId, (perDocument.get(row.documentId) || 0) + 1)
+    if ([...perDocument.values()].every((n) => n <= 1)) continue
+    for (const row of group) {
+      row.ambiguousIdentifier = row.identifier
+      row.identifier = null
+      row.normalizedIdentifier = null
+      row.key = entityKeyOf({
+        categoryCode: row.categoryCode,
+        identifier: null,
+        normalizedIdentifier: null,
+        documentId: row.documentId,
+        rowKey: row.rowKey
+      })
+    }
+    void key
+  }
+
   const uf = makeUnionFind()
   for (const row of rows) uf.find(row.key)
 
@@ -313,6 +423,11 @@ export function buildCategoryEntities({
       label: members.find((m) => m.label)?.label || null,
       identified,
       identifier: members.find((m) => m.identifier)?.identifier || null,
+      // What narrows this entity down without pinning it — the only thing
+      // that can raise a "probably the same" question about it.
+      probableIdentifier: members.find((m) => m.probableIdentifier)?.probableIdentifier || null,
+      normalizedProbableIdentifier:
+        members.find((m) => m.normalizedProbableIdentifier)?.normalizedProbableIdentifier || null,
       memberKeys,
       members: members.map((m) => ({ documentId: m.documentId, fileName: m.fileName, rowKey: m.rowKey })),
       documentIds,
@@ -342,6 +457,15 @@ export function buildCategoryEntities({
         let reason = null
         if (a.identifier && b.identifier) {
           if (looksLikeSameIdentifier(a.identifier, b.identifier)) reason = 'similarIdentifier'
+        } else if (
+          a.normalizedProbableIdentifier &&
+          b.normalizedProbableIdentifier &&
+          a.normalizedProbableIdentifier === b.normalizedProbableIdentifier
+        ) {
+          // Same creditor and same debt type, same bank and same account
+          // type: everything the documents say matches, and none of it
+          // proves anything. Exactly the case that used to merge silently.
+          reason = 'probableIdentifier'
         } else if (identifiedEntities.length === 1) {
           // One side says nothing about what it is, and there is exactly
           // one candidate it could belong to. With two or more candidates

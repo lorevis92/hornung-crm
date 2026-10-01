@@ -33,6 +33,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
 import { buildCaseAssistantContext } from '../src/lib/caseAssistantContext.js'
 import { buildQualityFindings } from '../src/lib/extractionQuality.js'
+import { buildCategoryEntities, suggestionsAsQualityFindings } from '../src/lib/categoryEntities.js'
 import { resolveModel } from '../src/lib/aiModels.js'
 
 // A specialist's choice on the Tax settings "AI" tab (ai_model_settings,
@@ -65,6 +66,8 @@ Rules:
 - A question about Swiss tax law in general (not about this case's data) may be answered from your own general knowledge, but you must clearly say it is general information to be verified — never present it as a fact about this case or its documents.
 - A document's data comes in two forms and both are real: the defined fields of its category, and lines marked "Other information found" — things the document says that no defined field covers. Use both when answering, and never treat an "other information" line as less reliable just because it has no field name. One marked UNCERTAIN is the exception: report it as what the document appears to say, and say it still needs confirming.
 - The absence of a field means only that the document does not state it. Never describe it as missing data, a gap, or something the client failed to provide.
+- "How many accounts / properties / mortgages does this client have" is answered ONLY by the "HOW MANY OF EACH THING THIS CASE HAS" section. It already merges rows from different documents that describe the same real-world thing, including merges a specialist confirmed by hand. Never recount from the extracted rows and never give a number that disagrees with it.
+- When something appears under "ENTITIES THAT MIGHT BE THE SAME THING", say exactly that: two rows that might be one thing, not yet confirmed. Do not decide it yourself and do not present either reading as the answer.
 - You can only answer questions. You have no ability to change any data or take any action — never claim otherwise.
 - Be concise and concrete: point at the exact document, row and value, not a vague description.
 
@@ -116,18 +119,24 @@ export default async function handler(req, res) {
     const documents = documentsRes.data || []
     const documentIds = documents.map((d) => d.id)
 
-    const [extractedFieldsRes, otherFindingsRes, categoriesRes, fieldDefsRes] = await Promise.all([
+    const [extractedFieldsRes, otherFindingsRes, mergeDecisionsRes, categoriesRes, fieldDefsRes] = await Promise.all([
       documentIds.length
         ? admin.from('extracted_document_fields').select('*').in('document_id', documentIds)
         : Promise.resolve({ data: [] }),
       documentIds.length
         ? admin.from('document_other_findings').select('*').in('document_id', documentIds)
         : Promise.resolve({ data: [] }),
+      admin
+        .from('entity_merge_decisions')
+        .select('*')
+        .eq('client_id', caseRow.client_id)
+        .eq('tax_year', caseRow.tax_year),
       admin.from('document_categories').select('code, group_key, label_en, label_de, label_fr, label_it'),
       admin.from('category_field_definitions').select('category_code, field_key, field_label')
     ])
     if (extractedFieldsRes.error) throw extractedFieldsRes.error
     if (otherFindingsRes.error) throw otherFindingsRes.error
+    if (mergeDecisionsRes.error) throw mergeDecisionsRes.error
     if (categoriesRes.error) throw categoriesRes.error
     if (fieldDefsRes.error) throw fieldDefsRes.error
 
@@ -138,12 +147,26 @@ export default async function handler(req, res) {
     // The same findings Tax Summary shows the specialist — computed here
     // rather than read from a table, so the assistant can never describe a
     // question as open after it has actually been resolved.
-    const qualityFindings = buildQualityFindings({
+    // The SAME grouping Tax Summary's by-category view shows, including
+    // the merges a specialist confirmed — so the assistant can never
+    // disagree with the screen about how many things this case has.
+    const { groups: categoryGroups, suggestions: mergeSuggestions } = buildCategoryEntities({
       documents,
       extractedFields,
       fieldDefs: fieldDefsRes.data || [],
-      otherFindings
+      categories: categoriesRes.data || [],
+      mergeDecisions: mergeDecisionsRes.data || []
     })
+
+    const qualityFindings = [
+      ...buildQualityFindings({
+        documents,
+        extractedFields,
+        fieldDefs: fieldDefsRes.data || [],
+        otherFindings
+      }),
+      ...suggestionsAsQualityFindings(mergeSuggestions, documents)
+    ]
 
     const context = buildCaseAssistantContext({
       client,
@@ -156,6 +179,8 @@ export default async function handler(req, res) {
       categories: categoriesRes.data || [],
       fieldDefs: fieldDefsRes.data || [],
       otherFindings,
+      categoryGroups,
+      mergeSuggestions,
       qualityFindings
     })
 

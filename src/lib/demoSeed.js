@@ -105,12 +105,16 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'childcare_costs', field_key: 'annual_amount', field_label: 'Annual amount', value_type: 'numeric', sort_order: 30 },
   { category_code: 'childcare_costs', field_key: 'subsidy_amount', field_label: 'Subsidy/contribution received', value_type: 'numeric', sort_order: 35 },
 
+  // The one thing that identifies a specific debt: two different mortgages from the
+  // same bank can both be written "Ipoteca", so creditor + type is never enough.
+  { category_code: 'debt_certificate', field_key: 'contract_number', field_label: 'Contract / mortgage number', value_type: 'text', sort_order: 5 },
   { category_code: 'debt_certificate', field_key: 'creditor_name', field_label: 'Creditor name', value_type: 'text', sort_order: 10 },
   { category_code: 'debt_certificate', field_key: 'debt_type', field_label: 'Debt type', value_type: 'text', sort_order: 20 },
   { category_code: 'debt_certificate', field_key: 'debt_balance', field_label: 'Debt balance', value_type: 'numeric', sort_order: 30 },
   { category_code: 'debt_certificate', field_key: 'annual_interest_paid', field_label: 'Annual interest paid', value_type: 'numeric', sort_order: 40 },
   { category_code: 'debt_certificate', field_key: 'annual_amortization', field_label: 'Annual amortization (principal repayment)', value_type: 'numeric', sort_order: 50 },
 
+  { category_code: 'pillar_3a_certificate', field_key: 'policyholder_name', field_label: 'Policyholder name', value_type: 'text', sort_order: 5 },
   { category_code: 'pillar_3a_certificate', field_key: 'institution_name', field_label: 'Institution name', value_type: 'text', sort_order: 10 },
   { category_code: 'pillar_3a_certificate', field_key: 'policy_number', field_label: 'Policy number', value_type: 'text', sort_order: 20 },
   { category_code: 'pillar_3a_certificate', field_key: 'annual_contribution', field_label: 'Annual contribution', value_type: 'numeric', sort_order: 30 },
@@ -118,7 +122,13 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'health_insurance_policy', field_key: 'insurer_name', field_label: 'Insurer name', value_type: 'text', sort_order: 10 },
   { category_code: 'health_insurance_policy', field_key: 'insured_persons_count', field_label: 'Insured persons count', value_type: 'numeric', sort_order: 20 },
   { category_code: 'health_insurance_policy', field_key: 'annual_premium', field_label: 'Annual premium', value_type: 'numeric', sort_order: 30 },
+  // Whose premium, and for which cover — a family statement lists one premium per
+  // person per policy type, and without these a row is just an amount.
+  { category_code: 'health_insurance_policy', field_key: 'insured_person_name', field_label: 'Insured person', value_type: 'text', sort_order: 45 },
+  { category_code: 'health_insurance_policy', field_key: 'policy_type', field_label: 'Policy type (basic LAMal/KVG or supplementary LCA/VVG)', value_type: 'text', sort_order: 46 },
+  { category_code: 'health_insurance_policy', field_key: 'policy_number', field_label: 'Policy number', value_type: 'text', sort_order: 47 },
 
+  { category_code: 'medical_costs', field_key: 'person_name', field_label: 'Person the expense belongs to', value_type: 'text', sort_order: 5 },
   { category_code: 'medical_costs', field_key: 'description', field_label: 'Description', value_type: 'text', sort_order: 10 },
   { category_code: 'medical_costs', field_key: 'insurance_reimbursement', field_label: 'Insurance reimbursement received', value_type: 'numeric', sort_order: 15 },
   { category_code: 'medical_costs', field_key: 'total_amount', field_label: 'Total amount', value_type: 'numeric', sort_order: 20 },
@@ -137,7 +147,15 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'bank_securities_crypto_statement', field_key: 'account_balance_31_12', field_label: 'Account balance (31.12)', value_type: 'numeric', sort_order: 30 },
   { category_code: 'bank_securities_crypto_statement', field_key: 'interest_income', field_label: 'Interest income', value_type: 'numeric', sort_order: 40 },
   { category_code: 'bank_securities_crypto_statement', field_key: 'dividend_income', field_label: 'Dividend income', value_type: 'numeric', sort_order: 50 },
+  // Identity of ONE account on a statement that lists several (migrations 37 and 49):
+  // the holder and the IBAN are what tell two accounts apart, since the institution
+  // name is the same for every account on the same statement. account_number covers a
+  // foreign broker or crypto account, which has no IBAN.
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_holder_name', field_label: 'Account holder name', value_type: 'text', sort_order: 45 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_iban', field_label: 'Account IBAN', value_type: 'text', sort_order: 46 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_number', field_label: 'Account number (when there is no IBAN)', value_type: 'text', sort_order: 47 },
 
+  { category_code: 'pension_fund_statement', field_key: 'insured_person_name', field_label: 'Insured person', value_type: 'text', sort_order: 5 },
   { category_code: 'pension_fund_statement', field_key: 'institution_name', field_label: 'Institution name', value_type: 'text', sort_order: 10 },
   { category_code: 'pension_fund_statement', field_key: 'accumulated_capital', field_label: 'Accumulated capital', value_type: 'numeric', sort_order: 20 },
 
@@ -162,6 +180,8 @@ export const CATEGORY_FIELD_DEFINITIONS = [
   { category_code: 'pension_capital_withdrawal', field_key: 'gross_amount', field_label: 'Gross amount', value_type: 'numeric', sort_order: 20 },
   { category_code: 'pension_capital_withdrawal', field_key: 'date_received', field_label: 'Date received', value_type: 'date', sort_order: 30 },
 
+  { category_code: 'life_insurance_policy', field_key: 'policyholder_name', field_label: 'Policyholder name', value_type: 'text', sort_order: 5 },
+  { category_code: 'life_insurance_policy', field_key: 'policy_number', field_label: 'Policy number', value_type: 'text', sort_order: 6 },
   { category_code: 'life_insurance_policy', field_key: 'insurer_name', field_label: 'Insurer name', value_type: 'text', sort_order: 10 },
   { category_code: 'life_insurance_policy', field_key: 'surrender_value', field_label: 'Surrender value (31.12)', value_type: 'numeric', sort_order: 20 },
   { category_code: 'life_insurance_policy', field_key: 'annual_premium', field_label: 'Annual premium', value_type: 'numeric', sort_order: 30 },

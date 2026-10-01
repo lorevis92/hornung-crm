@@ -47,6 +47,12 @@ function groupFieldsByRow(fields, fieldLabelByKey, categoryCode) {
 //   that no whitelist field covers (src/lib/otherFindings.js). Included so
 //   the assistant can answer from what a document ACTUALLY says, not only
 //   from what the schema anticipated.
+// categoryGroups/mergeSuggestions: buildCategoryEntities(...) output
+//   (src/lib/categoryEntities.js) — HOW MANY real-world things this case
+//   has and which documents describe each, including the merges a
+//   specialist confirmed. The assistant must answer "how many properties"
+//   from this and never by counting raw rows, or it would contradict the
+//   screen the consultant is looking at.
 // qualityFindings: buildQualityFindings(...) output (src/lib/extractionQuality.js)
 //   — the open questions about the extracted data, the same ones Tax
 //   Summary shows the specialist.
@@ -62,6 +68,8 @@ export function buildCaseAssistantContext({
   categories,
   fieldDefs,
   otherFindings,
+  categoryGroups,
+  mergeSuggestions,
   qualityFindings
 }) {
   const categoryByCode = Object.fromEntries((categories || []).map((c) => [c.code, c]))
@@ -131,6 +139,72 @@ export function buildCaseAssistantContext({
           (finding.needs_review ? ' — UNCERTAIN, flagged for a specialist to confirm' : '')
       )
     }
+  }
+  lines.push('')
+
+  // Counting entities is the one thing the assistant must NOT work out for
+  // itself: the screen already has an answer, arrived at by merging rows
+  // across documents and by decisions a specialist made, and a second
+  // opinion computed from raw rows would simply contradict it.
+  lines.push('=== HOW MANY OF EACH THING THIS CASE HAS (authoritative) ===')
+  lines.push(
+    'This is the definitive answer to "how many accounts / properties / mortgages does this client ' +
+      "have\", as shown in Tax Summary's by-category view. Rows from different documents describing " +
+      'the same real-world thing are already merged here — either because they share an identifier ' +
+      'that settles it, or because a specialist confirmed it. NEVER recount by listing the extracted ' +
+      'rows yourself, and never give a number that disagrees with this section.'
+  )
+  if (!categoryGroups?.length) {
+    lines.push('Nothing extracted yet, so there is nothing to count.')
+  }
+  for (const group of categoryGroups || []) {
+    const category = categoryByCode[group.categoryCode]
+    lines.push(`${category?.label_en || group.categoryCode}: ${group.entities.length}`)
+    for (const entity of group.entities) {
+      const docs = entity.members
+        .map((m) => `[[doc:${m.documentId}|${m.fileName}]]`)
+        .filter((ref, i, all) => all.indexOf(ref) === i)
+        .join(', ')
+      const how =
+        entity.mergedBy === 'decision'
+          ? ' (one thing: a specialist confirmed these documents describe the same one)'
+          : entity.mergedBy === 'identifier'
+            ? ' (one thing: the documents agree on an identifier that settles it)'
+            : ''
+      lines.push(`  - ${entity.label || 'not identified'} — described by ${docs}${how}`)
+    }
+  }
+  lines.push('')
+
+  // The counts above are only trustworthy if the open questions about them
+  // are stated too: a pending suggestion means the number could still
+  // change, and saying so is more useful than picking a side.
+  lines.push('=== ENTITIES THAT MIGHT BE THE SAME THING (not yet decided) ===')
+  if (!mergeSuggestions?.length) {
+    lines.push('None — every entity above is either settled or genuinely separate.')
+  }
+  for (const suggestion of mergeSuggestions || []) {
+    const category = categoryByCode[suggestion.categoryCode]
+    const docs = suggestion.documentIds
+      .map((id) => {
+        const doc = (documents || []).find((d) => d.id === id)
+        return doc ? `[[doc:${doc.id}|${doc.file_name}]]` : null
+      })
+      .filter(Boolean)
+      .join(', ')
+    lines.push(
+      `  ${category?.label_en || suggestion.categoryCode}: "${suggestion.labels[0] || 'not identified'}" and ` +
+        `"${suggestion.labels[1] || 'not identified'}" (${docs}) may be the same one — ` +
+        `${
+          suggestion.reason === 'similarIdentifier'
+            ? 'the same identifier written two different ways'
+            : suggestion.reason === 'probableIdentifier'
+              ? 'everything the documents state about them matches, but none of it is specific enough to prove it'
+              : 'one of them says nothing about which one it is'
+        }. NO specialist has decided yet. They are counted SEPARATELY above. If asked about them, say ` +
+        'plainly that there are two rows that might be one thing and that it has not been confirmed — ' +
+        'do not pick a side.'
+    )
   }
   lines.push('')
 

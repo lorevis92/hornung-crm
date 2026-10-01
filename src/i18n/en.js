@@ -628,6 +628,8 @@ export default {
     qualityOpenDocument: 'Open document',
     qualityGoToData: 'Go to the data',
     rowUnidentified: 'Row not identified',
+    qualityPossibleSameEntityProbable: 'Everything stated about «{a}» and «{b}» matches, without proving they are the same one. Resolve it in the by-category view of',
+    mergeSuggestProbable: 'Everything these two documents state about «{a}» and «{b}» matches, but none of it proves they are the same one. Please check.',
     qualityPossibleSameEntityMissing: 'An entry says nothing about which one it is — it could be «{identified}». Resolve it in the by-category view of',
     qualityPossibleSameEntitySimilar: 'Possibly the same thing written two ways — «{a}» and «{b}». Resolve it in the by-category view of',
     mergeKeepSeparate: 'No, keep separate',

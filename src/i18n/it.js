@@ -626,6 +626,8 @@ export default {
     qualityOpenDocument: 'Apri il documento',
     qualityGoToData: 'Vai ai dati',
     rowUnidentified: 'Riga non identificata',
+    qualityPossibleSameEntityProbable: 'Tutto ciò che è indicato su «{a}» e «{b}» coincide, senza provare che siano lo stesso. Risolvilo nella vista per categoria di',
+    mergeSuggestProbable: 'Tutto ciò che questi due documenti dicono su «{a}» e «{b}» coincide, ma non prova che siano lo stesso. Da verificare.',
     qualityPossibleSameEntityMissing: 'Una voce non dice di quale si tratta — potrebbe essere «{identified}». Risolvilo nella vista per categoria di',
     qualityPossibleSameEntitySimilar: 'Forse la stessa cosa scritta in due modi — «{a}» e «{b}». Risolvilo nella vista per categoria di',
     mergeKeepSeparate: 'No, tienili separati',

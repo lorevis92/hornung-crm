@@ -214,7 +214,22 @@ export async function runExtraction(
         'share the same row_key, and a second account\'s own holder/institution/type/IBAN share a ' +
         'different row_key. A field that describes the document as a whole, not any one row (e.g. a ' +
         'single reporting currency for the whole statement), uses row_key "". Never combine two ' +
-        'distinct rows into one, and never split one row across two row_keys.'
+        'distinct rows into one, and never split one row across two row_keys.' +
+        // The identity fields are what everything else depends on: a balance
+        // nobody can attribute is not usable, and two statements can only be
+        // recognised as describing the same account if both state what
+        // identifies it (see src/lib/categoryEntities.js). The field list
+        // above does not say which fields those are — this does.
+        (identityFields.length
+          ? '\n\nThe most important fields to get right are the ones that say WHOSE row it is or ' +
+            `WHICH one it is: ${identityFields.join(', ')}. Extract them whenever the document states ` +
+            'them anywhere that applies to the row — including when the same value applies to several ' +
+            'rows, and including a value printed once in a header or a column title instead of being ' +
+            'repeated on every line. Prefer the most specific one available: an IBAN, account number, ' +
+            'policy number or contract number over a name, and a name over a generic type. Never ' +
+            'invent one — a row whose identity the document does not state must come back without it, ' +
+            'and will be flagged for a human to resolve.'
+          : '')
       : ''
 
     const extractMessage = await anthropic.messages.create({

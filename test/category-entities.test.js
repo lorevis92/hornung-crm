@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
+  ENTITY_IDENTIFIERS,
   buildCategoryEntities,
   entityKeyOf,
   looksLikeSameIdentifier,
@@ -17,6 +18,8 @@ import {
   sortedPair,
   suggestionsAsQualityFindings
 } from '../src/lib/categoryEntities.js'
+import { ROW_IDENTITY_FIELDS } from '../src/lib/rowBasedFields.js'
+import { CATEGORY_FIELD_DEFINITIONS } from '../src/lib/demoSeed.js'
 
 const PROPERTY_DEFS = [
   { category_code: 'property_tax_value', field_key: 'property_address', field_label: 'Address', sort_order: 10 },
@@ -259,6 +262,274 @@ describe('the identifier helpers', () => {
     expect(
       entityKeyOf({ categoryCode: 'property_tax_value', identifier: null, documentId: 'd4', rowKey: '' })
     ).toBe('property_tax_value|doc|d4|row|')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Identity strength: what merges on its own, and what only ever asks.
+// ---------------------------------------------------------------------------
+const BANK_DEFS = [
+  { category_code: 'bank_securities_crypto_statement', field_key: 'institution_name', field_label: 'Institution', sort_order: 10 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_type', field_label: 'Account type', sort_order: 20 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_balance_31_12', field_label: 'Balance', sort_order: 30 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'interest_income', field_label: 'Interest', sort_order: 40 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_holder_name', field_label: 'Holder', sort_order: 45 },
+  { category_code: 'bank_securities_crypto_statement', field_key: 'account_iban', field_label: 'IBAN', sort_order: 46 }
+]
+const HEALTH_DEFS = [
+  { category_code: 'health_insurance_policy', field_key: 'insurer_name', field_label: 'Insurer', sort_order: 10 },
+  { category_code: 'health_insurance_policy', field_key: 'annual_premium', field_label: 'Premium', sort_order: 30 },
+  { category_code: 'health_insurance_policy', field_key: 'insured_person_name', field_label: 'Insured person', sort_order: 45 },
+  { category_code: 'health_insurance_policy', field_key: 'policy_type', field_label: 'Policy type', sort_order: 46 }
+]
+const DEBT_DEFS = [
+  { category_code: 'debt_certificate', field_key: 'contract_number', field_label: 'Contract number', sort_order: 5 },
+  { category_code: 'debt_certificate', field_key: 'creditor_name', field_label: 'Creditor', sort_order: 10 },
+  { category_code: 'debt_certificate', field_key: 'debt_type', field_label: 'Debt type', sort_order: 20 },
+  { category_code: 'debt_certificate', field_key: 'debt_balance', field_label: 'Balance', sort_order: 30 }
+]
+
+function buildFor(categoryCode, defs, documents, extractedFields, mergeDecisions = []) {
+  return buildCategoryEntities({
+    documents,
+    extractedFields,
+    fieldDefs: defs,
+    categories: [{ code: categoryCode, label_en: categoryCode, sort_order: 10 }],
+    mergeDecisions
+  })
+}
+
+describe('the identity fields the dictionary now provides are the ones the merge logic uses', () => {
+  it('treats an IBAN, an account number or institution+holder as certain for a bank account', () => {
+    const { certain, probable } = ENTITY_IDENTIFIERS.bank_securities_crypto_statement
+    expect(certain).toContainEqual(['account_iban'])
+    expect(certain).toContainEqual(['account_number'])
+    expect(certain).toContainEqual(['institution_name', 'account_holder_name'])
+    // Institution + account type is a hint, not a proof.
+    expect(probable).toContainEqual(['institution_name', 'account_type'])
+    expect(certain).not.toContainEqual(['institution_name', 'account_type'])
+  })
+
+  it('treats insurer + insured person + policy type as certain for a premium', () => {
+    const { certain } = ENTITY_IDENTIFIERS.health_insurance_policy
+    expect(certain).toContainEqual(['insurer_name', 'insured_person_name', 'policy_type'])
+  })
+
+  it('no longer treats creditor + debt type as certain for a debt', () => {
+    const { certain, probable } = ENTITY_IDENTIFIERS.debt_certificate
+    expect(certain).not.toContainEqual(['creditor_name', 'debt_type'])
+    expect(probable).toContainEqual(['creditor_name', 'debt_type'])
+    // What identifies a specific debt instead.
+    expect(certain).toContainEqual(['contract_number'])
+  })
+
+  it('names those same fields to the extraction, so documents can be read into them at all', () => {
+    // The prompt lists the field dictionary dynamically, but WHICH fields
+    // are a row's identity is a separate statement it has to make —
+    // api/extract-document.js builds that from this map.
+    const bank = ROW_IDENTITY_FIELDS.bank_securities_crypto_statement
+    expect(bank).toContain('account_iban')
+    expect(bank).toContain('account_holder_name')
+    expect(bank).toContain('account_number')
+    expect(ROW_IDENTITY_FIELDS.health_insurance_policy).toContain('insured_person_name')
+    expect(ROW_IDENTITY_FIELDS.health_insurance_policy).toContain('policy_type')
+    expect(ROW_IDENTITY_FIELDS.debt_certificate).toContain('contract_number')
+    expect(ROW_IDENTITY_FIELDS.pension_fund_statement).toContain('insured_person_name')
+    expect(ROW_IDENTITY_FIELDS.life_insurance_policy).toContain('policyholder_name')
+
+    const extractionSource = readFileSync(new URL('../api/extract-document.js', import.meta.url), 'utf8')
+    expect(extractionSource).toMatch(/identityFields\.join/)
+    expect(extractionSource).toMatch(/most important fields to get right/)
+  })
+
+  it('has every identity field it relies on in the shipped dictionary, not just in the merge map', () => {
+    // The gap this round closed: the merge logic named fields that
+    // category_field_definitions did not have, so they were never
+    // extracted and never merged anything. Checked against the demo seed,
+    // which mirrors the migrations.
+    const seeded = new Set(CATEGORY_FIELD_DEFINITIONS.map((d) => `${d.category_code}:${d.field_key}`))
+    const missing = []
+    for (const [categoryCode, specs] of Object.entries(ENTITY_IDENTIFIERS)) {
+      for (const spec of [...(specs.certain || []), ...(specs.probable || [])]) {
+        for (const fieldKey of spec) {
+          if (!seeded.has(`${categoryCode}:${fieldKey}`)) missing.push(`${categoryCode}.${fieldKey}`)
+        }
+      }
+    }
+    expect(missing).toEqual([])
+  })
+})
+
+describe('a bank account across two statements', () => {
+  const documents = [
+    doc('b1', 'estratto-2025.pdf', 'bank_securities_crypto_statement'),
+    doc('b2', 'titoli-2025.pdf', 'bank_securities_crypto_statement')
+  ]
+
+  it('merges as a certain identity when both statements give the same IBAN', () => {
+    const fields = [
+      field('b1', 'institution_name', 'Banque du Leman'),
+      field('b1', 'account_iban', 'CH93 0076 2011 6238 5295 7'),
+      field('b1', 'account_balance_31_12', '12400.00'),
+      field('b2', 'institution_name', 'BANQUE DU LEMAN'),
+      // The same IBAN, spaced differently — one account.
+      field('b2', 'account_iban', 'CH9300762011623852957'),
+      field('b2', 'interest_income', '64.50')
+    ]
+    const { groups, suggestions } = buildFor('bank_securities_crypto_statement', BANK_DEFS, documents, fields)
+    expect(groups[0].entities).toHaveLength(1)
+    expect(groups[0].entities[0].mergedBy).toBe('identifier')
+    expect(suggestions).toEqual([])
+  })
+
+  it('only asks when there is no IBAN and no holder, just the same institution and account type', () => {
+    const fields = [
+      field('b1', 'institution_name', 'Banque du Leman'),
+      field('b1', 'account_type', 'Conto risparmio'),
+      field('b1', 'account_balance_31_12', '12400.00'),
+      field('b2', 'institution_name', 'Banque du Leman'),
+      field('b2', 'account_type', 'Conto risparmio'),
+      field('b2', 'account_balance_31_12', '5980.20')
+    ]
+    const { groups, suggestions } = buildFor('bank_securities_crypto_statement', BANK_DEFS, documents, fields)
+    // Either one account read from two statements, or two accounts of the
+    // same kind. Not something to settle automatically.
+    expect(groups[0].entities).toHaveLength(2)
+    expect(suggestions).toHaveLength(1)
+    expect(suggestions[0].reason).toBe('probableIdentifier')
+  })
+
+  it('merges on institution + holder, which does name one account', () => {
+    const fields = [
+      field('b1', 'institution_name', 'Banque du Leman'),
+      field('b1', 'account_holder_name', 'Giulia Weber'),
+      field('b1', 'account_balance_31_12', '12400.00'),
+      field('b2', 'institution_name', 'Banque du Leman'),
+      field('b2', 'account_holder_name', 'GIULIA WEBER'),
+      field('b2', 'interest_income', '64.50')
+    ]
+    const { groups } = buildFor('bank_securities_crypto_statement', BANK_DEFS, documents, fields)
+    expect(groups[0].entities).toHaveLength(1)
+    expect(groups[0].entities[0].mergedBy).toBe('identifier')
+  })
+})
+
+describe('an insurance premium', () => {
+  it('merges as a certain identity on insurer + insured person + policy type', () => {
+    const documents = [
+      doc('h1', 'premi-2025.pdf', 'health_insurance_policy'),
+      doc('h2', 'attestato-premi.pdf', 'health_insurance_policy')
+    ]
+    const fields = [
+      field('h1', 'insurer_name', 'Sante Valais'),
+      field('h1', 'insured_person_name', 'Lina Weber', { row_key: 'row-1' }),
+      field('h1', 'policy_type', 'LAMal', { row_key: 'row-1' }),
+      field('h1', 'annual_premium', '1320', { row_key: 'row-1' }),
+      field('h2', 'insurer_name', 'SANTE VALAIS'),
+      field('h2', 'insured_person_name', 'LINA WEBER', { row_key: 'row-1' }),
+      field('h2', 'policy_type', 'lamal', { row_key: 'row-1' }),
+      field('h2', 'annual_premium', '1320', { row_key: 'row-1' })
+    ]
+    const { groups, suggestions } = buildFor('health_insurance_policy', HEALTH_DEFS, documents, fields)
+    expect(groups[0].entities).toHaveLength(1)
+    expect(groups[0].entities[0].mergedBy).toBe('identifier')
+    expect(suggestions).toEqual([])
+  })
+
+  it('keeps the basic and the supplementary cover of one person apart', () => {
+    const documents = [doc('h1', 'premi-2025.pdf', 'health_insurance_policy')]
+    const fields = [
+      field('h1', 'insurer_name', 'Sante Valais'),
+      field('h1', 'insured_person_name', 'Lina Weber', { row_key: 'row-1' }),
+      field('h1', 'policy_type', 'LAMal', { row_key: 'row-1' }),
+      field('h1', 'annual_premium', '1320', { row_key: 'row-1' }),
+      field('h1', 'insured_person_name', 'Lina Weber', { row_key: 'row-2' }),
+      field('h1', 'policy_type', 'LCA', { row_key: 'row-2' }),
+      field('h1', 'annual_premium', '540', { row_key: 'row-2' })
+    ]
+    const { groups } = buildFor('health_insurance_policy', HEALTH_DEFS, documents, fields)
+    expect(groups[0].entities).toHaveLength(2)
+  })
+})
+
+describe('two debts from the same bank with the same generic type', () => {
+  const documents = [
+    doc('m1', 'ipoteca-a.pdf', 'debt_certificate'),
+    doc('m2', 'ipoteca-b.pdf', 'debt_certificate')
+  ]
+  const fields = [
+    field('m1', 'creditor_name', 'Banque Cantonale'),
+    field('m1', 'debt_type', 'Ipoteca'),
+    field('m1', 'debt_balance', '435000.00'),
+    // A different mortgage, described in exactly the same words.
+    field('m2', 'creditor_name', 'Banque Cantonale'),
+    field('m2', 'debt_type', 'Ipoteca'),
+    field('m2', 'debt_balance', '265000.00')
+  ]
+
+  it('is NOT merged automatically — this is the case the demotion exists for', () => {
+    const { groups } = buildFor('debt_certificate', DEBT_DEFS, documents, fields)
+    expect(groups[0].entities).toHaveLength(2)
+    expect(groups[0].entities.every((e) => e.mergedBy === null)).toBe(true)
+    // Both balances survive, which is the whole point: an automatic merge
+    // here would have silently destroyed one of two real debts.
+    const balances = groups[0].entities
+      .map((e) => e.values.find((v) => v.fieldKey === 'debt_balance')?.entries[0]?.value)
+      .sort()
+    expect(balances).toEqual(['265000.00', '435000.00'])
+  })
+
+  it('is raised as a question instead', () => {
+    const { suggestions } = buildFor('debt_certificate', DEBT_DEFS, documents, fields)
+    expect(suggestions).toHaveLength(1)
+    expect(suggestions[0].reason).toBe('probableIdentifier')
+  })
+
+  it('merges only after the specialist says so, and then stays merged', () => {
+    const { suggestions } = buildFor('debt_certificate', DEBT_DEFS, documents, fields)
+    const [a, b] = sortedPair(...suggestions[0].keys)
+    const decisions = [{ category_code: 'debt_certificate', entity_key_a: a, entity_key_b: b, decision: 'merged' }]
+    const { groups, suggestions: after } = buildFor('debt_certificate', DEBT_DEFS, documents, fields, decisions)
+    expect(groups[0].entities).toHaveLength(1)
+    expect(groups[0].entities[0].mergedBy).toBe('decision')
+    expect(after).toEqual([])
+  })
+
+  it('still merges on its own when the documents give the same contract number', () => {
+    const withContract = [
+      ...fields,
+      field('m1', 'contract_number', 'HYP-7781'),
+      field('m2', 'contract_number', 'HYP-7781')
+    ]
+    const { groups, suggestions } = buildFor('debt_certificate', DEBT_DEFS, documents, withContract)
+    expect(groups[0].entities).toHaveLength(1)
+    expect(groups[0].entities[0].mergedBy).toBe('identifier')
+    expect(suggestions).toEqual([])
+  })
+})
+
+describe('two rows of the SAME document are never merged', () => {
+  it('keeps them apart even when one identifier covers both', () => {
+    // A 3a certificate states one policy number above two separate
+    // contributions. The extraction gave them distinct row_keys because
+    // the document describes two things, and an identifier that cannot
+    // tell them apart inside one file cannot be trusted across files.
+    const defs = [
+      { category_code: 'pillar_3a_certificate', field_key: 'institution_name', field_label: 'Institution', sort_order: 10 },
+      { category_code: 'pillar_3a_certificate', field_key: 'policy_number', field_label: 'Policy number', sort_order: 20 },
+      { category_code: 'pillar_3a_certificate', field_key: 'annual_contribution', field_label: 'Contribution', sort_order: 30 }
+    ]
+    const documents = [doc('p1', 'attestazioni-3a.pdf', 'pillar_3a_certificate')]
+    const fields = [
+      field('p1', 'institution_name', 'Fondazione Previdenza'),
+      field('p1', 'policy_number', 'PV-3141'),
+      field('p1', 'annual_contribution', '7258.00', { row_key: 'row-1' }),
+      field('p1', 'annual_contribution', '6000.00', { row_key: 'row-2' })
+    ]
+    const { groups, suggestions } = buildFor('pillar_3a_certificate', defs, documents, fields)
+    expect(groups[0].entities).toHaveLength(2)
+    expect(groups[0].entities.every((e) => e.mergedBy === null)).toBe(true)
+    expect(suggestions).toEqual([])
   })
 })
 
