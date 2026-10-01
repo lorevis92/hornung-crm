@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle, AlignJustify, ArrowLeft, Eye, FileText, FolderOpen, List
+  AlertTriangle, AlignJustify, ArrowLeft, Eye, FileText, FolderOpen, Layers, List
 } from 'lucide-react'
 import CaseAssistant from '../components/CaseAssistant'
 import CompactFieldRow from '../components/CompactFieldRow'
@@ -16,6 +16,8 @@ import { docTypeLabel } from '../lib/labels'
 import { mergeFieldsWithDefinitions } from '../lib/extraction'
 import { buildQualityFindings } from '../lib/extractionQuality'
 import OtherFindingsList from '../components/OtherFindingsList'
+import CategoryEntityView from '../components/CategoryEntityView'
+import { buildCategoryEntities, sortedPair, suggestionsAsQualityFindings } from '../lib/categoryEntities'
 import { formatDate, fullName } from '../lib/format'
 import { resolvePersonDisplayOrder } from '../lib/personOrder'
 import {
@@ -86,6 +88,26 @@ function groupFieldsByRow(fields) {
 // Which of the two field-review layouts a specialist last picked — same
 // remembered-choice pattern as DocumentList's list/grid toggle.
 const FIELD_LAYOUT_KEY = 'hornung.fieldLayout'
+// And which of the two READINGS of the same extraction they last used:
+// by document ("what does this file say") or by category ("how many
+// properties does this client have"). Remembered the same way.
+const DATA_VIEW_KEY = 'hornung.dataView'
+
+function readStoredDataView() {
+  try {
+    return localStorage.getItem(DATA_VIEW_KEY) === 'category' ? 'category' : 'document'
+  } catch {
+    return 'document'
+  }
+}
+
+function storeDataView(view) {
+  try {
+    localStorage.setItem(DATA_VIEW_KEY, view)
+  } catch {
+    /* localStorage unavailable — ignore, the app still works */
+  }
+}
 
 function readStoredFieldLayout() {
   try {
@@ -144,6 +166,9 @@ export default function TaxSummary() {
   // (navigate(-1)) the right way back.
   const enteredSourceViaClick = useRef(false)
   const [fieldLayout, setFieldLayoutState] = useState(readStoredFieldLayout)
+  const [dataView, setDataViewState] = useState(readStoredDataView)
+  const [mergeDecisions, setMergeDecisions] = useState([])
+  const [savingPairKey, setSavingPairKey] = useState(null)
   const [fileUrls, setFileUrls] = useState({})
   const [busyKey, setBusyKey] = useState(null)
   const [togglingKey, setTogglingKey] = useState(null)
@@ -179,12 +204,14 @@ export default function TaxSummary() {
       setChildrenCount((questionnaireRow?.children || []).length)
       setQuestionnaire(questionnaireRow)
 
-      const [extractedByDoc, findings] = await Promise.all([
+      const [extractedByDoc, findings, merges] = await Promise.all([
         Promise.all(categorized.map((d) => api.listExtractedFieldsForDocument(d.id))),
-        api.listOtherFindingsForDocuments(categorized.map((d) => d.id))
+        api.listOtherFindingsForDocuments(categorized.map((d) => d.id)),
+        api.listEntityMergeDecisions(row.client_id, row.tax_year)
       ])
       if (!active) return
       setOtherFindings(findings)
+      setMergeDecisions(merges)
 
       const flat = []
       const raw = []
@@ -243,9 +270,29 @@ export default function TaxSummary() {
   // a line read twice, is a row missing (src/lib/extractionQuality.js).
   // Recomputed from the current data on every render, never stored, so a
   // finding disappears the moment the specialist fixes what caused it.
+  // The same extraction read by category instead of by document, with the
+  // cross-document merges already applied (src/lib/categoryEntities.js).
+  const { groups: categoryGroups, suggestions: mergeSuggestions } = useMemo(
+    () =>
+      buildCategoryEntities({
+        documents,
+        extractedFields: rawFields,
+        fieldDefs,
+        categories,
+        mergeDecisions
+      }),
+    [documents, rawFields, fieldDefs, categories, mergeDecisions]
+  )
+
+  // One list of open questions for BOTH views: the data-quality findings
+  // and the still-unanswered "possibly the same thing" suggestions, which
+  // are a question about the same extraction and belong in the same place.
   const qualityFindings = useMemo(
-    () => buildQualityFindings({ documents, extractedFields: rawFields, fieldDefs, otherFindings }),
-    [documents, rawFields, fieldDefs, otherFindings]
+    () => [
+      ...buildQualityFindings({ documents, extractedFields: rawFields, fieldDefs, otherFindings }),
+      ...suggestionsAsQualityFindings(mergeSuggestions, documents)
+    ],
+    [documents, rawFields, fieldDefs, otherFindings, mergeSuggestions]
   )
 
   // Documents the extraction never finished on — a genuine gap in what this
@@ -321,6 +368,10 @@ export default function TaxSummary() {
     setDocuments(categorized)
     const extractedByDoc = await Promise.all(categorized.map((d) => api.listExtractedFieldsForDocument(d.id)))
     setOtherFindings(await api.listOtherFindingsForDocuments(categorized.map((d) => d.id)))
+    // Re-read after a re-extraction too: a merge the specialist confirmed
+    // is keyed by the entity's own identifier, not by a row id, so it must
+    // still apply to the freshly extracted rows (see migration 48).
+    setMergeDecisions(await api.listEntityMergeDecisions(caseRow.client_id, caseRow.tax_year))
     const allDefs = await api.listFieldDefinitions()
     setFieldDefs(allDefs)
     const flat = []
@@ -540,6 +591,50 @@ export default function TaxSummary() {
   }
   const findingViewKey = (finding) => `${finding.document_id}:${finding.id}:`
 
+  const setDataView = (view) => {
+    setDataViewState(view)
+    storeDataView(view)
+  }
+
+  // "Yes, these are one thing" / "No, they are different". Stored against
+  // the derived entity keys so the answer survives re-extraction.
+  const resolveSuggestion = async (suggestion, decision) => {
+    const [entityKeyA, entityKeyB] = sortedPair(suggestion.keys[0], suggestion.keys[1])
+    const pair = suggestion.keys.join('::')
+    setSavingPairKey(pair)
+    try {
+      const saved = await api.saveEntityMergeDecision(caseRow.client_id, caseRow.tax_year, {
+        category_code: suggestion.categoryCode,
+        entity_key_a: entityKeyA,
+        entity_key_b: entityKeyB,
+        decision,
+        decided_by: profile?.id || null
+      })
+      setMergeDecisions((list) => [
+        ...list.filter((d) => !(d.entity_key_a === entityKeyA && d.entity_key_b === entityKeyB)),
+        saved
+      ])
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setSavingPairKey(null)
+    }
+  }
+
+  // The findings that belong to one extracted row, as plain text — the
+  // by-category view shows them on the entity that row ended up in, so the
+  // same question is visible whichever way the data is being read.
+  const findingsByMember = (documentId, rowKey) =>
+    qualityFindings
+      .filter(
+        (f) =>
+          f.kind !== 'possibleSameEntity' &&
+          f.documentId === documentId &&
+          (f.rowKey || '') === (rowKey || '')
+      )
+      .map((f) => ({ ...f, text: qualityFindingText(f) }))
+
   const setFieldLayout = (layout) => {
     setFieldLayoutState(layout)
     storeFieldLayout(layout)
@@ -576,6 +671,14 @@ export default function TaxSummary() {
       })
     }
     if (finding.kind === 'legacyFormat') return t('summary.qualityLegacyFormat')
+    if (finding.kind === 'possibleSameEntity') {
+      return finding.detail?.reason === 'missingIdentifier'
+        ? t('summary.qualityPossibleSameEntityMissing', { identified: (finding.detail?.labels || []).find(Boolean) || '' })
+        : t('summary.qualityPossibleSameEntitySimilar', {
+            a: finding.detail?.labels?.[0] || '',
+            b: finding.detail?.labels?.[1] || ''
+          })
+    }
     if (finding.kind === 'otherFindingNeedsReview') {
       return t('summary.qualityOtherFindingNeedsReview', {
         label: finding.detail?.label || '',
@@ -867,7 +970,8 @@ export default function TaxSummary() {
                             {retryingDocId === finding.documentId ? <Spinner size={13} /> : null}
                             {t('summary.reExtractDocument')}
                           </button>
-                        ) : finding.kind === 'otherFindingNeedsReview' ? null : (
+                        ) : finding.kind === 'otherFindingNeedsReview' ||
+                          finding.kind === 'possibleSameEntity' ? null : (
                           <button
                             type="button"
                             className="btn-secondary btn-sm"
@@ -892,9 +996,39 @@ export default function TaxSummary() {
             <>
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <h2 className="section-title text-xl">{t('summary.documentDataTitle')}</h2>
-                  <p className="section-sub">{t('summary.documentDataHelp')}</p>
+                  <h2 className="section-title text-xl">
+                    {t(dataView === 'category' ? 'summary.categoryDataTitle' : 'summary.documentDataTitle')}
+                  </h2>
+                  <p className="section-sub">
+                    {t(dataView === 'category' ? 'summary.categoryDataHelp' : 'summary.documentDataHelp')}
+                  </p>
                 </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Two readings of the same extraction — by document
+                      ("what does this file say") and by category ("how
+                      many properties does this client have"). Neither
+                      replaces the other; the choice is remembered. */}
+                  <div className="flex items-center gap-1 rounded-lg bg-sand/60 p-0.5" role="group" aria-label={t('summary.dataViewToggle')}>
+                    <button
+                      type="button"
+                      className={clsx('btn-ghost btn-sm', dataView === 'document' && 'bg-white text-ink-900 shadow-sm')}
+                      onClick={() => setDataView('document')}
+                      aria-pressed={dataView === 'document'}
+                    >
+                      <FileText size={14} aria-hidden="true" />
+                      {t('summary.dataViewByDocument')}
+                    </button>
+                    <button
+                      type="button"
+                      className={clsx('btn-ghost btn-sm', dataView === 'category' && 'bg-white text-ink-900 shadow-sm')}
+                      onClick={() => setDataView('category')}
+                      aria-pressed={dataView === 'category'}
+                    >
+                      <Layers size={14} aria-hidden="true" />
+                      {t('summary.dataViewByCategory')}
+                    </button>
+                  </div>
+                  {dataView === 'document' ? (
                 <div className="flex items-center gap-1" role="group" aria-label={t('summary.fieldViewToggle')}>
                   <button
                     type="button"
@@ -917,9 +1051,36 @@ export default function TaxSummary() {
                     <AlignJustify size={16} aria-hidden="true" />
                   </button>
                 </div>
+                  ) : null}
+                </div>
               </div>
 
-              {sections.map((section) => (
+              {dataView === 'category' ? (
+                <CategoryEntityView
+                  groups={categoryGroups}
+                  suggestions={mergeSuggestions}
+                  findingsByMember={findingsByMember}
+                  documents={allDocuments}
+                  savingPairKey={savingPairKey}
+                  viewingKey={viewingKey}
+                  onViewDocument={viewDocument}
+                  onViewSource={(entry) =>
+                    viewSource({
+                      document_id: entry.documentId,
+                      field_key: entry.fieldKey,
+                      row_key: entry.rowKey,
+                      file_name: entry.fileName,
+                      source_quote: entry.sourceQuote,
+                      source_page: entry.sourcePage,
+                      isPdf: allDocuments.find((d) => d.id === entry.documentId)?.mime_type === 'application/pdf',
+                      isText: allDocuments.find((d) => d.id === entry.documentId)?.mime_type === 'text/plain'
+                    })
+                  }
+                  onResolveSuggestion={resolveSuggestion}
+                />
+              ) : null}
+
+              {dataView === 'document' ? sections.map((section) => (
                 <section key={section.key} className="space-y-4">
                   <div>
                     <h3 className="section-title text-lg">{t(section.titleKey)}</h3>
@@ -1072,7 +1233,7 @@ export default function TaxSummary() {
                     ))}
                   </div>
                 </section>
-              ))}
+              )) : null}
             </>
           ) : (
             <EmptyState icon={FolderOpen} title={t('summary.noData')} />

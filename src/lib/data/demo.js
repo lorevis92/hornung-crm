@@ -249,6 +249,7 @@ function seed() {
     fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS)),
     extractedDocumentFields,
     documentOtherFindings,
+    entityMergeDecisions: [],
     taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS)),
     fieldSuggestions: [],
     pricingItems: JSON.parse(JSON.stringify(PRICING_ITEMS)),
@@ -273,6 +274,8 @@ function load() {
       // (migration 46) — an empty list simply means nothing beyond the
       // whitelist was recorded for those documents.
       parsed.documentOtherFindings ||= []
+      // Same for sessions started before the by-category view (migration 48).
+      parsed.entityMergeDecisions ||= []
       // Same for sessions started before "Tax parameters" existed.
       parsed.taxParameters ||= JSON.parse(JSON.stringify(TAX_PARAMETERS))
       // Same for sessions started before the personal-details auto-fill
@@ -739,6 +742,43 @@ export const demoApi = {
     } else {
       row = { id: uid('exf'), document_id: documentId, ...payload, row_key: rowKey }
       s.extractedDocumentFields.push(row)
+    }
+    commit()
+    return wait(row)
+  },
+
+  // Demo mirror of entity_merge_decisions (migration 48) — same shape and
+  // same key-based identity as the real backend.
+  async listEntityMergeDecisions(clientId, taxYear) {
+    const s = store()
+    return wait(
+      s.entityMergeDecisions.filter((d) => d.client_id === clientId && d.tax_year === Number(taxYear))
+    )
+  },
+
+  async saveEntityMergeDecision(clientId, taxYear, payload) {
+    const s = store()
+    const existing = s.entityMergeDecisions.find(
+      (d) =>
+        d.client_id === clientId &&
+        d.tax_year === Number(taxYear) &&
+        d.category_code === payload.category_code &&
+        d.entity_key_a === payload.entity_key_a &&
+        d.entity_key_b === payload.entity_key_b
+    )
+    let row
+    if (existing) {
+      Object.assign(existing, payload, { decided_at: iso(Date.now()) })
+      row = existing
+    } else {
+      row = {
+        id: uid('emd'),
+        client_id: clientId,
+        tax_year: Number(taxYear),
+        ...payload,
+        decided_at: iso(Date.now())
+      }
+      s.entityMergeDecisions.push(row)
     }
     commit()
     return wait(row)

@@ -455,6 +455,33 @@ export const supabaseApi = {
     return this.listOtherFindingsForDocuments([documentId])
   },
 
+  // "Are these two extracted rows the same real-world thing?" — the
+  // specialist's answers in Tax Summary's by-category view
+  // (entity_merge_decisions, migration 48). Keyed by derived entity key,
+  // not by row id, so an answer survives re-extraction.
+  async listEntityMergeDecisions(clientId, taxYear) {
+    return unwrap(
+      await supabase
+        .from('entity_merge_decisions')
+        .select('*')
+        .eq('client_id', clientId)
+        .eq('tax_year', Number(taxYear))
+    )
+  },
+
+  async saveEntityMergeDecision(clientId, taxYear, payload) {
+    return unwrap(
+      await supabase
+        .from('entity_merge_decisions')
+        .upsert(
+          { client_id: clientId, tax_year: Number(taxYear), ...payload, decided_at: new Date().toISOString() },
+          { onConflict: 'client_id,tax_year,category_code,entity_key_a,entity_key_b' }
+        )
+        .select()
+        .single()
+    )
+  },
+
   async saveExtractedFieldForDocument(documentId, payload) {
     return unwrap(
       await supabase
