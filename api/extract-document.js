@@ -91,8 +91,45 @@ export async function runExtraction(
   if (claimError) throw claimError
   if (!claimed) {
     console.log(`[extract-document] ${documentId} is not in ${JSON.stringify(fromStatuses)} anymore — skipping`)
-    return
+    // Reported, not swallowed: a caller that asked for a re-extraction and
+    // got nothing back used to show the specialist a success toast for a
+    // run that never happened.
+    return { claimed: false, documentId }
   }
+
+  try {
+    return await extractClaimedDocument(admin, anthropic, documentId, claimed, {
+      forcedCategoryCode,
+      throwOnRegistrySyncError
+    })
+  } catch (error) {
+    // The claim above already moved this document to 'extracting'. Only
+    // api/extract-document.js's own HTTP handler used to undo that on
+    // failure, so a run started by api/retry-extraction.js or
+    // api/reprocess-client-year.js (which call runExtraction directly) left
+    // the document stuck mid-pipeline forever: Tax Summary kept showing it
+    // as "still processing", with no error anywhere for the specialist to
+    // see. Recording the failure belongs to whoever claimed it.
+    try {
+      await admin
+        .from('client_documents')
+        .update({
+          status: 'extraction_failed',
+          extraction_error: (error.message || 'EXTRACTION_FAILED').slice(0, 2000)
+        })
+        .eq('id', documentId)
+        .eq('status', 'extracting')
+    } catch (markError) {
+      console.error(`[extract-document] could not mark ${documentId} as extraction_failed:`, markError)
+    }
+    throw error
+  }
+}
+
+async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
+  forcedCategoryCode = null,
+  throwOnRegistrySyncError = false
+} = {}) {
 
   const mimeType = claimed.mime_type || ''
   const isPdf = mimeType === 'application/pdf'
@@ -323,6 +360,38 @@ export async function runExtraction(
       if (upsertError) throw upsertError
     }
 
+    // Everything this run did NOT produce has to go. The upsert above only
+    // ever adds or overwrites, and row_key is chosen afresh by the model on
+    // every run — so a document re-extracted after producing "row-1"/"row-2"
+    // and now producing "row-a"/"row-b" would keep BOTH sets forever. The
+    // specialist then sees the old rows sitting next to the new ones, which
+    // reads exactly like "the re-extraction did nothing", and the quality
+    // checks start reporting duplicates that exist only in the database.
+    // (document_other_findings has always been replaced wholesale; this
+    // brings the fields in line with it.)
+    //
+    // One exception, deliberately: a row a specialist edited or corrected by
+    // hand is theirs, not the model's, and is never deleted just because
+    // this run did not happen to produce it again.
+    const keptKeys = new Set(rows.map((r) => `${r.field_key}:${r.row_key}`))
+    const { data: existingRows, error: existingError } = await admin
+      .from('extracted_document_fields')
+      .select('id, field_key, row_key, verified_by_specialist')
+      .eq('document_id', documentId)
+    if (existingError) throw existingError
+    const staleIds = (existingRows || [])
+      .filter((r) => !r.verified_by_specialist)
+      .filter((r) => !keptKeys.has(`${r.field_key}:${r.row_key || ROW_KEY_DOCUMENT_LEVEL}`))
+      .map((r) => r.id)
+    if (staleIds.length) {
+      const { error: deleteError } = await admin
+        .from('extracted_document_fields')
+        .delete()
+        .in('id', staleIds)
+      if (deleteError) throw deleteError
+      console.log(`[extract-document] ${documentId}: removed ${staleIds.length} row(s) left by a previous extraction`)
+    }
+
     // ------------------------------- Phase 3: coverage check -------------
     // Everything from here on is best-effort. The whitelist extraction
     // above has already been written and is what the app is built on; a
@@ -427,6 +496,8 @@ export async function runExtraction(
     console.error(`[extract-document] registry sync failed for document ${documentId}:`, syncError)
     if (throwOnRegistrySyncError) throw syncError
   }
+
+  return { claimed: true, documentId }
 }
 
 export default async function handler(req, res) {

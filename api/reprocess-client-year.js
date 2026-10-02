@@ -57,7 +57,11 @@ export default async function handler(req, res) {
       )
       failures = results.filter((r) => r.status === 'rejected')
       failures.forEach((r) => console.error('[reprocess-client-year]', r.reason))
-      processed = documents.length - failures.length
+      // A fulfilled run that skipped its document (its status changed under
+      // it) is not a document that was reprocessed — counting it as one
+      // reported "15 reprocessed" for a run that touched nothing.
+      const skipped = results.filter((r) => r.status === 'fulfilled' && r.value?.claimed === false).length
+      processed = documents.length - failures.length - skipped
     }
 
     let mergedProperties = 0

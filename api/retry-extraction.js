@@ -58,7 +58,14 @@ export default async function handler(req, res) {
     const { runExtraction } = await import('./extract-document.js')
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    await runExtraction(admin, anthropic, documentId, { fromStatuses: [doc.status] })
+    const result = await runExtraction(admin, anthropic, documentId, { fromStatuses: [doc.status] })
+    // runExtraction skips a document whose status changed between the read
+    // above and its own atomic claim. That used to return a bare 200, so the
+    // specialist got a success toast for an extraction that never ran and
+    // then wondered why Tax Summary looked unchanged.
+    if (result && result.claimed === false) {
+      throw httpError(409, 'NOT_RETRYABLE', 'This document was already being processed — nothing was re-extracted.')
+    }
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error('[retry-extraction]', error)
