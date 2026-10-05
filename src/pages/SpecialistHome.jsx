@@ -5,10 +5,12 @@ import {
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
-import { Checkbox, EmptyState, Field, PageLoader, Select, Spinner, Stat, TextInput } from '../components/ui'
+import { LoadGate } from '../components/LoadState'
+import { Checkbox, EmptyState, Field, Select, Spinner, Stat, TextInput } from '../components/ui'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
+import { useLoad } from '../lib/useLoad'
 import { currentTaxYear } from '../lib/config'
 import { CASE_STATUSES, CANTONS, LANGUAGES } from '../lib/constants'
 import { formatDate, fullName } from '../lib/format'
@@ -29,7 +31,6 @@ export default function SpecialistHome() {
   const toast = useToast()
   const year = currentTaxYear()
 
-  const [loading, setLoading] = useState(true)
   const [clients, setClients] = useState([])
   const [stats, setStats] = useState(null)
   const [query, setQuery] = useState('')
@@ -59,13 +60,9 @@ export default function SpecialistHome() {
     ])
     setClients(rows)
     setStats(kpi)
-    setLoading(false)
   }, [query, yearFilter, statusFilter, showArchived, year])
-
-  useEffect(() => {
-    const timer = setTimeout(load, 180)
-    return () => clearTimeout(timer)
-  }, [load])
+  // Debounced: the search box reloads as the specialist types.
+  const loadState = useLoad(load, { delay: 180, keepOnChange: true })
 
   // Any filter change invalidates the current page — go back to the top.
   useEffect(() => {
@@ -83,7 +80,7 @@ export default function SpecialistHome() {
       const result = await api.createClient(form)
       setModalOpen(false)
       setForm(emptyForm)
-      await load()
+      loadState.refresh()
       if (result.emailSent) toast.success(t('specialist.inviteSent', { email: form.email }))
       else toast.info(t('specialist.inviteFailed'))
     } catch (error) {
@@ -173,8 +170,10 @@ export default function SpecialistHome() {
           />
         </div>
 
-        {loading ? (
-          <PageLoader label={t('common.loading')} />
+        {loadState.status !== 'ready' ? (
+          <div className="p-4">
+            <LoadGate load={loadState} showDetail />
+          </div>
         ) : clients.length ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px]">
@@ -229,7 +228,7 @@ export default function SpecialistHome() {
           </div>
         ) : null}
 
-        {!loading && clients.length > PAGE_SIZE ? (
+        {loadState.status === 'ready' && clients.length > PAGE_SIZE ? (
           <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
             <p className="text-[13.5px] text-ink-400">
               {t('specialist.pageOf', { page: currentPage, pages: totalPages })}
@@ -257,7 +256,7 @@ export default function SpecialistHome() {
           </div>
         ) : null}
 
-        {!loading && !clients.length ? (
+        {loadState.status === 'ready' && !clients.length ? (
           <div className="p-6">
             <EmptyState icon={Users} title={t('specialist.noClients')} />
           </div>

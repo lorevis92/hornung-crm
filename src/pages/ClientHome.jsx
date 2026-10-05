@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarClock, CalendarPlus, FileCheck2, FolderOpen, Mail, Phone, Upload } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import StatusStepper from '../components/StatusStepper'
-import { EmptyState, Field, PageLoader, Select, Spinner } from '../components/ui'
+import { LoadGate } from '../components/LoadState'
+import { EmptyState, Field, Select, Spinner } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
+import { useLoad } from '../lib/useLoad'
 import { CONTACT, currentTaxYear } from '../lib/config'
 import { selectableClientTaxYears } from '../lib/caseCreation'
 import { formatDate } from '../lib/format'
@@ -17,25 +19,20 @@ export default function ClientHome() {
   const { client, profile } = useAuth()
   const toast = useToast()
   const [cases, setCases] = useState([])
-  const [loading, setLoading] = useState(true)
   const yearOptions = useMemo(() => selectableClientTaxYears(), [])
   const [newYear, setNewYear] = useState(String(yearOptions[0]))
   const [addingYear, setAddingYear] = useState(false)
 
-  useEffect(() => {
-    let active = true
-    if (!client?.id) {
-      setLoading(false)
-      return undefined
-    }
-    api
-      .listCases(client.id)
-      .then((rows) => active && setCases(rows))
-      .finally(() => active && setLoading(false))
-    return () => {
-      active = false
-    }
-  }, [client?.id])
+  const loadState = useLoad(
+    useCallback(
+      async (isCurrent) => {
+        if (!client?.id) return
+        const rows = await api.listCases(client.id)
+        if (isCurrent()) setCases(rows)
+      },
+      [client?.id]
+    )
+  )
 
   const year = currentTaxYear()
 
@@ -79,7 +76,7 @@ export default function ClientHome() {
     }
   }
 
-  if (loading) return <PageLoader label={t('common.loading')} />
+  if (loadState.status !== 'ready') return <LoadGate load={loadState} />
 
   return (
     <div className="space-y-9">

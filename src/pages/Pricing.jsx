@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import clsx from 'clsx'
 import { Receipt, Sparkle } from 'lucide-react'
-import { PageLoader } from '../components/ui'
+import { LoadGate } from '../components/LoadState'
 import FeeEstimatePanel from '../components/FeeEstimatePanel'
 import { useAuth } from '../context/AuthContext'
 import { viewerCopy } from '../lib/viewerCopy'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
+import { useLoad } from '../lib/useLoad'
 import { currentTaxYear, FEATURES } from '../lib/config'
 import { formatChf } from '../lib/format'
 import { pricingDescription, pricingLabel } from '../lib/pricing'
@@ -47,36 +48,32 @@ export default function Pricing() {
   // The price list itself is the same for both; only the subtitle spoke of
   // "your tax return" — see src/lib/viewerCopy.js.
   const copy = viewerCopy(isStaff)
-  const [loading, setLoading] = useState(true)
   const [pricing, setPricing] = useState([])
   const [questionnaire, setQuestionnaire] = useState(null)
   const [caseRow, setCaseRow] = useState(null)
 
-  useEffect(() => {
-    let active = true
-    const run = async () => {
-      const items = await api.listPricing()
-      if (!active) return
-      setPricing(items)
+  const loadState = useLoad(
+    useCallback(
+      async (isCurrent) => {
+        const items = await api.listPricing()
+        if (!isCurrent()) return
+        setPricing(items)
 
-      if (FEATURES.clientFeeEstimate && client?.id) {
-        const [quest, cases] = await Promise.all([
-          api.getQuestionnaire(client.id),
-          api.listCases(client.id)
-        ])
-        if (!active) return
-        setQuestionnaire(quest)
-        setCaseRow(cases.find((c) => c.tax_year === currentTaxYear()) || cases[0] || null)
-      }
-      setLoading(false)
-    }
-    run()
-    return () => {
-      active = false
-    }
-  }, [client?.id])
+        if (FEATURES.clientFeeEstimate && client?.id) {
+          const [quest, cases] = await Promise.all([
+            api.getQuestionnaire(client.id),
+            api.listCases(client.id)
+          ])
+          if (!isCurrent()) return
+          setQuestionnaire(quest)
+          setCaseRow(cases.find((c) => c.tax_year === currentTaxYear()) || cases[0] || null)
+        }
+      },
+      [client?.id]
+    )
+  )
 
-  if (loading) return <PageLoader label={t('common.loading')} />
+  if (loadState.status !== 'ready') return <LoadGate load={loadState} showDetail={isStaff} />
 
   const base = pricing.filter((p) => ['base', 'per_unit', 'tier'].includes(p.kind))
   const surcharges = pricing.filter((p) => p.kind === 'surcharge')

@@ -1,5 +1,4 @@
-// Shared implementation behind scripts/export-weber-fixture.mjs and
-// scripts/export-sara-fixture.mjs — pulls one client's real,
+// Implementation behind scripts/export-weber-fixture.mjs — pulls one client's real,
 // specialist-reviewed data out of production and writes it to a
 // test/fixtures/*.json golden-case fixture, the same JSON shape the
 // golden-case tests (test/weber-extraction.test.js) run the row model and
@@ -82,20 +81,13 @@ export async function exportClientFixture({ clientEmail, taxYear, outFile }) {
         'extracted_document_fields',
         await supabase
           .from('extracted_document_fields')
-          .select('document_id, field_key, row_key, field_value, confidence, source_quote, source_page, included_in_calculation, verified_by_specialist')
+          .select('document_id, field_key, row_key, row_label, field_value, confidence, source_quote, source_page')
           .in('document_id', documentIds)
       )
     : []
 
   const categories = must('document_categories', await supabase.from('document_categories').select('*').eq('active', true))
   const fieldDefs = must('category_field_definitions', await supabase.from('category_field_definitions').select('*'))
-  // tax_parameters only: reference data the consultant reads in Tax
-  // settings. field_calculation_rules is deprecated (nothing computes from
-  // it any more), so it is no longer exported into golden-case fixtures.
-  const parameters = must(
-    'tax_parameters',
-    await supabase.from('tax_parameters').select('*').eq('tax_year', taxYear)
-  )
 
   const fixture = {
     exportedAt: new Date().toISOString(),
@@ -104,17 +96,20 @@ export async function exportClientFixture({ clientEmail, taxYear, outFile }) {
     primaryPerson: persons.find((p) => p.person_type === 'primary') || null,
     spousePerson: persons.find((p) => p.person_type === 'spouse') || null,
     children,
-    documents: realDocuments.map(({ id, file_name, category_code, status, mime_type }) => ({
+    documents: realDocuments.map(({ id, file_name, category_code, status, mime_type, person_ref, person_name, person_quote, person_page }) => ({
       id,
       file_name,
       category_code,
       status,
-      mime_type
+      mime_type,
+      person_ref,
+      person_name,
+      person_quote,
+      person_page
     })),
     extractedFields,
     categories,
-    fieldDefs,
-    parameters
+    fieldDefs
   }
 
   writeFileSync(outFile, JSON.stringify(fixture, null, 2) + '\n')
@@ -125,8 +120,7 @@ export async function exportClientFixture({ clientEmail, taxYear, outFile }) {
     extractedFields: extractedFields.length,
     children: children.length,
     hasPrimary: Boolean(fixture.primaryPerson),
-    hasSpouse: Boolean(fixture.spousePerson),
-    parameters: parameters.length
+    hasSpouse: Boolean(fixture.spousePerson)
   })
 
   await supabase.auth.signOut()

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeftRight, Plus, Save, Trash2, Users, Car, Home, User, Info, MessageSquare } from 'lucide-react'
-import { Checkbox, Field, PageLoader, Select, Spinner, TextInput, Textarea } from './ui'
+import { LoadGate } from './LoadState'
+import { Checkbox, Field, Select, Spinner, TextInput, Textarea } from './ui'
 import { useI18n } from '../i18n'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { api } from '../lib/data'
+import { useLoad } from '../lib/useLoad'
 import { MARITAL_STATUSES, PERMIT_TYPES } from '../lib/constants'
 import { fullName } from '../lib/format'
 import { resolvePersonDisplayOrder } from '../lib/personOrder'
@@ -164,7 +166,6 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
   const { t } = useI18n()
   const { isStaff } = useAuth()
   const toast = useToast()
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [details, setDetails] = useState({})
   const [primary, setPrimary] = useState(emptyPerson('primary'))
@@ -202,12 +203,11 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
     }
   }
 
-  useEffect(() => {
-    let active = true
-    if (!clientId) return undefined
-    setLoading(true)
-    api.getQuestionnaire(clientId).then((data) => {
-      if (!active) return
+  const loadState = useLoad(
+    useCallback(async (isCurrent) => {
+      if (!clientId) return
+      const data = await api.getQuestionnaire(clientId)
+      if (!isCurrent()) return
       setDetails(data.details || {})
       // A client's name lives on `clients` from the moment they're invited,
       // but the questionnaire's own primary-person row only exists once
@@ -226,7 +226,6 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
       setChildren(data.children || [])
       setVehicles(data.vehicles || [])
       setProperties(data.properties || [])
-      setLoading(false)
       // A link into this form (e.g. the Tax Summary completeness banner's
       // "Fix this" action) can target a specific section via the URL hash —
       // only scrollable once its data has actually rendered.
@@ -235,11 +234,11 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
           document.querySelector(window.location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         })
       }
-    })
-    return () => {
-      active = false
-    }
-  }, [clientId])
+      // client is only the fallback for a first, never-saved form: reading
+      // it must not reload the whole questionnaire every time it changes.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [clientId])
+  )
 
   const setDetail = (key) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
@@ -283,7 +282,7 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
     }
   }
 
-  if (loading) return <PageLoader label={t('common.loading')} />
+  if (loadState.status !== 'ready') return <LoadGate load={loadState} showDetail={isStaff} />
 
   const disabled = readOnly
 

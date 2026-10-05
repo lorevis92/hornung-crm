@@ -1,31 +1,18 @@
-// Regression tests for src/lib/extractionQuality.js — the open questions
-// this app still tracks after the tax calculation engine was removed.
+// Regression tests for src/lib/extractionQuality.js — the notes Tax Summary
+// shows next to a document ("da verificare").
 //
-// The distinction these tests lock in: a finding is raised only about the
+// The distinction these tests lock in: a note is raised only about the
 // extracted DATA (whose row is this, was a line read twice, is a row
-// missing, can the rows be grouped at all). Nothing here judges how a
-// figure should be taxed — those checks went away with the engine.
+// missing). Nothing here judges how a figure should be taxed.
 import { describe, expect, it } from 'vitest'
 import { buildQualityFindings } from '../src/lib/extractionQuality.js'
 
 const BANK = 'bank_securities_crypto_statement'
 
-const FIELD_DEFS = [
-  { category_code: BANK, field_key: 'institution_name' },
-  { category_code: BANK, field_key: 'account_holder_name' },
-  { category_code: BANK, field_key: 'account_type' },
-  { category_code: BANK, field_key: 'account_iban' },
-  { category_code: BANK, field_key: 'account_balance_31_12' },
-  { category_code: BANK, field_key: 'reported_total_balance' },
-  { category_code: 'health_insurance_policy', field_key: 'insured_person_name' },
-  { category_code: 'health_insurance_policy', field_key: 'annual_premium' },
-  { category_code: 'salary_statement', field_key: 'gross_salary' }
-]
-
 const bankDoc = { id: 'doc-bank', category_code: BANK, file_name: '07_conti_bancari.pdf' }
 
 function run(extractedFields, documents = [bankDoc]) {
-  return buildQualityFindings({ documents, extractedFields, fieldDefs: FIELD_DEFS })
+  return buildQualityFindings({ documents, extractedFields })
 }
 
 describe('unidentified rows', () => {
@@ -52,21 +39,6 @@ describe('unidentified rows', () => {
   it('never flags a single-row document — there is nothing to tell it apart from', () => {
     const findings = run([
       { document_id: 'doc-bank', row_key: 'row-1', field_key: 'account_balance_31_12', field_value: '10000' }
-    ])
-    expect(findings).toHaveLength(0)
-  })
-
-  it('ignores a value the specialist already marked as not relevant', () => {
-    const findings = run([
-      { document_id: 'doc-bank', row_key: 'row-1', field_key: 'account_holder_name', field_value: 'Sara Bianchi' },
-      { document_id: 'doc-bank', row_key: 'row-1', field_key: 'account_balance_31_12', field_value: '10000' },
-      {
-        document_id: 'doc-bank',
-        row_key: 'row-2',
-        field_key: 'account_balance_31_12',
-        field_value: '8200',
-        included_in_calculation: false
-      }
     ])
     expect(findings).toHaveLength(0)
   })
@@ -151,27 +123,6 @@ describe('the document\'s own stated total vs. its rows', () => {
       { document_id: 'doc-bank', row_key: 'row-2', field_key: 'account_balance_31_12', field_value: '8200' }
     ])
     expect(findings.filter((f) => f.kind === 'reportedTotalMismatch')).toHaveLength(0)
-  })
-})
-
-describe('data extracted before the row model existed', () => {
-  it('flags the document for re-extraction and says nothing else about it', () => {
-    const findings = run([
-      { document_id: 'doc-bank', row_key: '', field_key: 'account_balance_31_12', field_value: '10000' },
-      { document_id: 'doc-bank', row_key: '', field_key: 'account_balance_31_12_2', field_value: '8200' },
-      { document_id: 'doc-bank', row_key: '', field_key: 'account_balance_31_12_3', field_value: '1240' }
-    ])
-    expect(findings).toHaveLength(1)
-    expect(findings[0].kind).toBe('legacyFormat')
-    expect(findings[0].detail.fieldKeys.sort()).toEqual(['account_balance_31_12_2', 'account_balance_31_12_3'])
-  })
-
-  it('never mistakes a canonical key that happens to end in digits for an old suffix', () => {
-    const findings = run([
-      { document_id: 'doc-bank', row_key: 'row-1', field_key: 'account_holder_name', field_value: 'Sara' },
-      { document_id: 'doc-bank', row_key: 'row-1', field_key: 'account_balance_31_12', field_value: '10000' }
-    ])
-    expect(findings.filter((f) => f.kind === 'legacyFormat')).toHaveLength(0)
   })
 })
 

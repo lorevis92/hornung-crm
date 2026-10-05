@@ -186,6 +186,10 @@ export const supabaseApi = {
       supabase.from('client_vehicles').select('*').eq('client_id', clientId).order('sort_order'),
       supabase.from('client_properties').select('*').eq('client_id', clientId).order('sort_order')
     ])
+    // A failed read must not look like an empty questionnaire: saving that
+    // form would then overwrite the real one with blanks.
+    const failed = [details, persons, children, vehicles, properties].find((r) => r.error)
+    if (failed) throw failed.error
     return {
       details: details.data || { client_id: clientId },
       persons: persons.data || [],
@@ -425,11 +429,8 @@ export const supabaseApi = {
     return true
   },
 
-  // Specialist verification of AI-extracted values (extracted_document_fields
-  // is keyed by client_documents.id, so we resolve it from the case_documents
-  // id every caller actually has — same indirection as setDocumentCategory).
-  // "Direct" primitives — the caller already has the real client_documents.id
-  // (e.g. the tax summary, which queries client_documents itself).
+  // AI-extracted values, read-only (written only by api/extract-document.js).
+  // Keyed by client_documents.id — Tax Summary has it directly.
   async listExtractedFieldsForDocument(documentId) {
     return unwrap(
       await supabase.from('extracted_document_fields').select('*').eq('document_id', documentId)
@@ -451,53 +452,9 @@ export const supabaseApi = {
     )
   },
 
-  async listOtherFindingsForDocument(documentId) {
-    return this.listOtherFindingsForDocuments([documentId])
-  },
-
-  // "Are these two extracted rows the same real-world thing?" — the
-  // specialist's answers in Tax Summary's by-category view
-  // (entity_merge_decisions, migration 48). Keyed by derived entity key,
-  // not by row id, so an answer survives re-extraction.
-  async listEntityMergeDecisions(clientId, taxYear) {
-    return unwrap(
-      await supabase
-        .from('entity_merge_decisions')
-        .select('*')
-        .eq('client_id', clientId)
-        .eq('tax_year', Number(taxYear))
-    )
-  },
-
-  async saveEntityMergeDecision(clientId, taxYear, payload) {
-    return unwrap(
-      await supabase
-        .from('entity_merge_decisions')
-        .upsert(
-          { client_id: clientId, tax_year: Number(taxYear), ...payload, decided_at: new Date().toISOString() },
-          { onConflict: 'client_id,tax_year,category_code,entity_key_a,entity_key_b' }
-        )
-        .select()
-        .single()
-    )
-  },
-
-  async saveExtractedFieldForDocument(documentId, payload) {
-    return unwrap(
-      await supabase
-        .from('extracted_document_fields')
-        .upsert(
-          { document_id: documentId, ...payload, row_key: payload.row_key || '' },
-          { onConflict: 'document_id,field_key,row_key' }
-        )
-        .select()
-        .single()
-    )
-  },
-
-  // Case-document-indirected variants — DocumentList only ever has the
-  // case_documents.id (see setDocumentCategory), so resolve the mirrored
-  // client_documents row first and delegate to the direct primitives above.
+  // The same values by case_documents.id — the case page only has that id
+  // (its Questionnaire check reads the personal-details sheet this way), so
+  // resolve the mirrored client_documents row first.
   async listExtractedFields(caseDocumentId) {
     const { data: clientDoc, error: clientDocError } = await supabase
       .from('client_documents')
@@ -507,17 +464,6 @@ export const supabaseApi = {
     if (clientDocError) throw clientDocError
     if (!clientDoc) return []
     return this.listExtractedFieldsForDocument(clientDoc.id)
-  },
-
-  async saveExtractedField(caseDocumentId, payload) {
-    const { data: clientDoc, error: clientDocError } = await supabase
-      .from('client_documents')
-      .select('id')
-      .eq('source_case_document_id', caseDocumentId)
-      .maybeSingle()
-    if (clientDocError) throw clientDocError
-    if (!clientDoc) throw new Error('CLIENT_DOCUMENT_NOT_FOUND')
-    return this.saveExtractedFieldForDocument(clientDoc.id, payload)
   },
 
   // All of a client's documents for one tax year, across every case in that
@@ -532,48 +478,8 @@ export const supabaseApi = {
     )
   },
 
-  // "Mark as not relevant" on Tax Summary's incomplete-calculation banner —
-  // a document that genuinely has nothing worth extracting (or whose
-  // content needs a manual entry instead, see the chalet-expenses case)
-  // moves to 'rejected' (an existing, final client_documents status) so it
-  // stops showing up as an unexplained orphaned-document warning, instead
-  // of a specialist having no way to acknowledge it was actually reviewed.
-  async updateClientDocumentStatus(documentId, status) {
-    return unwrap(
-      await supabase.from('client_documents').update({ status }).eq('id', documentId).select().single()
-    )
-  },
-
-  // Tax settings — federal/cantonal tax parameters (staff only, RLS: "tax
-  // parameters: staff only").
-  async listTaxParameters() {
-    return unwrap(
-      await supabase
-        .from('tax_parameters')
-        .select('*')
-        .order('scope', { ascending: true })
-        .order('canton_code', { ascending: true })
-        .order('tax_year', { ascending: false })
-    )
-  },
-
-  async createTaxParameter(payload) {
-    return unwrap(await supabase.from('tax_parameters').insert(payload).select().single())
-  },
-
-  async updateTaxParameter(id, patch) {
-    return unwrap(
-      await supabase.from('tax_parameters').update(patch).eq('id', id).select().single()
-    )
-  },
-
-  async deleteTaxParameter(id) {
-    unwrap(await supabase.from('tax_parameters').delete().eq('id', id))
-    return true
-  },
-
-  async retryExtraction(documentId, { force = false } = {}) {
-    return callApi('/api/retry-extraction', { documentId, force })
+  async retryExtraction(documentId) {
+    return callApi('/api/retry-extraction', { documentId })
   },
 
   // The "reload everything" safety net — re-extracts every document of a
@@ -824,27 +730,6 @@ export const supabaseApi = {
       )
     }
     return this.listRequested(caseId)
-  },
-
-  async listEvents(caseId) {
-    return unwrap(
-      await supabase
-        .from('case_events')
-        .select('*')
-        .eq('case_id', caseId)
-        .order('created_at', { ascending: false })
-        .limit(50)
-    )
-  },
-
-  async listExtracted(caseId) {
-    const rows = unwrap(
-      await supabase
-        .from('extracted_fields')
-        .select('*, document:case_documents(file_name)')
-        .eq('case_id', caseId)
-    )
-    return (rows || []).map((r) => ({ ...r, document_name: r.document?.file_name || null }))
   },
 
   async getStats(year) {

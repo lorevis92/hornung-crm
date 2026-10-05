@@ -11,32 +11,33 @@
 // snapshot of code output: a failure here means the row model or the
 // quality checks changed behaviour on real data.
 import { describe, expect, it } from 'vitest'
-import { mergeFieldsWithDefinitions } from '../src/lib/extraction.js'
+import { groupDocumentRows } from '../src/lib/extraction.js'
 import { buildQualityFindings } from '../src/lib/extractionQuality.js'
-import { buildCategoryEntities, sortedPair } from '../src/lib/categoryEntities.js'
 import fixture from './fixtures/weber-2025.json' with { type: 'json' }
 
 function docByFilePart(part) {
   return fixture.documents.find((d) => d.file_name.toLowerCase().includes(part.toLowerCase()))
 }
 
+function groupedRowsOf(doc) {
+  return groupDocumentRows(
+    fixture.fieldDefs.filter((d) => d.category_code === doc.category_code),
+    fixture.extractedFields.filter((f) => f.document_id === doc.id),
+    doc.category_code
+  )
+}
+
 function rowsOf(doc) {
-  const defs = fixture.fieldDefs.filter((d) => d.category_code === doc.category_code)
-  const extracted = fixture.extractedFields.filter((f) => f.document_id === doc.id)
-  const merged = mergeFieldsWithDefinitions(defs, extracted, doc)
-  const byRow = new Map()
-  for (const field of merged) {
-    const key = field.row_key || ''
-    if (!byRow.has(key)) byRow.set(key, { rowKey: key, rowLabel: field.row_label, values: {} })
-    if (field.field_value) byRow.get(key).values[field.field_key] = field.field_value
-  }
-  return [...byRow.values()]
+  return groupedRowsOf(doc).map((row) => ({
+    rowKey: row.rowKey,
+    rowLabel: row.label,
+    values: Object.fromEntries(row.fields.map((f) => [f.field_key, f.value]))
+  }))
 }
 
 const findings = buildQualityFindings({
   documents: fixture.documents,
-  extractedFields: fixture.extractedFields,
-  fieldDefs: fixture.fieldDefs
+  extractedFields: fixture.extractedFields
 })
 
 function findingsFor(doc, kind) {
@@ -133,15 +134,9 @@ describe('Weber 2025 — what the quality checks say about the same data', () =>
     expect(findingsFor(docByFilePart('10_attestazione_banca_conti'), 'unidentifiedRow')).toHaveLength(0)
   })
 
-  it('raises nothing about how anything is taxed — only the four data-quality kinds exist', () => {
+  it('raises nothing about how anything is taxed — only the data-quality kinds exist', () => {
     const kinds = [...new Set(findings.map((f) => f.kind))].sort()
-    expect(kinds.every((k) =>
-      ['unidentifiedRow', 'duplicateSource', 'reportedTotalMismatch', 'legacyFormat'].includes(k)
-    )).toBe(true)
-  })
-
-  it('no document in this real case is still on the pre-row-model format', () => {
-    expect(findings.filter((f) => f.kind === 'legacyFormat')).toHaveLength(0)
+    expect(kinds.every((k) => ['unidentifiedRow', 'duplicateSource', 'reportedTotalMismatch'].includes(k))).toBe(true)
   })
 })
 
@@ -155,7 +150,7 @@ describe('Weber 2025 — dropping the empty rows changed nothing that was extrac
     for (const doc of fixture.documents) {
       const defs = fixture.fieldDefs.filter((d) => d.category_code === doc.category_code)
       const extracted = fixture.extractedFields.filter((f) => f.document_id === doc.id)
-      const merged = mergeFieldsWithDefinitions(defs, extracted, doc)
+      const merged = groupedRowsOf(doc).flatMap((row) => row.fields)
 
       const definedKeys = new Set(defs.map((d) => d.field_key))
       const realValues = extracted.filter(
@@ -164,7 +159,7 @@ describe('Weber 2025 — dropping the empty rows changed nothing that was extrac
       // One displayed row per extracted value: nothing invented, nothing
       // lost, and no empty row left over.
       expect(merged, doc.file_name).toHaveLength(realValues.length)
-      expect(merged.every((r) => String(r.field_value).trim()), doc.file_name).toBe(true)
+      expect(merged.every((r) => String(r.value).trim()), doc.file_name).toBe(true)
     }
   })
 
@@ -192,11 +187,7 @@ describe('Weber 2025 — dropping the empty rows changed nothing that was extrac
     expect(defs.map((d) => d.field_key)).toEqual(
       expect.arrayContaining(['dividend_income', 'capital_gain_loss'])
     )
-    const merged = mergeFieldsWithDefinitions(
-      defs,
-      fixture.extractedFields.filter((f) => f.document_id === doc.id),
-      doc
-    )
+    const merged = groupedRowsOf(doc).flatMap((row) => row.fields)
     expect(merged.some((r) => r.field_key === 'dividend_income')).toBe(false)
     expect(merged.some((r) => r.field_key === 'capital_gain_loss')).toBe(false)
   })
@@ -228,107 +219,11 @@ describe('Weber 2025 — dropping the empty rows changed nothing that was extrac
     const withFindingsArgument = buildQualityFindings({
       documents: fixture.documents,
       extractedFields: fixture.extractedFields,
-      fieldDefs: fixture.fieldDefs,
       otherFindings: []
     })
     expect(withFindingsArgument).toEqual(findings)
     // And no document in this case has an uncertain "other information"
     // item, because the fixture predates the coverage check entirely.
     expect(findings.filter((f) => f.kind === 'otherFindingNeedsReview')).toHaveLength(0)
-  })
-})
-
-// The by-category reading of the same real data (src/lib/categoryEntities.js).
-// The document view answers "what does this file say"; this one answers "how
-// many properties does this client have". Weber is the case that proves both
-// halves of the merge rule on real documents: one property genuinely written
-// two ways across two files, and two mortgages from the SAME bank that must
-// never be collapsed into one.
-function entitiesOf(categoryCode, mergeDecisions = []) {
-  const { groups, suggestions } = buildCategoryEntities({
-    documents: fixture.documents,
-    extractedFields: fixture.extractedFields,
-    fieldDefs: fixture.fieldDefs,
-    categories: fixture.categories,
-    mergeDecisions
-  })
-  const group = groups.find((g) => g.categoryCode === categoryCode)
-  return {
-    entities: group?.entities || [],
-    suggestions: suggestions.filter((s) => s.categoryCode === categoryCode)
-  }
-}
-
-describe('Weber 2025 — the by-category view on real documents', () => {
-  it('keeps the two mortgages distinct: same bank, two different debts', () => {
-    const { entities, suggestions } = entitiesOf('debt_certificate')
-    expect(entities).toHaveLength(2)
-
-    const sion = entities.find((e) => e.label?.includes('SION'))
-    const martigny = entities.find((e) => e.label?.includes('MARTIGNY'))
-    expect(sion).toBeTruthy()
-    expect(martigny).toBeTruthy()
-
-    const amountOf = (entity, fieldKey) =>
-      entity.values.find((v) => v.fieldKey === fieldKey)?.entries[0]?.value
-    expect(amountOf(sion, 'debt_balance')).toBe('435000.00')
-    expect(amountOf(sion, 'annual_interest_paid')).toBe('7490.00')
-    expect(amountOf(martigny, 'debt_balance')).toBe('265000.00')
-    expect(amountOf(martigny, 'annual_interest_paid')).toBe('4590.00')
-
-    // Both name "BANQUE MONT ROUX" — sharing a creditor is not sharing a
-    // debt, and nothing may suggest otherwise.
-    expect(sion.label).toContain('BANQUE MONT ROUX')
-    expect(martigny.label).toContain('BANQUE MONT ROUX')
-    expect(suggestions).toEqual([])
-    expect(entities.every((e) => e.mergedBy === null)).toBe(true)
-  })
-
-  it('asks about the one property this case really does write two ways', () => {
-    const { entities, suggestions } = entitiesOf('property_tax_value')
-    // Sion, Martigny, and the maintenance invoices that say only "RUE DES
-    // FINETTES 6" — three entities until someone decides.
-    expect(entities).toHaveLength(3)
-    expect(suggestions).toHaveLength(1)
-    expect(suggestions[0].reason).toBe('similarIdentifier')
-    const labels = suggestions[0].labels.join(' | ').toLowerCase()
-    expect(labels).toContain('finettes')
-    // The Sion property is nowhere near it and is never dragged in.
-    expect(labels).not.toContain('dixence')
-  })
-
-  it('merges that property into one once confirmed, keeping both documents visible', () => {
-    const { suggestions } = entitiesOf('property_tax_value')
-    const [a, b] = sortedPair(...suggestions[0].keys)
-    const { entities, suggestions: after } = entitiesOf('property_tax_value', [
-      { category_code: 'property_tax_value', entity_key_a: a, entity_key_b: b, decision: 'merged' }
-    ])
-    expect(entities).toHaveLength(2)
-    const merged = entities.find((e) => e.documentIds.length > 1)
-    expect(merged.mergedBy).toBe('decision')
-    // The rental statement's income and the invoices' maintenance cost now
-    // sit on one property, each still pointing at the file it came from.
-    const rentalIncome = merged.values.find((v) => v.fieldKey === 'annual_rental_income')
-    const maintenance = merged.values.find((v) => v.fieldKey === 'maintenance_costs')
-    expect(rentalIncome.entries[0].fileName).toContain('07_rendiconto')
-    expect(maintenance.entries.some((e) => e.fileName.includes('08_fatture'))).toBe(true)
-    expect(after).toEqual([])
-  })
-
-  it('never merges the six health-insurance premiums, which say only an amount each', () => {
-    const { entities, suggestions } = entitiesOf('health_insurance_policy')
-    expect(entities).toHaveLength(6)
-    expect(suggestions).toEqual([])
-    // And the document view still raises each one as unidentified, so the
-    // two views say the same thing about them.
-    expect(findingsFor(docByFilePart('13_premi_cassa_malati'), 'unidentifiedRow')).toHaveLength(6)
-  })
-
-  it("keeps the joint account and Lina's account apart in this view too", () => {
-    const { entities } = entitiesOf('bank_securities_crypto_statement')
-    const labels = entities.map((e) => e.label || '')
-    expect(labels.some((l) => l.includes('COINTESTATO'))).toBe(true)
-    expect(labels.some((l) => l.includes('LINA'))).toBe(true)
-    expect(entities.filter((e) => e.mergedBy !== null)).toHaveLength(0)
   })
 })

@@ -5,14 +5,16 @@ import { Spinner } from './ui'
 import { useI18n } from '../i18n'
 import { useToast } from '../context/ToastContext'
 import { api } from '../lib/data'
-import { parseAssistantMessage } from '../lib/caseAssistantContext'
+import { parseAssistantMessage } from '../lib/citations'
 
-// One assistant reply, with any "[[doc:<id>|<file name>]]" reference (see
-// api/case-assistant.js's system prompt) rendered as a click-through to the
-// source document instead of dead text — same viewer Tax Summary already
-// uses for a single field's own "view source" action (onViewDocument is
-// TaxSummary.jsx's viewDocumentGroupSource).
+// One assistant reply, with its document references (src/lib/citations.js)
+// rendered as click-throughs: a reference to an extracted value opens the
+// document at its page with its sentence highlighted, a reference to a
+// document in general opens it from the start. onViewDocument(documentId,
+// { page, quote }) is Tax Summary's own viewer, or — on the case page — a
+// jump to Tax Summary opened on that point.
 function AssistantMessageContent({ content, onViewDocument }) {
+  const { t } = useI18n()
   const parts = parseAssistantMessage(content)
   return (
     <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
@@ -22,10 +24,12 @@ function AssistantMessageContent({ content, onViewDocument }) {
             key={i}
             type="button"
             className="mx-0.5 inline-flex items-center gap-1 rounded-md bg-gold-50 px-1.5 py-0.5 text-[12.5px] font-medium text-gold-800 underline decoration-gold-300 underline-offset-2 hover:bg-gold-100"
-            onClick={() => onViewDocument(part.documentId)}
+            onClick={() => onViewDocument(part.documentId, { page: part.page, quote: part.quote })}
+            title={part.quote || undefined}
           >
             <Eye size={11} aria-hidden="true" />
             {part.fileName}
+            {part.page ? <span className="text-gold-700">· {t('assistant.page', { page: part.page })}</span> : null}
           </button>
         ) : (
           <span key={i}>{part.text}</span>
@@ -35,8 +39,8 @@ function AssistantMessageContent({ content, onViewDocument }) {
   )
 }
 
-// Tax Summary's "ask about this case" chat bubble — present only on this
-// page (see TaxSummary.jsx), scoped to the ONE case open there. The server
+// The "ask about this case" chat bubble, on Tax Summary and on the case
+// page — the same conversation on both, scoped to the ONE case open there. The server
 // (api/case-assistant.js) rebuilds the case's context from the database on
 // every question; this component only ever sends the caseId and the
 // specialist's own message text.

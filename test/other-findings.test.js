@@ -13,7 +13,7 @@
 // value exist" — no value, nothing to say; a value nobody can attribute, a
 // question that must not be hidden.
 import { describe, expect, it } from 'vitest'
-import { mergeFieldsWithDefinitions } from '../src/lib/extraction.js'
+import { groupDocumentRows } from '../src/lib/extraction.js'
 import { buildQualityFindings } from '../src/lib/extractionQuality.js'
 import {
   MAX_OTHER_FINDINGS_PER_DOCUMENT,
@@ -40,11 +40,12 @@ function field(overrides) {
     confidence: 0.9,
     source_quote: null,
     source_page: 1,
-    included_in_calculation: true,
-    verified_by_specialist: false,
     ...overrides
   }
 }
+
+const BANK = 'bank_securities_crypto_statement'
+const fieldsOf = (rows) => rows.flatMap((row) => row.fields.map((f) => ({ ...f, row_key: row.rowKey })))
 
 describe('a whitelist field the document does not mention', () => {
   it('produces no row at all — not an empty one', () => {
@@ -52,7 +53,7 @@ describe('a whitelist field the document does not mention', () => {
       field({ field_key: 'account_holder_name', row_key: 'row-1', field_value: 'Giulia Weber' }),
       field({ field_key: 'account_balance_31_12', row_key: 'row-1', field_value: "12'400.00" })
     ]
-    const rows = mergeFieldsWithDefinitions(BANK_DEFS, extracted, bankDoc)
+    const rows = fieldsOf(groupDocumentRows(BANK_DEFS, extracted, BANK))
 
     expect(rows).toHaveLength(2)
     expect(rows.map((r) => r.field_key)).toEqual(['account_holder_name', 'account_balance_31_12'])
@@ -61,29 +62,33 @@ describe('a whitelist field the document does not mention', () => {
     expect(rows.some((r) => r.field_key === 'institution_name')).toBe(false)
     expect(rows.some((r) => r.field_key === 'interest_income')).toBe(false)
     // And nothing empty survives anywhere in the output.
-    expect(rows.every((r) => r.field_value.trim())).toBe(true)
+    expect(rows.every((r) => r.value.trim())).toBe(true)
   })
 
   it('treats a whitespace-only extracted value the same as no value', () => {
-    const rows = mergeFieldsWithDefinitions(
-      BANK_DEFS,
-      [
-        field({ field_key: 'account_holder_name', field_value: '   ' }),
-        field({ field_key: 'account_balance_31_12', field_value: '900.00' })
-      ],
-      bankDoc
+    const rows = fieldsOf(
+      groupDocumentRows(
+        BANK_DEFS,
+        [
+          field({ field_key: 'account_holder_name', field_value: '   ' }),
+          field({ field_key: 'account_balance_31_12', field_value: '900.00' })
+        ],
+        BANK
+      )
     )
     expect(rows.map((r) => r.field_key)).toEqual(['account_balance_31_12'])
   })
 
   it('keeps the field definition ORDER for the fields that are present', () => {
-    const rows = mergeFieldsWithDefinitions(
-      BANK_DEFS,
-      [
-        field({ field_key: 'interest_income', field_value: '12.40' }),
-        field({ field_key: 'account_holder_name', field_value: 'Giulia Weber' })
-      ],
-      bankDoc
+    const rows = fieldsOf(
+      groupDocumentRows(
+        BANK_DEFS,
+        [
+          field({ field_key: 'interest_income', field_value: '12.40' }),
+          field({ field_key: 'account_holder_name', field_value: 'Giulia Weber' })
+        ],
+        BANK
+      )
     )
     // Extraction order is irrelevant; sort_order still decides.
     expect(rows.map((r) => r.field_key)).toEqual(['account_holder_name', 'interest_income'])
@@ -93,7 +98,6 @@ describe('a whitelist field the document does not mention', () => {
     const findings = buildQualityFindings({
       documents: [bankDoc],
       extractedFields: [field({ field_key: 'account_balance_31_12', field_value: '900.00' })],
-      fieldDefs: BANK_DEFS
     })
     expect(findings).toEqual([])
   })
@@ -235,12 +239,11 @@ describe('an uncertain coverage finding', () => {
     expect(row.review_note).toBe('Non è chiaro se sia un addebito o un accredito')
   })
 
-  it('becomes an explicit open question instead of sitting quietly in the list', () => {
+  it('marks the document "da verificare" instead of sitting quietly in the list', () => {
     const [row] = buildOtherFindingRows({ items: [uncertain], documentId: 'doc-1', origin: 'coverage_check' })
     const findings = buildQualityFindings({
       documents: [bankDoc],
       extractedFields: [field({ field_key: 'account_balance_31_12', field_value: '900.00' })],
-      fieldDefs: BANK_DEFS,
       otherFindings: [{ ...row, id: 'f-1' }]
     })
     expect(findings).toHaveLength(1)
@@ -260,7 +263,6 @@ describe('an uncertain coverage finding', () => {
     const findings = buildQualityFindings({
       documents: [bankDoc],
       extractedFields: [field({ field_key: 'account_balance_31_12', field_value: '900.00' })],
-      fieldDefs: BANK_DEFS,
       otherFindings: [{ ...row, id: 'f-1' }]
     })
     expect(findings).toEqual([])
@@ -282,7 +284,6 @@ describe('a row whose value is there but whose owner is not', () => {
     const findings = buildQualityFindings({
       documents: [bankDoc],
       extractedFields: twoAccounts,
-      fieldDefs: BANK_DEFS
     })
     const unidentified = findings.filter((f) => f.kind === 'unidentifiedRow')
     expect(unidentified).toHaveLength(1)
@@ -292,11 +293,10 @@ describe('a row whose value is there but whose owner is not', () => {
   })
 
   it('still shows the value it could not attribute — the row is not dropped with its missing identity fields', () => {
-    const rows = mergeFieldsWithDefinitions(BANK_DEFS, twoAccounts, bankDoc)
-    const rowTwo = rows.filter((r) => r.row_key === 'row-2')
-    expect(rowTwo).toHaveLength(1)
-    expect(rowTwo[0].field_value).toBe("48'920.00")
-    // No identity to label it with, which is precisely what the finding says.
-    expect(rowTwo[0].row_label).toBeNull()
+    const rowTwo = groupDocumentRows(BANK_DEFS, twoAccounts, BANK).find((r) => r.rowKey === 'row-2')
+    expect(rowTwo.fields).toHaveLength(1)
+    expect(rowTwo.fields[0].value).toBe("48'920.00")
+    // No identity to label it with, which is precisely what the note says.
+    expect(rowTwo.label).toBeNull()
   })
 })

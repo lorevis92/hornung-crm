@@ -6,7 +6,7 @@
 import { currentTaxYear } from '../config'
 import {
   CATEGORY_FIELD_DEFINITIONS, DOCUMENT_CATEGORIES, DOCUMENT_TYPES,
-  PRICING_ITEMS, TAX_PARAMETERS
+  PRICING_ITEMS
 } from '../demoSeed'
 import {
   computePersonalDetailsSync, buildPropertySuggestionPayload, buildChildSuggestionCandidates,
@@ -176,7 +176,7 @@ function seed() {
     { id: 'case-5', client_id: 'client-3', tax_year: year, status: 'opened', status_updated_at: daysAgo(2), client_message: '', specialist_notes: '', due_date: `${year + 1}-03-31`, delivery_by_post: false, express: false, created_at: daysAgo(2), updated_at: daysAgo(2) }
   ]
 
-  const salaryDoc = { id: uid('doc'), case_id: 'case-1', document_type_id: 'salary_statement', direction: 'client_upload', storage_path: 'demo/salary.pdf', file_name: 'Lohnausweis_2025.pdf', file_size: 184320, mime_type: 'application/pdf', uploaded_by: clientProfile.id, created_at: daysAgo(20), category_code: 'salary_statement' }
+  const salaryDoc = { id: uid('doc'), case_id: 'case-1', document_type_id: 'salary_statement', direction: 'client_upload', storage_path: 'demo/salary.pdf', file_name: 'Lohnausweis_2025.pdf', file_size: 184320, mime_type: 'application/pdf', uploaded_by: clientProfile.id, created_at: daysAgo(20), category_code: 'salary_statement', status: 'extracted', person_ref: 'taxpayer', person_name: 'Marco Bianchi', person_quote: 'Arbeitnehmer: Marco Bianchi', person_page: 1 }
 
   const documents = [
     salaryDoc,
@@ -187,14 +187,13 @@ function seed() {
     { id: uid('doc'), case_id: 'case-3', document_type_id: null, direction: 'specialist_upload', storage_path: 'demo/decl2.pdf', file_name: `Dichiarazione_${prev2}_Bianchi.pdf`, file_size: 690000, mime_type: 'application/pdf', uploaded_by: specialist.id, created_at: daysAgo(660) }
   ]
 
-  // Sample AI-extracted values for salaryDoc, so the verification panel has
-  // something to show in demo mode (the salary_statement field dictionary
-  // has 9 fields — only some come pre-filled, mirroring a real partial
-  // extraction; the rest stay empty for the specialist to fill in by hand).
+  // Sample AI-extracted values for salaryDoc, so Tax Summary has something
+  // to show in demo mode (a real extraction fills only what the document
+  // states, so most of the salary_statement fields stay absent).
   const extractedDocumentFields = [
-    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'employer_name', field_value: 'Acme Logistics SA', confidence: 0.95, source_quote: 'Arbeitgeber: Acme Logistics SA', source_page: 1, verified_by_specialist: false, verified_at: null, verified_by: null },
-    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'gross_salary', field_value: "112'400", confidence: 0.98, source_quote: "Bruttolohn total 112'400", source_page: 1, verified_by_specialist: false, verified_at: null, verified_by: null },
-    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'withholding_tax', field_value: "1'204", confidence: 0.87, source_quote: 'Quellensteuer 1’204.00', source_page: 1, verified_by_specialist: false, verified_at: null, verified_by: null }
+    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'employer_name', field_value: 'Acme Logistics SA', confidence: 0.95, source_quote: 'Arbeitgeber: Acme Logistics SA', source_page: 1 },
+    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'gross_salary', field_value: "112'400", confidence: 0.98, source_quote: "Bruttolohn total 112'400", source_page: 1 },
+    { id: uid('exf'), document_id: salaryDoc.id, field_key: 'withholding_tax', field_value: "1'204", confidence: 0.87, source_quote: 'Quellensteuer 1’204.00', source_page: 1 }
   ]
 
   // One sample "other information found" row (document_other_findings,
@@ -226,13 +225,6 @@ function seed() {
     { id: uid('ev'), case_id: 'case-1', event_type: 'status_change', from_status: 'waiting_client', to_status: 'in_process', created_at: daysAgo(5), actor_id: specialist.id }
   ]
 
-  const extracted = [
-    { id: uid('ex'), case_id: 'case-1', group_key: 'income', field_key: 'gross_salary', field_label: 'Gross salary', field_value: "112'400", value_numeric: 112400, currency: 'CHF', confidence: 0.98, source_page: 1, source_snippet: 'Bruttolohn total 112’400', document_name: 'Lohnausweis_2025.pdf', status: 'pending' },
-    { id: uid('ex'), case_id: 'case-1', group_key: 'deductions', field_key: 'pillar_3a', field_label: 'Pillar 3a contributions', field_value: "7'056", value_numeric: 7056, currency: 'CHF', confidence: 0.99, source_page: 1, source_snippet: 'Einzahlungen 2025: CHF 7’056.00', document_name: 'Pilastro_3a_UBS.pdf', status: 'pending' },
-    { id: uid('ex'), case_id: 'case-1', group_key: 'assets', field_key: 'bank_balance_total', field_label: 'Total bank balances 31.12', field_value: "48'920", value_numeric: 48920, currency: 'CHF', confidence: 0.94, source_page: 3, source_snippet: 'Saldo totale al 31.12: CHF 48’920.15', document_name: 'Estratti_conti_31122025.pdf', status: 'pending' },
-    { id: uid('ex'), case_id: 'case-1', group_key: 'income', field_key: 'withholding_tax', field_label: 'Withholding tax deducted', field_value: "1'204", value_numeric: 1204, currency: 'CHF', confidence: 0.87, source_page: 2, source_snippet: 'Verrechnungssteuer 1’204.00', document_name: 'Estratti_conti_31122025.pdf', status: 'pending' }
-  ]
-
   return {
     profiles: [specialist, clientProfile, { id: 'profile-client-2', app_id: 'hornung_crm', role: 'client', full_name: 'Sophie Müller', email: c2.email, locale: 'de' }],
     clients: [c1, c2, c3],
@@ -245,12 +237,9 @@ function seed() {
     documents,
     requested,
     events,
-    extracted,
     fieldDefinitions: JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS)),
     extractedDocumentFields,
     documentOtherFindings,
-    entityMergeDecisions: [],
-    taxParameters: JSON.parse(JSON.stringify(TAX_PARAMETERS)),
     fieldSuggestions: [],
     pricingItems: JSON.parse(JSON.stringify(PRICING_ITEMS)),
     caseAssistantMessages: [],
@@ -266,18 +255,13 @@ function load() {
       // Sessions started before the "Tax settings" field-definitions screen
       // won't have this key in their saved state yet.
       parsed.fieldDefinitions ||= JSON.parse(JSON.stringify(CATEGORY_FIELD_DEFINITIONS))
-      // Same for sessions started before the document-verification panel —
-      // no sample values to backfill here, an empty list just means the
-      // specialist starts from a blank sheet for already-existing documents.
+      // Same for sessions started before extracted values existed — an
+      // empty list just means nothing was extracted for those documents.
       parsed.extractedDocumentFields ||= []
       // Same for sessions started before "other information found" existed
       // (migration 46) — an empty list simply means nothing beyond the
       // whitelist was recorded for those documents.
       parsed.documentOtherFindings ||= []
-      // Same for sessions started before the by-category view (migration 48).
-      parsed.entityMergeDecisions ||= []
-      // Same for sessions started before "Tax parameters" existed.
-      parsed.taxParameters ||= JSON.parse(JSON.stringify(TAX_PARAMETERS))
       // Same for sessions started before the personal-details auto-fill
       // feature existed.
       parsed.fieldSuggestions ||= []
@@ -440,7 +424,7 @@ export const demoApi = {
   },
 
   // Mirrors the real cascade (clients -> questionnaire tables / tax_cases ->
-  // case_documents / case_events / case_requested_documents / extracted_fields)
+  // case_documents / case_events / case_requested_documents)
   // so demo mode behaves the same way. Never touches `profiles` — that's the
   // demo stand-in for auth.users/app_profiles, which a real client deletion
   // must not affect either.
@@ -460,7 +444,6 @@ export const demoApi = {
     s.documents = s.documents.filter((d) => !caseIds.includes(d.case_id))
     s.requested = s.requested.filter((r) => !caseIds.includes(r.case_id))
     s.events = s.events.filter((e) => !caseIds.includes(e.case_id))
-    s.extracted = s.extracted.filter((e) => !caseIds.includes(e.case_id))
     s.cases = s.cases.filter((c) => c.client_id !== id)
     s.clients = s.clients.filter((c) => c.id !== id)
 
@@ -720,68 +703,10 @@ export const demoApi = {
   },
 
   // Demo has no separate client_documents table — documents.id doubles as
-  // the "document_id" extracted_document_fields would otherwise reference.
-  // Demo has no separate client_documents table — documents.id doubles as
-  // "document_id", so these are already the direct primitives; the
-  // case-document-indirected names are plain aliases.
+  // document_id, so the case-document variant below is a plain alias.
   async listExtractedFieldsForDocument(documentId) {
     const s = store()
     return wait(s.extractedDocumentFields.filter((f) => f.document_id === documentId))
-  },
-
-  async saveExtractedFieldForDocument(documentId, payload) {
-    const s = store()
-    const rowKey = payload.row_key || ''
-    const existing = s.extractedDocumentFields.find(
-      (f) => f.document_id === documentId && f.field_key === payload.field_key && (f.row_key || '') === rowKey
-    )
-    let row
-    if (existing) {
-      Object.assign(existing, payload, { row_key: rowKey })
-      row = existing
-    } else {
-      row = { id: uid('exf'), document_id: documentId, ...payload, row_key: rowKey }
-      s.extractedDocumentFields.push(row)
-    }
-    commit()
-    return wait(row)
-  },
-
-  // Demo mirror of entity_merge_decisions (migration 48) — same shape and
-  // same key-based identity as the real backend.
-  async listEntityMergeDecisions(clientId, taxYear) {
-    const s = store()
-    return wait(
-      s.entityMergeDecisions.filter((d) => d.client_id === clientId && d.tax_year === Number(taxYear))
-    )
-  },
-
-  async saveEntityMergeDecision(clientId, taxYear, payload) {
-    const s = store()
-    const existing = s.entityMergeDecisions.find(
-      (d) =>
-        d.client_id === clientId &&
-        d.tax_year === Number(taxYear) &&
-        d.category_code === payload.category_code &&
-        d.entity_key_a === payload.entity_key_a &&
-        d.entity_key_b === payload.entity_key_b
-    )
-    let row
-    if (existing) {
-      Object.assign(existing, payload, { decided_at: iso(Date.now()) })
-      row = existing
-    } else {
-      row = {
-        id: uid('emd'),
-        client_id: clientId,
-        tax_year: Number(taxYear),
-        ...payload,
-        decided_at: iso(Date.now())
-      }
-      s.entityMergeDecisions.push(row)
-    }
-    commit()
-    return wait(row)
   },
 
   async listExtractedFields(caseDocumentId) {
@@ -795,14 +720,6 @@ export const demoApi = {
     const s = store()
     const wanted = new Set(documentIds)
     return wait(s.documentOtherFindings.filter((f) => wanted.has(f.document_id)))
-  },
-
-  async listOtherFindingsForDocument(documentId) {
-    return this.listOtherFindingsForDocuments([documentId])
-  },
-
-  async saveExtractedField(caseDocumentId, payload) {
-    return this.saveExtractedFieldForDocument(caseDocumentId, payload)
   },
 
   // "Personal details" (current_tax_sheet) -> registry sync. In demo mode
@@ -1086,47 +1003,11 @@ export const demoApi = {
     return wait(s.documents.filter((d) => caseIds.has(d.case_id)))
   },
 
-  async listTaxParameters() {
-    const s = store()
-    return wait(
-      [...s.taxParameters].sort(
-        (a, b) =>
-          a.scope.localeCompare(b.scope) ||
-          (a.canton_code || '').localeCompare(b.canton_code || '') ||
-          b.tax_year - a.tax_year
-      )
-    )
-  },
-
-  async createTaxParameter(payload) {
-    const s = store()
-    const row = { id: uid('param'), ...payload }
-    s.taxParameters.push(row)
-    commit()
-    return wait(row)
-  },
-
-  async updateTaxParameter(id, patch) {
-    const s = store()
-    const row = s.taxParameters.find((p) => p.id === id)
-    if (!row) throw new Error('NOT_FOUND')
-    Object.assign(row, patch)
-    commit()
-    return wait(row)
-  },
-
-  async deleteTaxParameter(id) {
-    const s = store()
-    s.taxParameters = s.taxParameters.filter((p) => p.id !== id)
-    commit()
-    return wait(true)
-  },
-
   // Demo mode has no real AI extraction to retry — simulates the same
   // outcome a real retry has when it succeeds (status flips back to
   // 'extracted', the error clears) so the completeness banner's "Retry"
   // action is testable end to end without a live Anthropic call.
-  async retryExtraction(documentId, { force = false } = {}) {
+  async retryExtraction(documentId) {
     void force
     const s = store()
     const doc = s.documents.find((d) => d.id === documentId)
@@ -1136,15 +1017,6 @@ export const demoApi = {
     doc.processed_at = iso(Date.now())
     commit()
     return wait({ ok: true })
-  },
-
-  async updateClientDocumentStatus(documentId, status) {
-    const s = store()
-    const doc = s.documents.find((d) => d.id === documentId)
-    if (!doc) throw new Error('Document not found.')
-    doc.status = status
-    commit()
-    return wait(doc)
   },
 
   // The "reload everything" safety net (see api/reprocess-client-year.js
@@ -1178,7 +1050,7 @@ export const demoApi = {
       await this.syncChildSuggestions(clientId, year)
     }
     const { merged } = await this.dedupeClientProperties(clientId)
-    return wait({ processed: docs.length, failed: 0, errors: [], mergedProperties: merged })
+    return wait({ processed: docs.length, failed: 0, failures: [], mergedProperties: merged })
   },
 
   // Merges existing duplicate client_properties rows for a client — see
@@ -1347,20 +1219,6 @@ export const demoApi = {
     )
     commit()
     return wait(s.requested.filter((r) => r.case_id === caseId))
-  },
-
-  async listEvents(caseId) {
-    const s = store()
-    return wait(
-      s.events
-        .filter((e) => e.case_id === caseId)
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    )
-  },
-
-  async listExtracted(caseId) {
-    const s = store()
-    return wait(s.extracted.filter((e) => e.case_id === caseId))
   },
 
   async getStats(year) {

@@ -5,10 +5,9 @@ import { api } from './data'
 // shouldn't interrupt whatever the user was actually doing.
 //
 // For the "Personal details" -> client registry auto-fill
-// (src/lib/personalDetails.js): called after a specialist manually saves a
-// field on a current_tax_sheet document (the AI-extraction path triggers
-// it server-side instead, see api/extract-document.js).
-export async function syncPersonalDetailsInBackground(documentId) {
+// (src/lib/personalDetails.js) — used by the catch-up below; a fresh
+// extraction triggers the same sync server-side (api/extract-document.js).
+async function syncPersonalDetailsInBackground(documentId) {
   if (!documentId) return null
   try {
     return await api.syncPersonalDetails(documentId)
@@ -20,7 +19,7 @@ export async function syncPersonalDetailsInBackground(documentId) {
 
 // Same reasoning, for the "property_tax_value" -> client_properties
 // suggestion (src/lib/personalDetails.js's buildPropertySuggestionPayload).
-export async function syncPropertySuggestionInBackground(documentId) {
+async function syncPropertySuggestionInBackground(documentId) {
   if (!documentId) return null
   try {
     return await api.syncPropertySuggestion(documentId)
@@ -31,9 +30,8 @@ export async function syncPropertySuggestionInBackground(documentId) {
 }
 
 // Same reasoning, for the child-name/child-count cross-reference
-// (src/lib/personalDetails.js's buildChildSuggestionCandidates) — re-run
-// after either a current_tax_sheet or a childcare_costs field is saved.
-export async function syncChildSuggestionsInBackground(clientId, taxYear) {
+// (src/lib/personalDetails.js's buildChildSuggestionCandidates).
+async function syncChildSuggestionsInBackground(clientId, taxYear) {
   if (!clientId || !taxYear) return null
   try {
     return await api.syncChildSuggestions(clientId, taxYear)

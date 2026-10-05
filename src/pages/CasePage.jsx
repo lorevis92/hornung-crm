@@ -13,16 +13,19 @@ import ChecklistPanel from '../components/ChecklistPanel'
 import FeeEstimatePanel from '../components/FeeEstimatePanel'
 import CaseAssistant from '../components/CaseAssistant'
 import Modal from '../components/Modal'
-import { EmptyState, Field, PageLoader, Select, Spinner, Textarea, TextInput } from '../components/ui'
+import { LoadGate } from '../components/LoadState'
+import { EmptyState, Field, Select, Spinner, Textarea, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
+import { useLoad } from '../lib/useLoad'
 import { CANTONS, CASE_STATUSES, CLIENT_DELETE_OPEN_STATUSES, MARITAL_STATUSES } from '../lib/constants'
 import { fullName } from '../lib/format'
 import { computeQuestionnaireConsistency, computeQuestionnaireCompleteness } from '../lib/questionnaireConsistency'
 import { describeSuggestion } from '../lib/suggestions'
 import { viewerCopy } from '../lib/viewerCopy'
+import { summaryLinkFor } from '../lib/citations'
 
 export default function CasePage() {
   const { caseId } = useParams()
@@ -39,7 +42,6 @@ export default function CasePage() {
   const [searchParams] = useSearchParams()
   const openConsistencyOnLoad = searchParams.get('fix') === 'consistency'
 
-  const [loading, setLoading] = useState(true)
   const [caseRow, setCaseRow] = useState(null)
   const [documents, setDocuments] = useState([])
   const [requested, setRequested] = useState([])
@@ -54,6 +56,7 @@ export default function CasePage() {
   const [resolvingSuggestionId, setResolvingSuggestionId] = useState(null)
   const [confirmingReprocess, setConfirmingReprocess] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
+  const [reprocessResult, setReprocessResult] = useState(null)
   const [statusDraft, setStatusDraft] = useState('opened')
   const [messageDraft, setMessageDraft] = useState('')
   const [notesDraft, setNotesDraft] = useState('')
@@ -68,11 +71,8 @@ export default function CasePage() {
 
   const load = useCallback(async () => {
     const row = await api.getCase(caseId)
-    if (!row) {
-      setLoading(false)
-      return
-    }
     setCaseRow(row)
+    if (!row) return
     setStatusDraft(row.status)
     setMessageDraft(row.client_message || '')
 
@@ -116,13 +116,8 @@ export default function CasePage() {
       const sheetDoc = docs.find((d) => d.category_code === 'current_tax_sheet')
       setCurrentTaxSheetFields(sheetDoc ? await api.listExtractedFields(sheetDoc.id) : [])
     }
-    setLoading(false)
   }, [caseId, isStaff])
-
-  useEffect(() => {
-    setLoading(true)
-    load()
-  }, [load])
+  const loadState = useLoad(load)
 
   const clientDocs = useMemo(
     () => documents.filter((d) => d.direction === 'client_upload'),
@@ -296,11 +291,10 @@ export default function CasePage() {
   }
 
   // The case page has no source viewer of its own; Tax Summary does. A
-  // document reference in an assistant answer therefore opens Tax Summary
-  // already showing that document (?doc=<id>, see TaxSummary.jsx) rather
-  // than being dead text here.
-  const viewDocumentInSummary = (documentId) => {
-    navigate(`/year/${caseId}/summary?doc=${encodeURIComponent(documentId)}`)
+  // reference in an assistant answer therefore opens Tax Summary directly on
+  // that document — at the page and sentence, when it points at a value.
+  const viewDocumentInSummary = (documentId, source = {}) => {
+    navigate(summaryLinkFor(caseId, { documentId, ...source }))
   }
 
   const toggleCaseOption = async (patch) => {
@@ -308,24 +302,16 @@ export default function CasePage() {
     setCaseRow((current) => ({ ...current, ...row }))
   }
 
-  // "Reload everything from what's actually written in the documents" —
-  // one action instead of retrying documents one at a time and hoping the
-  // Questionnaire/suggestions/calculation catch up on their own. Re-runs
-  // full extraction for every document of this year (even already-
-  // extracted ones, so a schema change made after they were first
-  // processed actually gets picked up), which re-syncs everything derived
-  // from them as a side effect — see api/reprocess-client-year.js.
+  // "Estrai tutto": re-runs the extraction on every document of this year
+  // (see api/reprocess-client-year.js, at most 3 at a time) and then shows
+  // what happened — how many succeeded, and each failed document with its
+  // reason — in the same dialog, instead of a toast that vanishes.
   const reprocessAll = async () => {
-    setConfirmingReprocess(false)
     setReprocessing(true)
     try {
       const result = await api.reprocessClientYear(caseRow.client_id, caseRow.tax_year)
-      if (result.failed) {
-        toast.error(t('case.reprocessPartial', { processed: result.processed, failed: result.failed }))
-      } else {
-        toast.success(t('case.reprocessDone', { processed: result.processed }))
-      }
-      await load()
+      setReprocessResult(result)
+      loadState.refresh()
     } catch (error) {
       console.error(error)
       toast.error(error.message || t('common.error'))
@@ -334,7 +320,7 @@ export default function CasePage() {
     }
   }
 
-  if (loading) return <PageLoader label={t('common.loading')} />
+  if (loadState.status !== 'ready') return <LoadGate load={loadState} showDetail={isStaff} />
   if (!caseRow) {
     return (
       <EmptyState
@@ -530,8 +516,6 @@ export default function CasePage() {
                   onCategoryChange={changeDocumentCategory}
                   canDelete={isStaff || !locked}
                   onDelete={removeDocument}
-                  clientId={caseRow.client_id}
-                  taxYear={caseRow.tax_year}
                 />
               ) : (
                 <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
@@ -602,8 +586,6 @@ export default function CasePage() {
                 onCategoryChange={changeDocumentCategory}
                 canDelete={isStaff}
                 onDelete={removeDocument}
-                clientId={caseRow.client_id}
-                taxYear={caseRow.tax_year}
               />
             ) : (
               <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[14.5px] text-ink-400">
@@ -714,11 +696,27 @@ export default function CasePage() {
 
       <Modal
         open={confirmingReprocess}
-        onClose={() => (reprocessing ? null : setConfirmingReprocess(false))}
-        title={t('case.reprocessConfirmTitle')}
-        description={t('case.reprocessConfirmBody')}
+        onClose={() => {
+          if (reprocessing) return
+          setConfirmingReprocess(false)
+          setReprocessResult(null)
+        }}
+        title={reprocessResult ? t('case.reprocessResultTitle') : t('case.reprocessConfirmTitle')}
+        description={reprocessResult ? null : t('case.reprocessConfirmBody')}
         size="sm"
         footer={
+          reprocessResult ? (
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              onClick={() => {
+                setConfirmingReprocess(false)
+                setReprocessResult(null)
+              }}
+            >
+              {t('common.close')}
+            </button>
+          ) : (
           <>
             <button
               type="button"
@@ -733,8 +731,31 @@ export default function CasePage() {
               {t('case.reprocessAll')}
             </button>
           </>
+          )
         }
-      />
+      >
+        {reprocessResult ? (
+          <div className="space-y-3 text-[14.5px] text-ink-700">
+            <p>{t('case.reprocessDone', { processed: reprocessResult.processed })}</p>
+            {reprocessResult.failures?.length ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <p className="font-medium text-red-900">
+                  {t('case.reprocessFailedTitle', { count: reprocessResult.failures.length })}
+                </p>
+                <ul className="mt-1.5 space-y-1 text-[13.5px] text-red-800">
+                  {reprocessResult.failures.map((f) => (
+                    <li key={f.documentId}>
+                      <span className="font-medium">{f.fileName}</span>
+                      {' — '}
+                      {f.error === 'ALREADY_PROCESSING' ? t('case.reprocessAlreadyProcessing') : f.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
 
       <Modal
         open={consistencyOpen}

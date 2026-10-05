@@ -6,8 +6,7 @@
 // it is, which document to open). Staff only (requireStaff),
 // same as every other case-scoped endpoint in this app — there is no
 // per-specialist case assignment here, so "authorized for this case" means
-// "is Hornung staff at all", exactly like /api/calculate-aggregates,
-// /api/save-field-decision, etc.
+// "is Hornung staff at all", like every other staff endpoint.
 //
 // The context is rebuilt from the database on EVERY call (never trusts
 // anything the client sends beyond caseId/message) — see
@@ -33,7 +32,6 @@ import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
 import { buildCaseAssistantContext } from '../src/lib/caseAssistantContext.js'
 import { buildQualityFindings } from '../src/lib/extractionQuality.js'
-import { buildCategoryEntities, suggestionsAsQualityFindings } from '../src/lib/categoryEntities.js'
 import { resolveModel } from '../src/lib/aiModels.js'
 
 // A specialist's choice on the Tax settings "AI" tab (ai_model_settings,
@@ -61,13 +59,15 @@ The consultant asks you about the ONE case described in the context below: what 
 Rules:
 - Always answer in Italian, regardless of what language the question is asked in.
 - Base every factual claim about THIS case strictly on the context below — never invent a number, a document, or a detail that isn't there. If something is asked about but isn't in the context, say so plainly instead of guessing.
-- Whenever you refer to a specific source document, use the exact marker "[[doc:<id>|<file name>]]" exactly as it appears in the context (copy it verbatim) so the consultant can click through and verify it themselves. Never invent a marker for a document not listed in the context.
+- Every reference must be clickable, using markers copied verbatim from the context — never invent one:
+  - when your answer relies on a specific extracted value, use the marker printed right after THAT value ("[[doc:<id>|<file name>|p<page>|<sentence>]]"): it opens the document at the page and sentence the value came from;
+  - when you refer to a document in general, use the document's own marker ("[[doc:<id>|<file name>]]"), which opens it from the start.
 - This app computes NOTHING: there is no taxable income, no taxable wealth, no deduction total, no assessment for this case, and you must never present one. If asked "how much is taxable", "what is the total deduction", or anything else that would require computing the declaration, say plainly that this app only collects documents and their extracted data, and that the calculation is done outside it. You may still add up figures the consultant explicitly asks you to add up, but say clearly it is a plain sum of the extracted values, not a tax result.
 - A question about Swiss tax law in general (not about this case's data) may be answered from your own general knowledge, but you must clearly say it is general information to be verified — never present it as a fact about this case or its documents.
 - A document's data comes in two forms and both are real: the defined fields of its category, and lines marked "Other information found" — things the document says that no defined field covers. Use both when answering, and never treat an "other information" line as less reliable just because it has no field name. One marked UNCERTAIN is the exception: report it as what the document appears to say, and say it still needs confirming.
 - The absence of a field means only that the document does not state it. Never describe it as missing data, a gap, or something the client failed to provide.
-- "How many accounts / properties / mortgages does this client have" is answered ONLY by the "HOW MANY OF EACH THING THIS CASE HAS" section. It already merges rows from different documents that describe the same real-world thing, including merges a specialist confirmed by hand. Never recount from the extracted rows and never give a number that disagrees with it.
-- When something appears under "ENTITIES THAT MIGHT BE THE SAME THING", say exactly that: two rows that might be one thing, not yet confirmed. Do not decide it yourself and do not present either reading as the answer.
+- Each document says whom it refers to ("Refers to"). Use it when asked about a person; "cannot be determined" means exactly that — say so instead of guessing. On a household document, each row may name its own person.
+- Two documents can describe the same account or property (for example two statements of one account). If asked how many there are, count carefully and say when two rows look like the same thing seen in two documents.
 - You can only answer questions. You have no ability to change any data or take any action — never claim otherwise.
 - Be concise and concrete: point at the exact document, row and value, not a vague description.
 
@@ -102,7 +102,7 @@ export default async function handler(req, res) {
 
     const [personsRes, childrenRes, documentsRes] = await Promise.all([
       admin.from('client_persons').select('*').eq('client_id', caseRow.client_id),
-      admin.from('client_children').select('*').eq('client_id', caseRow.client_id),
+      admin.from('client_children').select('*').eq('client_id', caseRow.client_id).order('sort_order'),
       admin
         .from('client_documents')
         .select('*')
@@ -119,54 +119,26 @@ export default async function handler(req, res) {
     const documents = documentsRes.data || []
     const documentIds = documents.map((d) => d.id)
 
-    const [extractedFieldsRes, otherFindingsRes, mergeDecisionsRes, categoriesRes, fieldDefsRes] = await Promise.all([
+    const [extractedFieldsRes, otherFindingsRes, categoriesRes, fieldDefsRes] = await Promise.all([
       documentIds.length
         ? admin.from('extracted_document_fields').select('*').in('document_id', documentIds)
         : Promise.resolve({ data: [] }),
       documentIds.length
         ? admin.from('document_other_findings').select('*').in('document_id', documentIds)
         : Promise.resolve({ data: [] }),
-      admin
-        .from('entity_merge_decisions')
-        .select('*')
-        .eq('client_id', caseRow.client_id)
-        .eq('tax_year', caseRow.tax_year),
       admin.from('document_categories').select('code, group_key, label_en, label_de, label_fr, label_it'),
-      admin.from('category_field_definitions').select('category_code, field_key, field_label')
+      admin.from('category_field_definitions').select('category_code, field_key, field_label, value_type, sort_order')
     ])
     if (extractedFieldsRes.error) throw extractedFieldsRes.error
     if (otherFindingsRes.error) throw otherFindingsRes.error
-    if (mergeDecisionsRes.error) throw mergeDecisionsRes.error
     if (categoriesRes.error) throw categoriesRes.error
     if (fieldDefsRes.error) throw fieldDefsRes.error
 
     const extractedFields = extractedFieldsRes.data || []
-    // What the documents hold beyond the whitelist (migration 46) — the
-    // assistant answers from the document, so it has to see this too.
     const otherFindings = otherFindingsRes.data || []
-    // The same findings Tax Summary shows the specialist — computed here
-    // rather than read from a table, so the assistant can never describe a
-    // question as open after it has actually been resolved.
-    // The SAME grouping Tax Summary's by-category view shows, including
-    // the merges a specialist confirmed — so the assistant can never
-    // disagree with the screen about how many things this case has.
-    const { groups: categoryGroups, suggestions: mergeSuggestions } = buildCategoryEntities({
-      documents,
-      extractedFields,
-      fieldDefs: fieldDefsRes.data || [],
-      categories: categoriesRes.data || [],
-      mergeDecisions: mergeDecisionsRes.data || []
-    })
-
-    const qualityFindings = [
-      ...buildQualityFindings({
-        documents,
-        extractedFields,
-        fieldDefs: fieldDefsRes.data || [],
-        otherFindings
-      }),
-      ...suggestionsAsQualityFindings(mergeSuggestions, documents)
-    ]
+    // Computed here, never stored: the same notes Tax Summary shows, so the
+    // assistant and the screen always agree on what is worth a second look.
+    const qualityFindings = buildQualityFindings({ documents, extractedFields, otherFindings })
 
     const context = buildCaseAssistantContext({
       client,
@@ -179,8 +151,6 @@ export default async function handler(req, res) {
       categories: categoriesRes.data || [],
       fieldDefs: fieldDefsRes.data || [],
       otherFindings,
-      categoryGroups,
-      mergeSuggestions,
       qualityFindings
     })
 

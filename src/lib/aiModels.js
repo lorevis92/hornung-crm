@@ -28,10 +28,6 @@ export const AI_MODELS = [
 
 export const DEFAULT_MODEL = 'claude-sonnet-5'
 
-export function aiModelLabel(modelId) {
-  return AI_MODELS.find((m) => m.id === modelId)?.label || modelId
-}
-
 // The exact precedence every AI-backed endpoint uses: a specialist's saved
 // choice (ai_model_settings, see migration 20260101000044) wins if present,
 // otherwise the env var, otherwise the hardcoded default — so changing the

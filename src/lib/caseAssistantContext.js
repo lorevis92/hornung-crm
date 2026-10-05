@@ -1,17 +1,26 @@
 // Builds the plain-text context fed to the case assistant (api/case-assistant.js)
-// — a pure function with no I/O, same reasoning as personalDetails.js: the
-// endpoint does every DB read, this only turns already-fetched rows into
-// text, so it's testable without a live database and can never accidentally
-// reach past what it was explicitly given. The caller is responsible for
-// scoping every query to exactly this case's client_id/tax_year — this
-// function has no way to fetch more even if it wanted to.
+// — a pure function with no I/O: the endpoint does every DB read, scoped to
+// exactly this case's client_id/tax_year, and this only turns those rows into
+// text. It can never reach past what it was given.
 //
-// The app no longer computes a tax declaration, so this context is strictly
-// "what the documents say and where each value came from": documents, their
-// extracted rows, and the open data-quality questions. It deliberately
-// contains no taxable totals, deductions or fiscal treatment of any kind —
-// there are none to report, and the assistant must not imply otherwise.
-import { ROW_KEY_DOCUMENT_LEVEL } from './rowBasedFields.js'
+// The app does not compute a tax declaration, so this context is strictly
+// "what the documents say, about whom, and where each value came from". Every
+// extracted value carries its own reference marker with page and sentence
+// (src/lib/citations.js), so an answer built on it opens the document at the
+// right point.
+import { documentMarker, sourceMarker } from './citations.js'
+import { describeDocumentPerson } from './documentPerson.js'
+import { groupDocumentRows } from './extraction.js'
+
+const PERSON_KIND_TEXT = {
+  taxpayer: 'the taxpayer',
+  spouse: 'the spouse',
+  both_spouses: 'both spouses',
+  child: 'a child',
+  household: 'the household (rows may belong to different persons)',
+  unknown: 'cannot be determined from the document',
+  pending: 'not determined yet (document not extracted with the current version)'
+}
 
 function fullName(person) {
   if (!person) return null
@@ -24,39 +33,30 @@ function formatAmount(value) {
   return n.toLocaleString('de-CH', { maximumFractionDigits: 0 })
 }
 
-// Groups a document's extracted fields by row_key (see rowBasedFields.js) —
-// same grouping the UI itself uses, so the assistant describes the data the
-// same way the specialist sees it on screen.
-function groupFieldsByRow(fields, fieldLabelByKey, categoryCode) {
-  const byRow = new Map()
-  for (const field of fields) {
-    if (!field.field_value) continue
-    const rowKey = field.row_key || ROW_KEY_DOCUMENT_LEVEL
-    if (!byRow.has(rowKey)) byRow.set(rowKey, [])
-    const label = fieldLabelByKey[`${categoryCode}:${field.field_key}`] || field.field_key
-    byRow.get(rowKey).push(`${label}: ${field.field_value}`)
+function describeNote(note) {
+  if (note.kind === 'unidentifiedRow') {
+    return 'one of its rows states nothing about whose it is (no account holder, insured person or similar).'
   }
-  return byRow
+  if (note.kind === 'duplicateSource') {
+    return `"${note.fieldKey}" was read ${note.detail?.count ?? 2} times from the same line ("${note.detail?.quote ?? ''}") — probably one line read twice.`
+  }
+  if (note.kind === 'reportedTotalMismatch') {
+    return `the document states a total of ${formatAmount(note.detail?.reportedTotal)} but its rows add up to ${formatAmount(note.detail?.rowsSum)} — a row may be missing.`
+  }
+  if (note.kind === 'otherFindingNeedsReview') {
+    return `"${note.detail?.label ?? ''}": ${note.detail?.value ?? ''} was found but could not be read with confidence${note.detail?.note ? ` (${note.detail.note})` : ''}.`
+  }
+  return null
 }
 
 // documents: client_documents rows for this case's client/tax_year.
-// extractedFields: extracted_document_fields rows for those documents.
-// categories/fieldDefs: the full document_categories / category_field_definitions
-//   tables (for human-readable labels).
-// otherFindings: document_other_findings rows — values a document holds
-//   that no whitelist field covers (src/lib/otherFindings.js). Included so
-//   the assistant can answer from what a document ACTUALLY says, not only
-//   from what the schema anticipated.
-// categoryGroups/mergeSuggestions: buildCategoryEntities(...) output
-//   (src/lib/categoryEntities.js) — HOW MANY real-world things this case
-//   has and which documents describe each, including the merges a
-//   specialist confirmed. The assistant must answer "how many properties"
-//   from this and never by counting raw rows, or it would contradict the
-//   screen the consultant is looking at.
-// qualityFindings: buildQualityFindings(...) output (src/lib/extractionQuality.js)
-//   — the open questions about the extracted data, the same ones Tax
-//   Summary shows the specialist.
-// primaryPerson/spousePerson/children: client_persons/client_children rows.
+// extractedFields / otherFindings: their extracted_document_fields /
+//   document_other_findings rows.
+// categories / fieldDefs: document_categories / category_field_definitions
+//   (labels, field order, value types).
+// qualityFindings: buildQualityFindings(...) — the same notes Tax Summary
+//   shows next to each document.
+// primaryPerson / spousePerson / children: client_persons / client_children.
 export function buildCaseAssistantContext({
   client,
   caseRow,
@@ -68,23 +68,10 @@ export function buildCaseAssistantContext({
   categories,
   fieldDefs,
   otherFindings,
-  categoryGroups,
-  mergeSuggestions,
   qualityFindings
 }) {
   const categoryByCode = Object.fromEntries((categories || []).map((c) => [c.code, c]))
-  const fieldLabelByKey = Object.fromEntries(
-    (fieldDefs || []).map((f) => [`${f.category_code}:${f.field_key}`, f.field_label])
-  )
-  const fieldsByDoc = {}
-  for (const field of extractedFields || []) {
-    ;(fieldsByDoc[field.document_id] ||= []).push(field)
-  }
-  const otherByDoc = {}
-  for (const finding of otherFindings || []) {
-    ;(otherByDoc[finding.document_id] ||= []).push(finding)
-  }
-
+  const household = { primary: primaryPerson, spouse: spousePerson, children: children || [] }
   const lines = []
 
   lines.push('=== CASE ===')
@@ -96,12 +83,12 @@ export function buildCaseAssistantContext({
   lines.push('=== HOUSEHOLD (from the Questionnaire) ===')
   if (primaryPerson) {
     lines.push(
-      `Primary person: ${fullName(primaryPerson) || 'unnamed'}` +
+      `Taxpayer: ${fullName(primaryPerson) || 'unnamed'}` +
         (primaryPerson.marital_status ? `, marital status: ${primaryPerson.marital_status}` : '') +
         (primaryPerson.date_of_birth ? `, born ${primaryPerson.date_of_birth}` : '')
     )
   } else {
-    lines.push('Primary person: not yet in the registry.')
+    lines.push('Taxpayer: not yet in the registry.')
   }
   if (spousePerson && (spousePerson.first_name || spousePerson.last_name)) {
     lines.push(`Spouse: ${fullName(spousePerson) || 'unnamed'}`)
@@ -112,165 +99,48 @@ export function buildCaseAssistantContext({
   lines.push('')
 
   lines.push('=== DOCUMENTS AND THEIR EXTRACTED DATA ===')
-  if (!documents?.length) {
-    lines.push('No documents uploaded yet for this case.')
-  }
+  if (!documents?.length) lines.push('No documents uploaded yet for this case.')
   for (const doc of documents || []) {
     const category = categoryByCode[doc.category_code]
+    const person = describeDocumentPerson(doc, household)
     lines.push(
-      `[[doc:${doc.id}|${doc.file_name}]] — category: ${category?.label_en || doc.category_code || 'uncategorized'}, status: ${doc.status}`
+      `${documentMarker(doc)} — type: ${category?.label_en || doc.category_code || 'uncategorized'}, status: ${doc.status}`
     )
-    const fields = fieldsByDoc[doc.id] || []
-    const others = otherByDoc[doc.id] || []
-    if (!fields.length && !others.length) {
+    lines.push(
+      `  Refers to: ${person.name ? `${person.name} — ` : ''}${PERSON_KIND_TEXT[person.kind]}` +
+        (doc.person_quote ? ` (document says: "${doc.person_quote}")` : '')
+    )
+    const rows = groupDocumentRows(
+      (fieldDefs || []).filter((d) => d.category_code === doc.category_code),
+      (extractedFields || []).filter((f) => f.document_id === doc.id),
+      doc.category_code
+    )
+    const findings = (otherFindings || []).filter((f) => f.document_id === doc.id)
+    if (!rows.length && !findings.length) {
       lines.push('  (nothing extracted yet, or extraction failed)')
-      continue
     }
-    const byRow = groupFieldsByRow(fields, fieldLabelByKey, doc.category_code)
-    for (const [rowKey, entries] of byRow.entries()) {
-      lines.push(rowKey ? `  Row (${rowKey}): ${entries.join('; ')}` : `  ${entries.join('; ')}`)
+    for (const row of rows) {
+      const values = row.fields
+        .map((f) => `${f.label}: ${f.value} ${sourceMarker(doc, { page: f.source_page, quote: f.source_quote })}`)
+        .join('; ')
+      if (row.rowKey) {
+        lines.push(`  Row "${row.label || 'not identified'}"${row.person ? ` (person: ${row.person})` : ''}: ${values}`)
+      } else {
+        lines.push(`  ${values}`)
+      }
     }
-    // Free-form values the category's field list does not cover — as real
-    // as the fields above, just not anticipated by the schema.
-    for (const finding of others) {
+    for (const finding of findings) {
       lines.push(
-        `  Other information found: ${finding.label}: ${finding.finding_value}` +
-          (finding.source_quote ? ` (document says: "${finding.source_quote}")` : '') +
-          (finding.needs_review ? ' — UNCERTAIN, flagged for a specialist to confirm' : '')
+        `  Other information found: ${finding.label}: ${finding.finding_value} ` +
+          sourceMarker(doc, { page: finding.source_page, quote: finding.source_quote }) +
+          (finding.needs_review ? ' — UNCERTAIN, still to be confirmed' : '')
       )
     }
-  }
-  lines.push('')
-
-  // Counting entities is the one thing the assistant must NOT work out for
-  // itself: the screen already has an answer, arrived at by merging rows
-  // across documents and by decisions a specialist made, and a second
-  // opinion computed from raw rows would simply contradict it.
-  lines.push('=== HOW MANY OF EACH THING THIS CASE HAS (authoritative) ===')
-  lines.push(
-    'This is the definitive answer to "how many accounts / properties / mortgages does this client ' +
-      "have\", as shown in Tax Summary's by-category view. Rows from different documents describing " +
-      'the same real-world thing are already merged here — either because they share an identifier ' +
-      'that settles it, or because a specialist confirmed it. NEVER recount by listing the extracted ' +
-      'rows yourself, and never give a number that disagrees with this section.'
-  )
-  if (!categoryGroups?.length) {
-    lines.push('Nothing extracted yet, so there is nothing to count.')
-  }
-  for (const group of categoryGroups || []) {
-    const category = categoryByCode[group.categoryCode]
-    lines.push(`${category?.label_en || group.categoryCode}: ${group.entities.length}`)
-    for (const entity of group.entities) {
-      const docs = entity.members
-        .map((m) => `[[doc:${m.documentId}|${m.fileName}]]`)
-        .filter((ref, i, all) => all.indexOf(ref) === i)
-        .join(', ')
-      const how =
-        entity.mergedBy === 'decision'
-          ? ' (one thing: a specialist confirmed these documents describe the same one)'
-          : entity.mergedBy === 'identifier'
-            ? ' (one thing: the documents agree on an identifier that settles it)'
-            : ''
-      lines.push(`  - ${entity.label || 'not identified'} — described by ${docs}${how}`)
-    }
-  }
-  lines.push('')
-
-  // The counts above are only trustworthy if the open questions about them
-  // are stated too: a pending suggestion means the number could still
-  // change, and saying so is more useful than picking a side.
-  lines.push('=== ENTITIES THAT MIGHT BE THE SAME THING (not yet decided) ===')
-  if (!mergeSuggestions?.length) {
-    lines.push('None — every entity above is either settled or genuinely separate.')
-  }
-  for (const suggestion of mergeSuggestions || []) {
-    const category = categoryByCode[suggestion.categoryCode]
-    const docs = suggestion.documentIds
-      .map((id) => {
-        const doc = (documents || []).find((d) => d.id === id)
-        return doc ? `[[doc:${doc.id}|${doc.file_name}]]` : null
-      })
-      .filter(Boolean)
-      .join(', ')
-    lines.push(
-      `  ${category?.label_en || suggestion.categoryCode}: "${suggestion.labels[0] || 'not identified'}" and ` +
-        `"${suggestion.labels[1] || 'not identified'}" (${docs}) may be the same one — ` +
-        `${
-          suggestion.reason === 'similarIdentifier'
-            ? 'the same identifier written two different ways'
-            : suggestion.reason === 'probableIdentifier'
-              ? 'everything the documents state about them matches, but none of it is specific enough to prove it'
-              : 'one of them says nothing about which one it is'
-        }. NO specialist has decided yet. They are counted SEPARATELY above. If asked about them, say ` +
-        'plainly that there are two rows that might be one thing and that it has not been confirmed — ' +
-        'do not pick a side.'
-    )
-  }
-  lines.push('')
-
-  lines.push('=== OPEN DATA-QUALITY QUESTIONS (see src/lib/extractionQuality.js) ===')
-  lines.push(
-    'These are the only open questions this app tracks. They are about the extracted data itself ' +
-      '(whose row is this, was a line read twice, is a row missing), never about how a figure should be taxed.'
-  )
-  if (!qualityFindings?.length) {
-    lines.push('None — nothing is currently flagged on this case.')
-  }
-  for (const finding of qualityFindings || []) {
-    const docRef = `[[doc:${finding.documentId}|${finding.fileName}]]`
-    if (finding.kind === 'unidentifiedRow') {
-      lines.push(
-        `  ${docRef}: one of its rows (internal row key "${finding.rowKey}") states nothing about whose it is ` +
-          '— no account holder, insured person, creditor or similar. A specialist still has to say who it belongs to.'
-      )
-    } else if (finding.kind === 'duplicateSource') {
-      lines.push(
-        `  ${docRef}: "${finding.fieldKey}" was extracted ${finding.detail?.count ?? 2} times from the exact same ` +
-          `line of the document ("${finding.detail?.quote ?? ''}") — probably one line read twice, not several real rows.`
-      )
-    } else if (finding.kind === 'reportedTotalMismatch') {
-      lines.push(
-        `  ${docRef}: the document states a total of ${formatAmount(finding.detail?.reportedTotal)} but the rows ` +
-          `extracted from it add up to ${formatAmount(finding.detail?.rowsSum)} — a row may be missing.`
-      )
-    } else if (finding.kind === 'otherFindingNeedsReview') {
-      lines.push(
-        `  ${docRef}: something was found in this document that no defined field covers — ` +
-          `"${finding.detail?.label ?? ''}": ${finding.detail?.value ?? ''} — but it could not be read ` +
-          `with confidence${finding.detail?.note ? ` (${finding.detail.note})` : ''}. Report it as what the ` +
-          'document appears to say, never as established fact.'
-      )
-    } else if (finding.kind === 'legacyFormat') {
-      lines.push(
-        `  ${docRef}: extracted before the row model existed, so its values cannot be grouped into rows at all. ` +
-          'It needs re-extracting before anything can be said about its rows.'
-      )
+    for (const note of (qualityFindings || []).filter((n) => n.documentId === doc.id)) {
+      const text = describeNote(note)
+      if (text) lines.push(`  To double-check: ${text}`)
     }
   }
 
   return lines.join('\n')
-}
-
-// Splits an assistant reply into plain-text and document-reference parts —
-// the model is instructed (see api/case-assistant.js's system prompt) to
-// mark a source-document reference as "[[doc:<id>|<file name>]]", copied
-// verbatim from the context above, so the UI can render just that part as
-// a click-through to the source document (the same viewer Tax Summary
-// already uses for a single field's own "view source" action) instead of
-// dead text repeating a file name. A malformed or missing marker simply
-// falls through as plain text — never a rendering error.
-const DOC_REFERENCE_PATTERN = /\[\[doc:([^|\]]+)\|([^\]]+)\]\]/g
-
-export function parseAssistantMessage(content) {
-  const parts = []
-  let lastIndex = 0
-  let match
-  DOC_REFERENCE_PATTERN.lastIndex = 0
-  while ((match = DOC_REFERENCE_PATTERN.exec(content || '')) !== null) {
-    if (match.index > lastIndex) parts.push({ type: 'text', text: content.slice(lastIndex, match.index) })
-    parts.push({ type: 'doc', documentId: match[1], fileName: match[2] })
-    lastIndex = match.index + match[0].length
-  }
-  if (lastIndex < (content || '').length) parts.push({ type: 'text', text: content.slice(lastIndex) })
-  return parts
 }

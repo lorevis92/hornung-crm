@@ -1,41 +1,25 @@
-// Open questions about the QUALITY of what was extracted from a client's
-// documents — not about tax treatment. A pure function with no I/O, shared
-// by Tax Summary (which shows them with the action that resolves each one)
-// and api/case-assistant.js (which tells the assistant what is still
-// unresolved), same convention as personalDetails.js / rowIdentity.js.
-//
-// This is deliberately ALL that survives of the old "needs verification"
-// system: the checks that decided how a value should be taxed (include or
-// exclude it from a total, is it a double deduction, was a donation really
-// a donation) went away with the calculation engine. What remains is only
-// what a specialist still has to answer for the data itself to be usable
-// and traceable:
+// What may need a second look in the data extracted from a client's
+// documents — never about tax treatment. A pure function with no I/O,
+// shared by Tax Summary (which marks the document "da verificare" and shows
+// each note discreetly next to the row it concerns) and api/case-assistant.js
+// (which tells the assistant the same things). Nothing here asks the
+// specialist to approve anything; it only says where to look:
 //   - unidentifiedRow — a document has several rows of the same kind (three
-//     accounts, four premiums) and this one says nothing about WHOSE it is;
-//     without that the row can't be attributed or asked about.
+//     accounts, four premiums) and this one says nothing about WHOSE it is.
 //   - duplicateSource — two rows take the same VALUE from the exact same
-//     line of the document, which is the AI reading one line twice rather
-//     than two real rows. (Identity fields are exempt: one bank named once
-//     for two mortgages legitimately belongs to both rows.)
+//     line of the document: probably one line read twice. (Identity fields
+//     are exempt: one bank named once for two mortgages belongs to both.)
 //   - reportedTotalMismatch — the document states its own total and it
 //     doesn't match the sum of the rows extracted from it: a row is
 //     probably missing.
-//   - legacyFormat — extracted before the row model existed, so its values
-//     can't be grouped into rows at all; the document needs re-extracting.
-//   - otherFindingNeedsReview — the coverage pass (see
-//     src/lib/otherFindings.js) found something in the document that no
-//     whitelist field covers, but could not say confidently what it is.
-//     It is kept either way — nothing found is ever discarded — but an
-//     uncertain reading is surfaced as a question instead of being listed
-//     as fact.
+//   - otherFindingNeedsReview — the coverage pass (src/lib/otherFindings.js)
+//     found something no field covers but could not say confidently what.
 //
-// Note what is deliberately NOT here: a whitelist field the document simply
-// doesn't mention. That is not a problem, and since this round it produces
-// no row in the interface at all (src/lib/extraction.js). The line between
-// the two is whether a value exists: no value, no question; a value that
-// can't be attributed or can't be trusted, a question.
-import { ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL, isRowBasedCategory, legacySuffixBaseKey } from './rowBasedFields.js'
+// A field the document simply doesn't mention is NOT a note: no value, no
+// question.
+import { ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL, isRowBasedCategory } from './rowBasedFields.js'
 import { buildRowIdentityLabel } from './rowIdentity.js'
+import { parseAmount } from './fieldFormat.js'
 
 // Documents that state their own combined total, and which per-row field
 // that total should agree with. Most documents state no total at all, which
@@ -48,28 +32,10 @@ const REPORTED_TOTAL_FIELDS = {
 // than this is rounding, not a missing row.
 const REPORTED_TOTAL_TOLERANCE = 1
 
-// Same tolerant parser the extraction itself needs: an amount can come back
-// as a bare number or with the currency written into the same string
-// ("CHF 15 000.00", "1'240.00 USD").
-function parseAmount(value) {
-  if (value == null) return null
-  const cleaned = String(value)
-    .trim()
-    .replace(/[a-zA-Z]+/g, '')
-    .replace(/['’\s]/g, '')
-    .replace(/,/g, '')
-    .trim()
-  if (!cleaned) return null
-  const num = Number(cleaned)
-  return Number.isFinite(num) ? num : null
-}
-
 // documents: client_documents rows (id, category_code, file_name), already
 //   scoped to one client/tax year.
 // extractedFields: extracted_document_fields rows for those documents
-//   (field_key, row_key, field_value, source_quote, included_in_calculation).
-// fieldDefs: category_field_definitions rows — only used to tell a real
-//   canonical field_key apart from one still carrying the old "_2" suffix.
+//   (field_key, row_key, field_value, source_quote).
 // otherFindings: document_other_findings rows (optional) — only the ones
 //   flagged needs_review produce a question here; the rest are simply
 //   shown as "other information found".
@@ -77,17 +43,15 @@ function parseAmount(value) {
 // Returns a flat list of findings, each already carrying everything the UI
 // needs to point at the problem: { kind, documentId, fileName, categoryCode,
 // rowKey, fieldKey, detail }.
-export function buildQualityFindings({ documents, extractedFields, fieldDefs, otherFindings }) {
+export function buildQualityFindings({ documents, extractedFields, otherFindings }) {
   const findings = []
   const uncertainByDoc = {}
   for (const finding of otherFindings || []) {
     if (!finding?.needs_review) continue
     ;(uncertainByDoc[finding.document_id] ||= []).push(finding)
   }
-  const definedKeys = new Set((fieldDefs || []).map((f) => `${f.category_code}:${f.field_key}`))
   const fieldsByDoc = {}
   for (const field of extractedFields || []) {
-    if (field.included_in_calculation === false) continue
     if (!field.field_value || !String(field.field_value).trim()) continue
     ;(fieldsByDoc[field.document_id] ||= []).push(field)
   }
@@ -98,32 +62,6 @@ export function buildQualityFindings({ documents, extractedFields, fieldDefs, ot
     const docFields = fieldsByDoc[doc.id] || []
     if (!docFields.length) continue
     const base = { documentId: doc.id, fileName: doc.file_name, categoryCode }
-
-    // --- legacy "_2"/"_3" suffix, from before the row model existed -------
-    // Gated on the full key matching no definition: a perfectly canonical
-    // key can also end in digits (account_balance_31_12), and stripping
-    // that would flag every bank statement forever.
-    if (isRowBasedCategory(categoryCode)) {
-      const legacyKeys = new Set()
-      for (const field of docFields) {
-        if (definedKeys.has(`${categoryCode}:${field.field_key}`)) continue
-        const legacyBase = legacySuffixBaseKey(field.field_key)
-        if (legacyBase && definedKeys.has(`${categoryCode}:${legacyBase}`)) legacyKeys.add(field.field_key)
-      }
-      if (legacyKeys.size) {
-        findings.push({
-          ...base,
-          kind: 'legacyFormat',
-          rowKey: ROW_KEY_DOCUMENT_LEVEL,
-          fieldKey: null,
-          detail: { fieldKeys: [...legacyKeys] }
-        })
-        // Nothing else can be judged about a document whose values can't be
-        // grouped into rows in the first place — re-extracting it is the
-        // only next step, so don't pile unrelated findings on top.
-        continue
-      }
-    }
 
     // --- rows with no identity at all ------------------------------------
     const rowKeysPresent = new Set(docFields.map((f) => f.row_key || ROW_KEY_DOCUMENT_LEVEL))
@@ -196,9 +134,8 @@ export function buildQualityFindings({ documents, extractedFields, fieldDefs, ot
   }
 
   // --- the coverage pass found something it couldn't place ---------------
-  // Its own pass, deliberately outside the loop above: this question stands
-  // on its own even for a document whose whitelist extraction found nothing
-  // at all, or one still carrying legacy-format fields.
+  // Its own pass, deliberately outside the loop above: this note stands on
+  // its own even for a document whose field extraction found nothing at all.
   for (const doc of documents || []) {
     for (const finding of uncertainByDoc[doc.id] || []) {
       findings.push({

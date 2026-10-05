@@ -30,19 +30,6 @@ export function EmptyState({ icon: Icon, title, description, action }) {
   )
 }
 
-export function SectionHeader({ eyebrow, title, description, actions }) {
-  return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        {eyebrow ? <p className="eyebrow mb-1">{eyebrow}</p> : null}
-        <h2 className="section-title">{title}</h2>
-        {description ? <p className="section-sub max-w-2xl">{description}</p> : null}
-      </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-    </div>
-  )
-}
-
 export function Field({ label, hint, htmlFor, children, className = '', required = false }) {
   return (
     <div className={className}>

@@ -179,7 +179,7 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
       <div className="space-y-3">
         <button type="button" className="btn-secondary btn-sm" onClick={onBack}>
           <ArrowLeft size={16} aria-hidden="true" />
-          {t('extraction.backToVerification')}
+          {t('extraction.backToList')}
         </button>
         <div className="max-h-[65vh] overflow-auto rounded-xl border border-line bg-sand/40 p-4">
           {loading ? (
@@ -213,7 +213,7 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
       <div className="space-y-3">
         <button type="button" className="btn-secondary btn-sm" onClick={onBack}>
           <ArrowLeft size={16} aria-hidden="true" />
-          {t('extraction.backToVerification')}
+          {t('extraction.backToList')}
         </button>
         <div className="flex items-center justify-center rounded-xl border border-line bg-sand/40 p-4">
           {fileUrl ? (
@@ -231,7 +231,7 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" className="btn-secondary btn-sm" onClick={onBack}>
           <ArrowLeft size={16} aria-hidden="true" />
-          {t('extraction.backToVerification')}
+          {t('extraction.backToList')}
         </button>
         {numPages ? (
           <div className="flex items-center gap-1 text-[14px] text-ink-600">

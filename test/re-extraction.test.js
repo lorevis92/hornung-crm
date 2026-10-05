@@ -133,6 +133,28 @@ function makeAdmin({ documentRow, existingFields = [] }) {
           })
         }
       }
+      // The persons of the case, offered to the model as the only possible
+      // answers to "whom is this document about".
+      if (table === 'client_persons') {
+        return {
+          select: () => ({
+            eq: async () => ({
+              data: [
+                { person_type: 'primary', first_name: 'Giulia', last_name: 'Weber' },
+                { person_type: 'spouse', first_name: 'Lina', last_name: 'Weber' }
+              ],
+              error: null
+            })
+          })
+        }
+      }
+      if (table === 'client_children') {
+        return {
+          select: () => ({
+            eq: () => ({ order: async () => ({ data: [{ id: 'child-1', full_name: 'Noah Weber' }], error: null }) })
+          })
+        }
+      }
       if (table === 'document_other_findings') {
         return {
           delete: () => ({ async eq() { return { error: null } } }),
@@ -152,7 +174,7 @@ function makeAdmin({ documentRow, existingFields = [] }) {
   return admin
 }
 
-function makeAnthropic(fieldsPayload, { failExtraction = false } = {}) {
+function makeAnthropic(fieldsPayload, { failExtraction = false, documentPerson = null } = {}) {
   return {
     messages: {
       create: vi.fn(async ({ max_tokens: maxTokens }) => {
@@ -165,7 +187,14 @@ function makeAnthropic(fieldsPayload, { failExtraction = false } = {}) {
         }
         if (maxTokens === 2000) return { content: [{ type: 'text', text: '[]' }] }
         if (failExtraction) throw new Error('rate limited')
-        return { content: [{ type: 'text', text: JSON.stringify({ fields: fieldsPayload, other_findings: [] }) }] }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ document_person: documentPerson, fields: fieldsPayload, other_findings: [] })
+            }
+          ]
+        }
       })
     }
   }
@@ -201,9 +230,9 @@ describe('re-extracting a document that already has rows', () => {
       documentRow: DOCUMENT,
       existingFields: [
         // What a previous run wrote, under its own row keys.
-        { id: 'old-1', field_key: 'institution_name', row_key: 'row-1', field_value: 'Banque A', verified_by_specialist: false },
-        { id: 'old-2', field_key: 'account_balance_31_12', row_key: 'row-1', field_value: '100.00', verified_by_specialist: false },
-        { id: 'old-3', field_key: 'account_balance_31_12', row_key: 'row-2', field_value: '200.00', verified_by_specialist: false }
+        { id: 'old-1', field_key: 'institution_name', row_key: 'row-1', field_value: 'Banque A' },
+        { id: 'old-2', field_key: 'account_balance_31_12', row_key: 'row-1', field_value: '100.00' },
+        { id: 'old-3', field_key: 'account_balance_31_12', row_key: 'row-2', field_value: '200.00' }
       ]
     })
     const anthropic = makeAnthropic([
@@ -223,13 +252,14 @@ describe('re-extracting a document that already has rows', () => {
     expect(admin.state.fields.map((f) => f.field_value)).not.toContain('200.00')
   })
 
-  it('never deletes a value a specialist edited by hand', async () => {
+  it('keeps exactly what the new run read — there is no hand-edited exception any more', async () => {
     const admin = makeAdmin({
       documentRow: DOCUMENT,
       existingFields: [
-        { id: 'old-1', field_key: 'account_balance_31_12', row_key: 'row-1', field_value: '100.00', verified_by_specialist: false },
-        // Corrected by a human, and not produced by the new run.
-        { id: 'mine', field_key: 'institution_name', row_key: 'row-9', field_value: 'Banque corrected by hand', verified_by_specialist: true }
+        { id: 'old-1', field_key: 'account_balance_31_12', row_key: 'row-1', field_value: '100.00' },
+        // Corrected by hand under the old review flow: Tax Summary is now
+        // read-only, so the document itself is the only source of truth.
+        { id: 'old-edited', field_key: 'institution_name', row_key: 'row-9', field_value: 'Banque', verified_by_specialist: true }
       ]
     })
     const anthropic = makeAnthropic([
@@ -238,15 +268,15 @@ describe('re-extracting a document that already has rows', () => {
 
     await runExtraction(admin, anthropic, 'doc-1', { fromStatuses: ['extracted'] })
 
-    expect(admin.state.deletedIds).toEqual(['old-1'])
-    expect(admin.state.fields.some((f) => f.id === 'mine')).toBe(true)
+    expect(admin.state.deletedIds.sort()).toEqual(['old-1', 'old-edited'])
+    expect(admin.state.fields.map((f) => f.field_value)).toEqual(['150.00'])
   })
 
   it('leaves nothing behind when the document now yields exactly the same rows', async () => {
     const admin = makeAdmin({
       documentRow: DOCUMENT,
       existingFields: [
-        { id: 'old-1', field_key: 'institution_name', row_key: 'row-1', field_value: 'Banque A', verified_by_specialist: false }
+        { id: 'old-1', field_key: 'institution_name', row_key: 'row-1', field_value: 'Banque A' }
       ]
     })
     const anthropic = makeAnthropic([
@@ -295,5 +325,61 @@ describe('a run whose document was claimed by someone else', () => {
     ])
     const result = await runExtraction(admin, anthropic, 'doc-1', { fromStatuses: ['extracted'] })
     expect(result).toEqual({ claimed: true, documentId: 'doc-1' })
+  })
+})
+
+describe('whom the document refers to, and what each row is called', () => {
+  it('saves the person the model chose among the persons of the case, with the sentence that shows it', async () => {
+    const admin = makeAdmin({ documentRow: DOCUMENT })
+    const anthropic = makeAnthropic(
+      [{ field_key: 'institution_name', row_key: '', field_value: 'Banque A', confidence: 0.9 }],
+      { documentPerson: { ref: 'spouse', quote: 'Titolare: Lina Weber', page: null } }
+    )
+
+    await runExtraction(admin, anthropic, 'doc-1', { fromStatuses: ['extracted'] })
+
+    expect(admin.state.documentRow).toMatchObject({
+      status: 'extracted',
+      person_ref: 'spouse',
+      person_name: 'Lina Weber',
+      person_quote: 'Titolare: Lina Weber'
+    })
+    // The prompt offered exactly the persons of this case, by code.
+    const prompt = anthropic.messages.create.mock.calls
+      .map(([call]) => call.messages[0].content.find((b) => b.type === 'text' && b.text.includes('WHOM'))?.text)
+      .find(Boolean)
+    expect(prompt).toContain('"taxpayer"')
+    expect(prompt).toContain('Giulia Weber')
+    expect(prompt).toContain('"child:child-1"')
+    expect(prompt).toContain('Noah Weber')
+    expect(prompt).toContain('"unknown"')
+  })
+
+  it('never saves a person that is not one of the case — it becomes "cannot be determined"', async () => {
+    const admin = makeAdmin({ documentRow: DOCUMENT })
+    const anthropic = makeAnthropic(
+      [{ field_key: 'institution_name', row_key: '', field_value: 'Banque A', confidence: 0.9 }],
+      { documentPerson: { ref: 'Mario Rossi', quote: 'Mario Rossi' } }
+    )
+
+    await runExtraction(admin, anthropic, 'doc-1', { fromStatuses: ['extracted'] })
+
+    expect(admin.state.documentRow.person_ref).toBe('unknown')
+    expect(admin.state.documentRow.person_quote).toBeNull()
+  })
+
+  it('gives every field of a row the same readable label', async () => {
+    const admin = makeAdmin({ documentRow: DOCUMENT })
+    const anthropic = makeAnthropic([
+      { field_key: 'institution_name', row_key: 'row-1', row_label: 'Conto risparmio UBS – Giulia Weber', field_value: 'UBS' },
+      { field_key: 'account_balance_31_12', row_key: 'row-1', row_label: 'Conto UBS', field_value: '150.00' }
+    ])
+
+    await runExtraction(admin, anthropic, 'doc-1', { fromStatuses: ['extracted'] })
+
+    expect(admin.state.upserted.map((r) => r.row_label)).toEqual([
+      'Conto risparmio UBS – Giulia Weber',
+      'Conto risparmio UBS – Giulia Weber'
+    ])
   })
 })

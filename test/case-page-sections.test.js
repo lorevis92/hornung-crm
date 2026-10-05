@@ -20,6 +20,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const casePage = read('src/pages/CasePage.jsx')
 const taxSummary = read('src/pages/TaxSummary.jsx')
 const caseAssistant = read('src/components/CaseAssistant.jsx')
+const summaryDocument = read('src/components/summary/SummaryDocument.jsx')
 
 describe('the case page no longer carries the History section', () => {
   it('does not render it, and the component it used is gone with it', () => {
@@ -51,8 +52,10 @@ describe('the case page no longer carries the document extraction status list', 
   })
 
   it('still exists where it belongs — inside Tax Summary', () => {
-    // The list was not deleted from the product, only from the case page.
-    expect(taxSummary).toMatch(/EXTRACTION_STATUS_LABEL_KEY/)
+    // The status was not deleted from the product, only from the case page:
+    // every document row of Tax Summary shows it.
+    expect(taxSummary).toMatch(/<SummaryDocument/)
+    expect(summaryDocument).toMatch(/STATUS_LABEL_KEY/)
     expect(en.extraction.statusExtracted).toBeTruthy()
   })
 })
@@ -83,9 +86,12 @@ describe('the assistant opened from the case page is the same conversation as th
 
   it('still lets a document reference be opened from the case page, which has no viewer of its own', () => {
     // It hands off to Tax Summary with that document already open
-    // (?doc=<id>) rather than rendering a dead badge.
-    expect(casePage).toMatch(/summary\?doc=/)
+    // (?doc=<id>, plus the page and sentence when it points at a value)
+    // rather than rendering a dead badge.
+    expect(casePage).toMatch(/summaryLinkFor\(caseId/)
     expect(taxSummary).toMatch(/searchParams\.get\('doc'\)/)
+    expect(taxSummary).toMatch(/searchParams\.get\('page'\)/)
+    expect(taxSummary).toMatch(/searchParams\.get\('quote'\)/)
   })
 })
 

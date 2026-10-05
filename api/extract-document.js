@@ -14,7 +14,10 @@
 //   2. Extraction — read the field dictionary for that category from
 //      category_field_definitions (kept fresh at call time, since staff can
 //      edit it from /tax-settings) and pull only the values actually present
-//      in the document. The same call also returns "other findings": values
+//      in the document, grouped into rows (one account, one premium, one
+//      property) that each get a readable label. The same call says whom
+//      the document refers to — one of the case's own persons, see
+//      src/lib/documentPerson.js — and returns "other findings": values
 //      worth a consultant's attention that no listed field covers.
 //   3. Coverage check — ONE further call per document (never per field),
 //      handed the document plus everything phase 2 produced, asked only
@@ -29,6 +32,7 @@ import { httpError, readBody, serviceClient } from './_lib.js'
 import { syncRegistryForClientYear } from './_registrySync.js'
 import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL } from '../src/lib/rowBasedFields.js'
 import { resolveModel } from '../src/lib/aiModels.js'
+import { buildPersonOptions, describePersonOptions, normalizePersonChoice } from '../src/lib/documentPerson.js'
 import {
   buildOtherFindingRows,
   capturedValuesOf,
@@ -224,6 +228,21 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
     .order('sort_order', { ascending: true })
   if (fieldDefsError) throw fieldDefsError
 
+  // The persons of this case, offered to the model as the only possible
+  // answers to "whom is this document about".
+  const [personsRes, childrenRes] = await Promise.all([
+    admin.from('client_persons').select('person_type, first_name, last_name, date_of_birth').eq('client_id', claimed.client_id),
+    admin.from('client_children').select('id, full_name').eq('client_id', claimed.client_id).order('sort_order')
+  ])
+  if (personsRes.error) throw personsRes.error
+  if (childrenRes.error) throw childrenRes.error
+  const personOptions = buildPersonOptions({
+    primary: (personsRes.data || []).find((p) => p.person_type === 'primary'),
+    spouse: (personsRes.data || []).find((p) => p.person_type === 'spouse'),
+    children: childrenRes.data || []
+  })
+
+  let personChoice
   {
     const fieldList = (fieldDefs || [])
       .map((f) => `- ${f.field_key} (${f.value_type}): ${f.field_label || f.field_key}`)
@@ -241,22 +260,26 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
     const rowInstruction = rowBased
       ? '\n\nThis document can have more than one row of the same kind — for example several bank ' +
         'accounts, several insurance premiums for different people, several securities positions, ' +
-        'several mortgages. For EACH field you extract, also give a "row_key": a short string you ' +
-        'choose (e.g. "row-1", "row-2", ...) that is the SAME for every field belonging to the same ' +
-        'real-world row, and DIFFERENT for a different row. This applies to identity fields too — ' +
+        'several mortgages. A row is ONE real-world thing: one account, one premium, one property, one ' +
+        'debt. Everything the document says about that same thing belongs to the same row, even when ' +
+        'it is written in different places (a summary table on page 1 and a detail on page 3 about the ' +
+        'same account are ONE row, not two). For EACH field you extract, give a "row_key": a short ' +
+        'string you choose (e.g. "row-1", "row-2", ...) that is the SAME for every field of the same ' +
+        'thing and DIFFERENT for a different thing. This applies to identity fields too — ' +
         (identityFields.length
           ? `${identityFields.join(', ')} — `
           : '') +
         'e.g. the account holder name, institution name, account type and IBAN of ONE account all ' +
         'share the same row_key, and a second account\'s own holder/institution/type/IBAN share a ' +
-        'different row_key. A field that describes the document as a whole, not any one row (e.g. a ' +
-        'single reporting currency for the whole statement), uses row_key "". Never combine two ' +
-        'distinct rows into one, and never split one row across two row_keys.' +
-        // The identity fields are what everything else depends on: a balance
-        // nobody can attribute is not usable, and two statements can only be
-        // recognised as describing the same account if both state what
-        // identifies it (see src/lib/categoryEntities.js). The field list
-        // above does not say which fields those are — this does.
+        'different row_key. Also give every field a "row_label": a short readable name for its row, ' +
+        'identical for all the fields of that row, built only from what the document states — e.g. ' +
+        '"Conto risparmio UBS – Mario Rossi" or "LAMal – Sara Bianchi" — in the language of the ' +
+        'document. A field that describes the document as a whole, not any one row (e.g. a single ' +
+        'reporting currency for the whole statement), uses row_key "" and row_label "". Never combine ' +
+        'two distinct things into one row, and never split one thing across two row_keys.' +
+        // The identity fields are what everything else depends on: a
+        // balance nobody can attribute is not usable. The field list above
+        // does not say which fields those are — this does.
         (identityFields.length
           ? '\n\nThe most important fields to get right are the ones that say WHOSE row it is or ' +
             `WHICH one it is: ${identityFields.join(', ')}. Extract them whenever the document states ` +
@@ -295,7 +318,16 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
                   : 'This has no page numbers — leave source_page null.') +
                 ' If you cannot pin down an exact quote (or, for a PDF, its page) for a field, leave ' +
                 'source_quote/source_page empty for that field rather than guessing — an empty value ' +
-                'is fine, an invented one is not.' +
+                'is fine, an invented one is not. Never compute, convert or complete a value: copy what ' +
+                'is written.' +
+                // Whom the document is about — chosen, never typed.
+                '\n\nAlso say WHOM this document refers to, choosing exactly one of these persons of the ' +
+                `case:\n${describePersonOptions(personOptions)}\n` +
+                'Choose "household" when different rows of this document belong to different persons ' +
+                '(e.g. one premium for each family member). Choose "unknown" when the document does not ' +
+                'make it clear — never guess from the case alone. Copy the verbatim sentence of the ' +
+                'document that shows it (a name, an "insured person", an "account holder", ...)' +
+                (isPdf ? ' and its page.' : '.') +
                 // The safety net. The field list above stays exactly as
                 // strict as it was — this is additive, and explicitly NOT a
                 // place to restate a listed field, so a well-modelled
@@ -309,8 +341,13 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
                 'returned as a field above, and do not pad the list: if the document holds nothing ' +
                 'beyond the fields, return an empty list.\n\n' +
                 'Respond with ONLY a JSON object, no other text:\n' +
-                '{"fields": [{"field_key": "<key>", "field_value": "<value as text>", "confidence": <0.0-1.0>, ' +
-                (rowBased ? '"row_key": "<row-1, row-2, ... or "" for a document-level field>", ' : '') +
+                '{"document_person": {"ref": "<one of the person codes above>", "quote": "<exact verbatim ' +
+                'text, or null>", "page": <page number, or null>}, ' +
+                '"fields": [{"field_key": "<key>", "field_value": "<value as text>", "confidence": <0.0-1.0>, ' +
+                (rowBased
+                  ? '"row_key": "<row-1, row-2, ... or "" for a document-level field>", "row_label": "<readable ' +
+                    'name of the row, or "">", '
+                  : '') +
                 '"source_quote": "<exact verbatim text, or null>", "source_page": <page number, or null>}, ...], ' +
                 '"other_findings": [{"label": "<short descriptive label>", "value": "<value as text>", ' +
                 '"source_quote": "<exact verbatim text, or null>", "source_page": <page number, or null>}, ...]} ' +
@@ -328,22 +365,34 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
     // far worse failure than losing its other findings.
     const extractedFieldItems = Array.isArray(extracted) ? extracted : extracted?.fields
     const extractedOtherItems = Array.isArray(extracted) ? [] : extracted?.other_findings
+    personChoice = normalizePersonChoice(Array.isArray(extracted) ? null : extracted?.document_person, personOptions, { isPdf })
     const definedKeys = new Set((fieldDefs || []).map((f) => f.field_key))
     const parsedRows = (Array.isArray(extractedFieldItems) ? extractedFieldItems : [])
       .filter((row) => row && definedKeys.has(row.field_key) && row.field_value !== null && row.field_value !== '')
       .map((row) => {
         const page = Number(row.source_page)
+        const rowKey = rowBased && typeof row.row_key === 'string' ? row.row_key : ROW_KEY_DOCUMENT_LEVEL
         return {
           document_id: documentId,
           field_key: row.field_key,
-          row_key: rowBased && typeof row.row_key === 'string' ? row.row_key : ROW_KEY_DOCUMENT_LEVEL,
+          row_key: rowKey,
+          row_label:
+            rowKey !== ROW_KEY_DOCUMENT_LEVEL && typeof row.row_label === 'string' && row.row_label.trim()
+              ? row.row_label.trim().slice(0, 200)
+              : null,
           field_value: String(row.field_value),
           confidence: typeof row.confidence === 'number' ? row.confidence : null,
           source_quote: typeof row.source_quote === 'string' && row.source_quote.trim() ? row.source_quote : null,
-          source_page: isPdf && Number.isInteger(page) ? page : null,
-          verified_by_specialist: false
+          source_page: isPdf && Number.isInteger(page) ? page : null
         }
       })
+    // One label per row: the model repeats it on every field of the row and
+    // occasionally varies it slightly — the first one wins for all of them.
+    const labelByRow = new Map()
+    for (const row of parsedRows) {
+      if (row.row_label && !labelByRow.has(row.row_key)) labelByRow.set(row.row_key, row.row_label)
+    }
+    for (const row of parsedRows) row.row_label = labelByRow.get(row.row_key) || null
     // Deduped by (field_key, row_key), last one wins: the model occasionally
     // repeats the exact same field+row twice when it's unsure whether two
     // mentions are really distinct entries — two rows sharing a
@@ -363,24 +412,17 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
     // Everything this run did NOT produce has to go. The upsert above only
     // ever adds or overwrites, and row_key is chosen afresh by the model on
     // every run — so a document re-extracted after producing "row-1"/"row-2"
-    // and now producing "row-a"/"row-b" would keep BOTH sets forever. The
-    // specialist then sees the old rows sitting next to the new ones, which
-    // reads exactly like "the re-extraction did nothing", and the quality
-    // checks start reporting duplicates that exist only in the database.
-    // (document_other_findings has always been replaced wholesale; this
-    // brings the fields in line with it.)
-    //
-    // One exception, deliberately: a row a specialist edited or corrected by
-    // hand is theirs, not the model's, and is never deleted just because
-    // this run did not happen to produce it again.
+    // and now producing "row-a"/"row-b" would keep BOTH sets forever, which
+    // reads exactly like "the re-extraction did nothing". After this, the
+    // document holds exactly what this run read from it (the same rule
+    // document_other_findings has always followed).
     const keptKeys = new Set(rows.map((r) => `${r.field_key}:${r.row_key}`))
     const { data: existingRows, error: existingError } = await admin
       .from('extracted_document_fields')
-      .select('id, field_key, row_key, verified_by_specialist')
+      .select('id, field_key, row_key')
       .eq('document_id', documentId)
     if (existingError) throw existingError
     const staleIds = (existingRows || [])
-      .filter((r) => !r.verified_by_specialist)
       .filter((r) => !keptKeys.has(`${r.field_key}:${r.row_key || ROW_KEY_DOCUMENT_LEVEL}`))
       .map((r) => r.id)
     if (staleIds.length) {
@@ -474,7 +516,7 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
 
   const { error: finishError } = await admin
     .from('client_documents')
-    .update({ status: 'extracted', processed_at: new Date().toISOString(), extraction_error: null })
+    .update({ status: 'extracted', processed_at: new Date().toISOString(), extraction_error: null, ...personChoice })
     .eq('id', documentId)
   if (finishError) throw finishError
 

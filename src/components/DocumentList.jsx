@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react'
 import {
-  AlertTriangle, FileText, Download, Trash2, Eye, Image as ImageIcon, FileSpreadsheet, List, LayoutGrid,
-  ClipboardCheck, Tag
+  AlertTriangle, FileText, Download, Trash2, Eye, Image as ImageIcon, FileSpreadsheet, List, LayoutGrid, Tag
 } from 'lucide-react'
 import clsx from 'clsx'
 import Modal from './Modal'
-import DocumentVerificationPanel from './DocumentVerificationPanel'
 import { useI18n } from '../i18n'
 import { useToast } from '../context/ToastContext'
 import { api } from '../lib/data'
@@ -52,9 +50,7 @@ export default function DocumentList({
   canAssignCategory = false,
   onCategoryChange,
   onDelete,
-  canDelete = false,
-  clientId,
-  taxYear
+  canDelete = false
 }) {
   const { t, lang } = useI18n()
   const toast = useToast()
@@ -66,7 +62,6 @@ export default function DocumentList({
   const [previewLoading, setPreviewLoading] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
-  const [verifyDoc, setVerifyDoc] = useState(null)
 
   // How many of these documents share each tax category — flagged inline
   // (not hidden, since two documents of the same type can be legitimate,
@@ -250,17 +245,6 @@ export default function DocumentList({
                 ) : null}
 
                 <div className="flex shrink-0 items-center gap-1">
-                  {canAssignCategory && doc.category_code ? (
-                    <button
-                      type="button"
-                      onClick={() => setVerifyDoc(doc)}
-                      className="btn-ghost btn-sm"
-                      title={t('extraction.action')}
-                      aria-label={t('extraction.action')}
-                    >
-                      <ClipboardCheck size={17} aria-hidden="true" />
-                    </button>
-                  ) : null}
                   <button
                     type="button"
                     onClick={() => download(doc)}
@@ -363,17 +347,6 @@ export default function DocumentList({
                   >
                     <Eye size={16} aria-hidden="true" />
                   </button>
-                  {canAssignCategory && doc.category_code ? (
-                    <button
-                      type="button"
-                      onClick={() => setVerifyDoc(doc)}
-                      className="btn-ghost btn-sm"
-                      title={t('extraction.action')}
-                      aria-label={t('extraction.action')}
-                    >
-                      <ClipboardCheck size={16} aria-hidden="true" />
-                    </button>
-                  ) : null}
                   <button
                     type="button"
                     onClick={() => download(doc)}
@@ -467,15 +440,6 @@ export default function DocumentList({
             </button>
           </>
         }
-      />
-
-      <DocumentVerificationPanel
-        open={!!verifyDoc}
-        onClose={() => setVerifyDoc(null)}
-        doc={verifyDoc}
-        categories={categories}
-        clientId={clientId}
-        taxYear={taxYear}
       />
     </div>
   )

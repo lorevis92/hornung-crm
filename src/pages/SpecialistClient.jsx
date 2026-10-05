@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, ArrowRight, Archive, CalendarPlus, Check, Mail, Pencil, Phone, RefreshCw, Save, FolderOpen,
@@ -8,10 +8,12 @@ import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
 import QuestionnaireForm from '../components/QuestionnaireForm'
 import QuestionnaireAutoFill from '../components/QuestionnaireAutoFill'
-import { EmptyState, Field, PageLoader, Select, Spinner, TextInput, Textarea } from '../components/ui'
+import { LoadGate } from '../components/LoadState'
+import { EmptyState, Field, Select, Spinner, TextInput, Textarea } from '../components/ui'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
+import { useLoad } from '../lib/useLoad'
 import { currentTaxYear, IS_DEMO } from '../lib/config'
 import { CANTONS, LANGUAGES } from '../lib/constants'
 import { formatDate, fullName } from '../lib/format'
@@ -30,7 +32,6 @@ export default function SpecialistClient() {
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
 
-  const [loading, setLoading] = useState(true)
   const [client, setClient] = useState(null)
   const [cases, setCases] = useState([])
   const [tab, setTab] = useState(['years', 'questionnaire', 'notes'].includes(initialTab) ? initialTab : 'years')
@@ -63,12 +64,8 @@ export default function SpecialistClient() {
     // after their next document upload.
     await catchUpRegistrySyncInBackground(clientId, rows)
     setSuggestions(await api.listFieldSuggestions(clientId))
-    setLoading(false)
   }, [clientId])
-
-  useEffect(() => {
-    load()
-  }, [load])
+  const loadState = useLoad(load)
 
   const saveNotes = async () => {
     setSavingNotes(true)
@@ -200,7 +197,7 @@ export default function SpecialistClient() {
     }
   }
 
-  if (loading) return <PageLoader label={t('common.loading')} />
+  if (loadState.status !== 'ready') return <LoadGate load={loadState} showDetail />
   if (!client) return <EmptyState icon={FolderOpen} title={t('common.error')} />
 
   const years = Array.from({ length: 6 }, (_, i) => currentTaxYear() + 1 - i)

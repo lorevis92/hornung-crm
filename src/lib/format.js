@@ -11,19 +11,6 @@ export function formatDate(value, lang = 'en') {
   })
 }
 
-export function formatDateTime(value, lang = 'en') {
-  if (!value) return ''
-  const d = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString(LOCALE_MAP[lang] || 'en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
 export function formatChf(amount, lang = 'en') {
   const n = Number(amount || 0)
   return new Intl.NumberFormat(LOCALE_MAP[lang] || 'de-CH', {
@@ -72,14 +59,6 @@ export function initials(name = '') {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join('')
-}
-
-export function relativeDays(dateValue) {
-  if (!dateValue) return null
-  const target = new Date(dateValue)
-  if (Number.isNaN(target.getTime())) return null
-  const diff = Math.ceil((target - new Date()) / (1000 * 60 * 60 * 24))
-  return diff
 }
 
 export function safeFileName(name = 'file') {

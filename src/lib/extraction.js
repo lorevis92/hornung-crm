@@ -1,106 +1,61 @@
-import { ROW_KEY_DOCUMENT_LEVEL, isRowBasedCategory, legacySuffixBaseKey } from './rowBasedFields.js'
+import { ROW_KEY_DOCUMENT_LEVEL, ROW_PERSON_FIELDS } from './rowBasedFields.js'
 import { buildRowIdentityLabel } from './rowIdentity.js'
 
-// Shared between DocumentVerificationPanel (single document) and TaxSummary
-// (every document of a client/tax year): merges the field dictionary for a
-// category with whatever was actually extracted for one document.
+// One document's extracted fields, arranged the way Tax Summary shows them:
+// grouped into rows (one account, one premium, one property — see
+// rowBasedFields.js), the document-level row first, each field in the
+// order of the category's field dictionary and carrying its source.
 //
-// ONLY fields that actually have a value come back. A defined field the
-// document says nothing about used to be emitted as an empty row reading
-// "Not found — enter it manually if you have it", which meant a bank
-// statement carrying three real values was displayed as fifteen rows,
-// twelve of them saying nothing. What the document does not contain is now
-// simply absent. Note the deliberate asymmetry with
-// src/lib/extractionQuality.js: a field missing from the document is not a
-// problem and is not shown, whereas a value that IS there but cannot be
-// attributed to anyone (an account with no holder and no IBAN) stays
-// flagged — the value exists, so hiding the question would lose it.
+// ONLY fields that actually have a value come back: a defined field the
+// document says nothing about is simply absent, never an empty line.
 //
-// A row-based
-// category (see rowBasedFields.js — bank accounts, insurance premiums,
-// pillar 3a certificates, ...) can have more than one ROW for the same
-// field definition, each sharing a `row_key` assigned by the extraction
-// itself; every row gets its own editable copy of every field definition,
-// labelled with that row's own identity (e.g. "Sara Bianchi — Cassa
-// Helvetica — base (LAMal)") instead of a bare "#2".
-export function mergeFieldsWithDefinitions(fieldDefs, extractedFields, doc) {
-  const categoryCode = doc?.category_code
-  const byKeyAndRow = new Map()
-  for (const e of extractedFields || []) {
-    byKeyAndRow.set(`${e.field_key}:${e.row_key || ROW_KEY_DOCUMENT_LEVEL}`, e)
+// fieldDefs: category_field_definitions rows for the document's category.
+// extractedFields: extracted_document_fields rows for the document.
+//
+// Returns [{ rowKey, label, person, currency, fields: [{ field_key, label,
+//   value, value_type, source_quote, source_page }] }]. A row's label is the
+// readable name the extraction gave it (row_label), else one built from its
+// identity fields, else null; `person` is whose row it is, from the row's
+// own person field (account holder, insured person, ...) when it has one.
+export function groupDocumentRows(fieldDefs, extractedFields, categoryCode) {
+  const defs = [...(fieldDefs || [])].sort((a, b) => a.sort_order - b.sort_order)
+  const defByKey = new Map(defs.map((d) => [d.field_key, d]))
+  const order = new Map(defs.map((d, i) => [d.field_key, i]))
+
+  const byRow = new Map()
+  for (const field of extractedFields || []) {
+    if (!defByKey.has(field.field_key)) continue
+    if (!String(field.field_value ?? '').trim()) continue
+    const rowKey = field.row_key || ROW_KEY_DOCUMENT_LEVEL
+    if (!byRow.has(rowKey)) byRow.set(rowKey, [])
+    byRow.get(rowKey).push(field)
   }
 
-  // Every distinct row_key actually present on this document, document-level
-  // first (a category has no row concept if it isn't in ROW_IDENTITY_FIELDS
-  // at all, so everything for it stays under the single document-level row).
-  const rowKeysPresent = Array.from(
-    new Set((extractedFields || []).map((e) => e.row_key || ROW_KEY_DOCUMENT_LEVEL))
-  ).sort((a, b) => (a === ROW_KEY_DOCUMENT_LEVEL ? -1 : b === ROW_KEY_DOCUMENT_LEVEL ? 1 : 0))
-  const rows_ = rowKeysPresent.length ? rowKeysPresent : [ROW_KEY_DOCUMENT_LEVEL]
+  const documentCurrency = byRow.get(ROW_KEY_DOCUMENT_LEVEL)?.find((f) => f.field_key === 'currency')?.field_value || null
+  const rowKeys = [...byRow.keys()].sort((a, b) =>
+    a === ROW_KEY_DOCUMENT_LEVEL ? -1 : b === ROW_KEY_DOCUMENT_LEVEL ? 1 : 0
+  )
 
-  // One shared implementation with src/lib/extractionQuality.js (see
-  // rowIdentity.js): a row labelled here and a row judged "unidentified"
-  // there must always be answering the same question the same way.
-  const rowLabelFor = (rowKey) => {
-    if (rowKey === ROW_KEY_DOCUMENT_LEVEL) return null
-    return buildRowIdentityLabel({
-      categoryCode,
-      fieldAt: (key) => byKeyAndRow.get(`${key}:${rowKey}`)?.field_value
-    })
-  }
-
-  const makeRow = (def, e, rowKey) => ({
-    field_key: def.field_key,
-    row_key: rowKey,
-    row_label: rowLabelFor(rowKey),
-    field_label: def.field_label || def.field_key,
-    field_value: e?.field_value || '',
-    confidence: e?.confidence ?? null,
-    source_quote: e?.source_quote || null,
-    source_page: e?.source_page || null,
-    verified_by_specialist: e?.verified_by_specialist || false,
-    verified_at: e?.verified_at || null,
-    verified_by: e?.verified_by || null,
-    included_in_calculation: e?.included_in_calculation !== false,
-    document_id: doc?.id ?? null,
-    file_name: doc?.file_name ?? null,
-    isPdf: doc?.mime_type === 'application/pdf',
-    isText: doc?.mime_type === 'text/plain'
+  return rowKeys.map((rowKey) => {
+    const fields = byRow.get(rowKey).sort((a, b) => order.get(a.field_key) - order.get(b.field_key))
+    const valueOf = (key) => fields.find((f) => f.field_key === key)?.field_value
+    const isRow = rowKey !== ROW_KEY_DOCUMENT_LEVEL
+    const personField = (ROW_PERSON_FIELDS[categoryCode] || []).find((key) => valueOf(key))
+    return {
+      rowKey,
+      label: isRow
+        ? fields.find((f) => f.row_label)?.row_label || buildRowIdentityLabel({ categoryCode, fieldAt: valueOf })
+        : null,
+      person: isRow && personField ? valueOf(personField) : null,
+      currency: valueOf('currency') || documentCurrency,
+      fields: fields.map((f) => ({
+        field_key: f.field_key,
+        label: defByKey.get(f.field_key).field_label || f.field_key,
+        value: f.field_value,
+        value_type: defByKey.get(f.field_key).value_type || 'text',
+        source_quote: f.source_quote || null,
+        source_page: f.source_page || null
+      }))
+    }
   })
-
-  const sortedDefs = [...(fieldDefs || [])].sort((a, b) => a.sort_order - b.sort_order)
-  const rows = []
-  for (const rowKey of rows_) {
-    for (const def of sortedDefs) {
-      const extracted = byKeyAndRow.get(`${def.field_key}:${rowKey}`)
-      // Nothing was found for this field on this row — the definition
-      // exists, the value does not, so there is nothing to show.
-      if (!extracted || !String(extracted.field_value ?? '').trim()) continue
-      rows.push(makeRow(def, extracted, rowKey))
-    }
-  }
-
-  // Fields extracted before the row model existed still carry the OLD
-  // "_2"/"_3" suffix convention — they match no definition above at all
-  // (field_key no longer aligns with any category_field_definitions row),
-  // so without this they'd silently vanish from the review panel. Surfaced
-  // as their own flagged rows instead, pointing at "re-extract this
-  // document" rather than disappearing. Guarded on the full field_key
-  // matching no definition first: legacySuffixBaseKey is a bare "_N" suffix
-  // match, which would also match a perfectly canonical key that just
-  // happens to end in digits (e.g. "account_balance_31_12") — a canonical
-  // key always has its own definition, so this only ever fires for a
-  // genuinely stale suffixed key.
-  const definedKeys = new Set(sortedDefs.map((d) => d.field_key))
-  if (isRowBasedCategory(categoryCode)) {
-    for (const e of extractedFields || []) {
-      if (definedKeys.has(e.field_key)) continue
-      const legacyBase = legacySuffixBaseKey(e.field_key)
-      if (!legacyBase) continue
-      const def = sortedDefs.find((d) => d.field_key === legacyBase) || { field_key: e.field_key, field_label: e.field_key }
-      rows.push({ ...makeRow(def, e, e.row_key || ROW_KEY_DOCUMENT_LEVEL), legacyFormat: true, row_label: null })
-    }
-  }
-
-  return rows
 }

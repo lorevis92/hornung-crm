@@ -16,17 +16,12 @@ function splitFullName(fullName = '') {
   return { first: parts[0] || '', last: parts.slice(1).join(' ') }
 }
 
-// clients.canton, and every cantonal tax_parameters row's own canton_code,
-// are the short code (src/lib/constants.js's CANTONS list — "VS", "GE", ...)
-// — but a document's own text names the canton out in whatever language it's
-// written in ("Vallese"/"Wallis"/"Valais"), and nothing about the extraction
-// constrains the AI to the short form. Writing that name straight into
-// clients.canton (autoFill did exactly this, since canton isn't in
-// FORCE_APPLY_FIELDS and the field was empty) silently breaks EVERY cantonal
-// tax_parameters lookup for that client from then on — a cantonal
-// parameter row is matched on canton_code exactly, so a canton written as
-// "Vallese" simply matches nothing the consultant then looks up in Tax
-// settings. Names as this app's
+// clients.canton is the short code (src/lib/constants.js's CANTONS list —
+// "VS", "GE", ...) — but a document's own text names the canton out in
+// whatever language it's written in ("Vallese"/"Wallis"/"Valais"), and
+// nothing about the extraction constrains the AI to the short form. Writing
+// that name straight into clients.canton would leave a value no canton
+// selector in the app recognises. Names as this app's
 // own i18n canton blocks spell them (src/i18n/{en,de,fr,it}.js) — matched
 // case-insensitively, accents stripped, so "Genève"/"GENEVE"/"geneve" all
 // resolve the same way; an already-valid code passes through unchanged.

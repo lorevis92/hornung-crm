@@ -56,7 +56,7 @@ export function computeQuestionnaireConsistency({
 
   const hasPendingChildSuggestion = (pendingSuggestions || []).some((s) => s.target_table === 'client_children')
   const countField = (currentTaxSheetFields || []).find(
-    (f) => f.field_key === 'children_count' && f.included_in_calculation !== false && f.field_value
+    (f) => f.field_key === 'children_count' && f.field_value
   )
   const declaredCount = countField ? parseInt(countField.field_value, 10) : null
   if (Number.isFinite(declaredCount) && declaredCount !== children.length && !hasPendingChildSuggestion) {
