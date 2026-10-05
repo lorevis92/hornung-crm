@@ -75,6 +75,28 @@ function parseJsonFromText(text) {
   }
 }
 
+// The one exception to "never infer": a person's gender may be read from an
+// unambiguous title or form of address the document writes ("Signora Sara
+// Bianchi", "Herr Luca Bianchi", "Madame", "Mr."), since many documents have
+// no M/F box but still say it this way — and without it the husband-first
+// order (src/lib/personOrder.js) cannot be decided. Never from a first name
+// alone, never a guess. Only added when the category has these fields.
+const GENDER_FIELD_KEYS = ['gender', 'partner_gender']
+
+export function genderInstruction(fieldDefs) {
+  const present = (fieldDefs || []).map((f) => f.field_key).filter((key) => GENDER_FIELD_KEYS.includes(key))
+  if (!present.length) return ''
+  return (
+    `\n\nOne exception to the rule above, for ${present.join(' and ')} only: if the document does not ` +
+    'state the gender explicitly but writes an unambiguous title or form of address for that person — ' +
+    'Signor/Signora, Herr/Frau, Monsieur/Madame, Mr./Mrs./Ms. or the equivalent in another language — ' +
+    'you may return the gender it implies ("male" or "female"), and copy that exact text (e.g. ' +
+    '"Signora Sara Bianchi") as source_quote like for any other field. Never deduce it from a first ' +
+    'name alone, and never guess when the document gives no title, form of address or explicit ' +
+    'gender: leave the field out. This exception applies to no other field.'
+  )
+}
+
 function textOf(message) {
   return (message.content || []).find((block) => block.type === 'text')?.text || ''
 }
@@ -308,6 +330,7 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
                     "when you actually find its value in the document — never invent, guess, or infer a " +
                     `value that is not written there.\n\nFields:\n${fieldList}`
                   : 'No specific fields are defined for this kind of document.') +
+                genderInstruction(fieldDefs) +
                 rowInstruction +
                 '\n\nFor each field you find, also copy its exact source text — verbatim, character-for-' +
                 'character as printed in the document, never paraphrased, summarized or translated ' +

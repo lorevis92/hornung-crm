@@ -136,26 +136,29 @@ function normalizeMaritalStatus(raw) {
 //   resolved    — fields extracted here whose value now matches the current
 //                 one exactly, so a stale pending suggestion (if any) is no
 //                 longer relevant: [{ table, person, field }]
-// Fields where the extraction's own confidence, when high enough, is
-// trusted to overwrite an existing (different) value outright instead of
-// sitting as a pending suggestion. Reserved for structural data the rest
-// of the app keys off — marital status decides whether the case is read as
-// a couple at all (person ordering, the household questions) — not for
-// identity fields like a name, which stay
-// conservative even at high confidence. Below this confidence, or when the
-// extraction carried no confidence at all, the normal suggest-on-conflict
-// path still applies.
-const FORCE_APPLY_THRESHOLD = 0.75
-const FORCE_APPLY_FIELDS = new Set(['marital_status', 'first_name', 'last_name', 'date_of_birth', 'current_address', 'gender'])
+//
+// The Questionnaire is never overwritten automatically: an empty field is
+// filled in, but a value already there and different ALWAYS becomes a
+// suggestion the specialist accepts or rejects — whatever the field, and
+// whatever the extraction's confidence (even 100%).
 
 // Same reasoning as normalizeMaritalStatus below — extraction can come back
 // in any of the app's four languages, matched whole-word so surrounding
 // context ("Sesso: M") doesn't prevent it. Used for the husband-first
 // display order (src/lib/personOrder.js), never for anything the client
-// can't correct later — an unmatched value is simply left blank.
+// can't correct later — an unmatched value is simply left blank. Titles and
+// forms of address count too ("Signora", "Herr", "Madame"): the extraction
+// may read the gender from them (api/extract-document.js's
+// genderInstruction) and occasionally returns the title itself.
 const GENDER_SYNONYMS = {
-  male: ['male', 'm', 'mann', 'männlich', 'mannlich', 'homme', 'masculin', 'uomo', 'maschio', 'maschile'],
-  female: ['female', 'f', 'frau', 'weiblich', 'femme', 'féminin', 'feminin', 'donna', 'femmina', 'femminile']
+  male: [
+    'male', 'm', 'mann', 'männlich', 'mannlich', 'homme', 'masculin', 'uomo', 'maschio', 'maschile',
+    'signor', 'signore', 'herr', 'monsieur', 'mr', 'mister'
+  ],
+  female: [
+    'female', 'f', 'frau', 'weiblich', 'femme', 'féminin', 'feminin', 'donna', 'femmina', 'femminile',
+    'signora', 'madame', 'mme', 'mrs', 'ms', 'miss'
+  ]
 }
 
 function normalizeGender(raw) {
@@ -202,29 +205,19 @@ function normalizeDate(raw) {
 
 export function computePersonalDetailsSync({ extractedFields, canton, primary, spouse }) {
   const byKey = Object.fromEntries((extractedFields || []).map((f) => [f.field_key, f.field_value]))
-  const confidenceByKey = Object.fromEntries((extractedFields || []).map((f) => [f.field_key, f.confidence]))
 
   const autoFill = []
   const suggestions = []
   const resolved = []
 
-  const consider = (table, person, field, fieldLabel, rawValue, currentValue, sourceFieldKey) => {
+  const consider = (table, person, field, fieldLabel, rawValue, currentValue) => {
     if (!rawValue || !String(rawValue).trim()) return
     const value = String(rawValue).trim()
     const current = currentValue == null ? '' : String(currentValue).trim()
-    const confidence = sourceFieldKey ? confidenceByKey[sourceFieldKey] : null
-    // Only the primary person's own fields ever force-apply — spouse fields
-    // share the same field names (first_name, date_of_birth, ...) but stay
-    // suggestion-only regardless, since accepting one there creates/renames
-    // a person's identity rather than correcting the client's own record.
-    // That includes the empty case: a spouse row that doesn't exist yet is
-    // itself an identity to confirm, the same as a name/DOB conflict on an
-    // existing one — never auto-created behind the specialist's back.
-    const forceApply =
-      person === 'primary' &&
-      FORCE_APPLY_FIELDS.has(field) &&
-      (confidence == null || confidence >= FORCE_APPLY_THRESHOLD)
-    if (person !== 'spouse' && (!current || (forceApply && current !== value))) {
+    // Spouse fields are suggestion-only even when empty: a spouse row that
+    // doesn't exist yet is an identity to confirm, never created behind the
+    // specialist's back.
+    if (person !== 'spouse' && !current) {
       autoFill.push({ table, person, field, value })
     } else if (current !== value) {
       suggestions.push({ table, person, field, fieldLabel, currentValue: current, suggestedValue: value })
@@ -233,16 +226,16 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
     }
   }
 
-  consider('clients', 'none', 'canton', 'Canton', normalizeCanton(byKey.canton), canton, 'canton')
+  consider('clients', 'none', 'canton', 'Canton', normalizeCanton(byKey.canton), canton)
 
   if (byKey.full_name) {
     const { first, last } = splitFullName(byKey.full_name)
-    consider('client_persons', 'primary', 'first_name', 'First name', first, primary?.first_name, 'full_name')
-    consider('client_persons', 'primary', 'last_name', 'Last name', last, primary?.last_name, 'full_name')
+    consider('client_persons', 'primary', 'first_name', 'First name', first, primary?.first_name)
+    consider('client_persons', 'primary', 'last_name', 'Last name', last, primary?.last_name)
   }
   consider(
     'client_persons', 'primary', 'date_of_birth', 'Date of birth',
-    normalizeDate(byKey.date_of_birth), primary?.date_of_birth, 'date_of_birth'
+    normalizeDate(byKey.date_of_birth), primary?.date_of_birth
   )
   // Combined into the single free-text address client_persons already
   // stores (e.g. "Bahnhofstrasse 12, 6300 Zug") — municipality/zip alone
@@ -252,14 +245,14 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
   if (combinedAddress) {
     consider(
       'client_persons', 'primary', 'current_address', 'Current address',
-      combinedAddress, primary?.current_address, 'street_address'
+      combinedAddress, primary?.current_address
     )
   }
   const normalizedMarital = normalizeMaritalStatus(byKey.marital_status)
   if (normalizedMarital) {
     consider(
       'client_persons', 'primary', 'marital_status', 'Marital status',
-      normalizedMarital, primary?.marital_status, 'marital_status'
+      normalizedMarital, primary?.marital_status
     )
   }
   consider(
@@ -268,7 +261,7 @@ export function computePersonalDetailsSync({ extractedFields, canton, primary, s
   )
   consider(
     'client_persons', 'primary', 'gender', 'Gender',
-    normalizeGender(byKey.gender), primary?.gender, 'gender'
+    normalizeGender(byKey.gender), primary?.gender
   )
 
   if (byKey.partner_full_name) {

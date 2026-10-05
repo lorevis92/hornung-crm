@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Info } from 'lucide-react'
 import { useI18n } from '../../i18n'
 import { formatDate, fullName } from '../../lib/format'
 
@@ -40,6 +40,16 @@ export default function HouseholdCard({ clientId, household, properties = [], pe
         <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-[13.5px] text-red-800">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
           {t('summary.registryEmpty')}
+        </p>
+      ) : null}
+
+      {/* Husband first is decided by gender (src/lib/personOrder.js); when it
+          is missing or the same on both sides the order is only a fallback,
+          so say so. A note, not an action: the fix is in the Questionnaire. */}
+      {personOrder.needsVerification ? (
+        <p className="flex items-start gap-2 rounded-lg bg-amber-50/70 px-3 py-2 text-[13px] text-amber-800">
+          <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+          {t('data.personOrderUnknown')}
         </p>
       ) : null}
 

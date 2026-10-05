@@ -153,3 +153,59 @@ describe('syncPersonalDetails — primary-person upsert idempotency', () => {
     expect(clientRow.canton).toBe('VS')
   })
 })
+
+// The Questionnaire is never overwritten by an extraction: an empty field is
+// filled in, a value already there and different always becomes a
+// suggestion for the specialist — for every field, at any confidence.
+describe('computePersonalDetailsSync — never overwrites the Questionnaire', () => {
+  const primary = {
+    person_type: 'primary',
+    first_name: 'Sara',
+    last_name: 'Bianchi',
+    date_of_birth: '1985-03-01',
+    current_address: 'Via Roma 1, 6900 Lugano',
+    marital_status: 'single',
+    gender: 'female'
+  }
+  const sheet = (confidence) =>
+    [
+      ['full_name', 'Laura Bianchi-Rossi'],
+      ['date_of_birth', '18.06.1987'],
+      ['street_address', 'Bahnhofstrasse 12'],
+      ['zip', '6300'],
+      ['municipality', 'Zug'],
+      ['marital_status', 'coniugata'],
+      ['gender', 'M']
+    ].map(([field_key, field_value]) => ({ field_key, field_value, confidence }))
+
+  for (const confidence of [1, 0.99, 0.75, null]) {
+    it(`turns every different value into a suggestion (confidence ${confidence})`, () => {
+      const { autoFill, suggestions } = computePersonalDetailsSync({
+        extractedFields: sheet(confidence),
+        canton: null,
+        primary,
+        spouse: null
+      })
+      const primaryFields = ['first_name', 'last_name', 'date_of_birth', 'current_address', 'marital_status', 'gender']
+      expect(autoFill.filter((a) => a.person === 'primary')).toEqual([])
+      for (const field of primaryFields) {
+        expect(suggestions.find((s) => s.field === field), field).toMatchObject({
+          person: 'primary',
+          currentValue: String(primary[field])
+        })
+      }
+    })
+  }
+
+  it('still fills a field that is empty', () => {
+    const { autoFill, suggestions } = computePersonalDetailsSync({
+      extractedFields: sheet(1),
+      canton: null,
+      primary: { ...primary, gender: null, date_of_birth: null },
+      spouse: null
+    })
+    expect(autoFillValue(autoFill, 'gender')).toBe('male')
+    expect(autoFillValue(autoFill, 'date_of_birth')).toBe('1987-06-18')
+    expect(suggestions.some((s) => s.field === 'gender' || s.field === 'date_of_birth')).toBe(false)
+  })
+})
