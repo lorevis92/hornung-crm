@@ -1,7 +1,8 @@
 // Husband first, and what happens when it cannot be decided.
 //  - The extraction may read a person's gender from an unambiguous title or
-//    form of address in the document ("Signora", "Herr", "Madame", "Mr."),
-//    never from a first name alone (api/extract-document.js).
+//    form of address ("Signora", "Herr", "Madame", "Mr.") and, failing that,
+//    from a first name that is unambiguously male or female — never from an
+//    ambiguous or unisex one (api/extract-document.js).
 //  - The household box in Tax Summary says so when the order is only a
 //    fallback (src/components/summary/HouseholdCard.jsx), as a note and not
 //    as an action: the fix stays in the Questionnaire.
@@ -34,15 +35,30 @@ describe('the extraction prompt for gender', () => {
     const text = genderInstruction(sheetDefs)
     expect(text).toContain('gender and partner_gender only')
     for (const title of ['Signor/Signora', 'Herr/Frau', 'Monsieur/Madame', 'Mr./Mrs.']) expect(text).toContain(title)
-    // ... still with the exact sentence as the source, like every field.
-    expect(text).toMatch(/copy that exact text/)
+    // ... still with the exact text it relied on as the source, like every field.
+    expect(text).toMatch(/As source_quote copy the exact text you relied on/)
     expect(text).toMatch(/applies to no other field/)
   })
 
-  it('still forbids deducing it from a first name, or guessing without any title', () => {
+  it('lets it use an unambiguous first name when there is no title', () => {
     const text = genderInstruction(sheetDefs)
-    expect(text).toMatch(/Never deduce it from a first name alone/)
-    expect(text).toMatch(/never guess/)
+    expect(text).toMatch(/first name \(from full_name \/ partner_full_name\)/)
+    expect(text).toMatch(/conventionally and unambiguously male or female/)
+    expect(text).toMatch(/Maria, Sara, Giulia are female; Luca, Giuseppe, Marco are male/)
+  })
+
+  it('keeps the title as the stronger sign', () => {
+    const text = genderInstruction(sheetDefs)
+    expect(text.indexOf('title or form of address')).toBeLessThan(text.indexOf('first name'))
+    expect(text).toMatch(/when there is one, it always\s+wins/)
+  })
+
+  it('forbids a guess when the name is ambiguous, unisex or unfamiliar', () => {
+    const text = genderInstruction(sheetDefs)
+    expect(text).toMatch(/ambiguous, unisex/)
+    expect(text).toMatch(/Andrea/)
+    expect(text).toMatch(/unfamiliar to you, or you are not sure, leave the field out/)
+    expect(text).toMatch(/never force a guess/)
   })
 
   it('adds nothing for a document type without gender fields', () => {
@@ -75,7 +91,22 @@ describe('a gender read from a title reaches the Questionnaire', () => {
     }
   })
 
-  it('never takes a bare first name as a gender', () => {
+  it('fills it from an unambiguous first name the model read without any title ("Maria Rossi")', () => {
+    // What the model returns for a sheet that only says "Maria Rossi".
+    const { autoFill } = sync([
+      { field_key: 'full_name', field_value: 'Maria Rossi', source_quote: 'Maria Rossi' },
+      { field_key: 'gender', field_value: 'female', source_quote: 'Maria Rossi' }
+    ])
+    expect(autoFill.find((a) => a.field === 'gender')?.value).toBe('female')
+  })
+
+  it('leaves it empty for an ambiguous name, which the model leaves out ("Andrea Rossi")', () => {
+    const { autoFill, suggestions } = sync([{ field_key: 'full_name', field_value: 'Andrea Rossi' }])
+    expect(autoFill.some((a) => a.field === 'gender')).toBe(false)
+    expect(suggestions.some((s) => s.field === 'gender')).toBe(false)
+  })
+
+  it('never takes a bare first name returned AS the gender value', () => {
     const { autoFill, suggestions } = sync([{ field_key: 'gender', field_value: 'Andrea' }])
     expect(autoFill.some((a) => a.field === 'gender')).toBe(false)
     expect(suggestions.some((s) => s.field === 'gender')).toBe(false)

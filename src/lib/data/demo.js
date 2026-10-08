@@ -13,6 +13,7 @@ import {
   normalizePropertyAddress
 } from '../personalDetails'
 import { validateClientCaseCreation } from '../caseCreation'
+import { flipOrderOverride, swapPersonRows, swapRoleRef, swapSuggestionPerson } from '../personSwap'
 
 const KEY = 'hornung.demo.v2'
 const blobs = new Map() // document id -> object URL (this session only)
@@ -421,6 +422,30 @@ export const demoApi = {
     Object.assign(c, patch, { updated_at: iso(Date.now()) })
     commit()
     return wait(c)
+  },
+
+  // Demo mirror of the swap_primary_and_spouse SQL function (migration 51),
+  // with the same rules (src/lib/personSwap.js).
+  async swapPrimaryAndSpouse(clientId) {
+    const s = store()
+    const primary = s.persons.find((p) => p.client_id === clientId && p.person_type === 'primary')
+    const spouse = s.persons.find((p) => p.client_id === clientId && p.person_type === 'spouse')
+    if (!primary || !spouse) throw new Error('NO_SPOUSE')
+    const swapped = swapPersonRows(primary, spouse)
+    Object.assign(primary, swapped.primary)
+    Object.assign(spouse, swapped.spouse)
+
+    const caseIds = new Set(s.cases.filter((c) => c.client_id === clientId).map((c) => c.id))
+    for (const doc of s.documents.filter((d) => caseIds.has(d.case_id))) {
+      if (doc.person_ref) doc.person_ref = swapRoleRef(doc.person_ref)
+    }
+    for (const suggestion of s.fieldSuggestions.filter((x) => x.client_id === clientId)) {
+      suggestion.target_person = swapSuggestionPerson(suggestion)
+    }
+    const client = s.clients.find((c) => c.id === clientId)
+    if (client) client.person_order_override = flipOrderOverride(client.person_order_override)
+    commit()
+    return this.getQuestionnaire(clientId)
   },
 
   // Mirrors the real cascade (clients -> questionnaire tables / tax_cases ->

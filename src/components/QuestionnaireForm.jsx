@@ -10,6 +10,8 @@ import { useLoad } from '../lib/useLoad'
 import { MARITAL_STATUSES, PERMIT_TYPES } from '../lib/constants'
 import { fullName } from '../lib/format'
 import { resolvePersonDisplayOrder } from '../lib/personOrder'
+import { flipOrderOverride } from '../lib/personSwap'
+import Modal from './Modal'
 
 const emptyPerson = (type) => ({
   person_type: type,
@@ -203,6 +205,28 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
     }
   }
 
+  const [confirmingSwap, setConfirmingSwap] = useState(false)
+  const [swapping, setSwapping] = useState(false)
+
+  const swapPersons = async () => {
+    setSwapping(true)
+    try {
+      await api.swapPrimaryAndSpouse(clientId)
+      // The override names rows, so the server flipped it to keep the same
+      // people in the same order — mirror that here.
+      setOrderOverride((current) => flipOrderOverride(current))
+      setConfirmingSwap(false)
+      toast.success(t('data.swapPersonsDone'))
+      loadState.reload()
+      onSaved?.()
+    } catch (error) {
+      console.error(error)
+      toast.error(error.message || t('common.error'))
+    } finally {
+      setSwapping(false)
+    }
+  }
+
   const loadState = useLoad(
     useCallback(async (isCurrent) => {
       if (!clientId) return
@@ -329,7 +353,8 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
       {/* Rendered in husband-first order (src/lib/personOrder.js) — which
           section appears FIRST changes; the section's own identity
           (Taxpayer = primary, Spouse = the other client_persons row) never
-          does, so data is never moved between people, only re-sequenced. */}
+          does. Moving the people between the two rows is a separate,
+          explicit action: "Scambia contribuente e coniuge" below. */}
       {spouse && personOrder.needsVerification && isStaff ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-[13.5px] text-amber-800">
           <span>{t('data.personOrderUnknown')}</span>
@@ -377,6 +402,41 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
           </SectionCard>
         )
       )}
+
+      {/* Swapping who is primary and who is spouse (staff only, once both
+          are saved): a change that spreads to documents and suggestions, so
+          it asks first — see src/lib/personSwap.js. */}
+      {isStaff && !disabled && primary?.id && spouse?.id ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-sand/40 px-4 py-3 text-[13.5px] text-ink-600">
+          <span>{t('data.swapPersonsHelp')}</span>
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setConfirmingSwap(true)}>
+            <ArrowLeftRight size={14} aria-hidden="true" />
+            {t('data.swapPersons')}
+          </button>
+        </div>
+      ) : null}
+
+      <Modal
+        open={confirmingSwap}
+        onClose={() => (swapping ? null : setConfirmingSwap(false))}
+        title={t('data.swapPersonsTitle')}
+        description={t('data.swapPersonsBody', {
+          primary: fullName(primary) || t('data.taxpayer'),
+          spouse: fullName(spouse) || t('data.spouse')
+        })}
+        size="sm"
+        footer={
+          <>
+            <button type="button" className="btn-secondary btn-sm" onClick={() => setConfirmingSwap(false)} disabled={swapping}>
+              {t('common.cancel')}
+            </button>
+            <button type="button" className="btn-primary btn-sm" onClick={swapPersons} disabled={swapping}>
+              {swapping ? <Spinner size={14} /> : <ArrowLeftRight size={14} aria-hidden="true" />}
+              {t('data.swapPersons')}
+            </button>
+          </>
+        }
+      />
 
       {/* ----------------------------------------------------- children --- */}
       <SectionCard

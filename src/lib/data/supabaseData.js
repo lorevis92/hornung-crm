@@ -169,6 +169,14 @@ export const supabaseApi = {
     return unwrap(await supabase.from('clients').update(patch).eq('id', id).select().single())
   },
 
+  // Swaps who is "primary" and who is "spouse" — persons, documents already
+  // attributed to them, pending suggestions and the display-order override,
+  // all in one transaction (migration 51; rules in src/lib/personSwap.js).
+  async swapPrimaryAndSpouse(clientId) {
+    unwrap(await supabase.rpc('swap_primary_and_spouse', { p_client_id: clientId }))
+    return this.getQuestionnaire(clientId)
+  },
+
   // Permanently removes the client, every row that hangs off it in THIS app,
   // its app_profiles row for hornung_crm, and — only if the same login isn't
   // also used by another WisiApp — the underlying auth.users account. This

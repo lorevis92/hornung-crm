@@ -75,12 +75,14 @@ function parseJsonFromText(text) {
   }
 }
 
-// The one exception to "never infer": a person's gender may be read from an
-// unambiguous title or form of address the document writes ("Signora Sara
-// Bianchi", "Herr Luca Bianchi", "Madame", "Mr."), since many documents have
-// no M/F box but still say it this way — and without it the husband-first
-// order (src/lib/personOrder.js) cannot be decided. Never from a first name
-// alone, never a guess. Only added when the category has these fields.
+// The one exception to "never infer": a person's gender, which many documents
+// never state in an M/F box — and without it the husband-first order
+// (src/lib/personOrder.js) cannot be decided. In order of strength: an
+// explicit statement, then a title or form of address ("Signora Sara
+// Bianchi", "Herr", "Madame", "Mr."), then the first name when it is
+// conventionally and unambiguously male or female (Maria, Luca, Giuseppe).
+// An ambiguous, unisex or unfamiliar name gives nothing: the field stays
+// empty. Only added when the category has these fields.
 const GENDER_FIELD_KEYS = ['gender', 'partner_gender']
 
 export function genderInstruction(fieldDefs) {
@@ -88,12 +90,17 @@ export function genderInstruction(fieldDefs) {
   if (!present.length) return ''
   return (
     `\n\nOne exception to the rule above, for ${present.join(' and ')} only: if the document does not ` +
-    'state the gender explicitly but writes an unambiguous title or form of address for that person — ' +
-    'Signor/Signora, Herr/Frau, Monsieur/Madame, Mr./Mrs./Ms. or the equivalent in another language — ' +
-    'you may return the gender it implies ("male" or "female"), and copy that exact text (e.g. ' +
-    '"Signora Sara Bianchi") as source_quote like for any other field. Never deduce it from a first ' +
-    'name alone, and never guess when the document gives no title, form of address or explicit ' +
-    'gender: leave the field out. This exception applies to no other field.'
+    'state the gender explicitly, you may still return "male" or "female" from these signs, strongest first:\n' +
+    '1. an unambiguous title or form of address for that person — Signor/Signora, Herr/Frau, ' +
+    'Monsieur/Madame, Mr./Mrs./Ms. or the equivalent in another language; when there is one, it always ' +
+    'wins;\n' +
+    '2. otherwise, the person\'s first name (from full_name / partner_full_name), but ONLY when that name ' +
+    'is conventionally and unambiguously male or female in the language and culture of the document — ' +
+    'e.g. Maria, Sara, Giulia are female; Luca, Giuseppe, Marco are male.\n' +
+    'Be cautious: if the first name is ambiguous, unisex (e.g. Andrea, which is male in Italy and female ' +
+    'elsewhere; Sascha, Dominique, Alex), unfamiliar to you, or you are not sure, leave the field out — ' +
+    'never force a guess. As source_quote copy the exact text you relied on (the title with the name, ' +
+    'e.g. "Signora Sara Bianchi", or the name itself). This exception applies to no other field.'
   )
 }
 
