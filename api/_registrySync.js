@@ -18,12 +18,10 @@ import { syncPropertySuggestion } from './_propertySuggestion.js'
 import { syncChildSuggestions } from './_childSuggestion.js'
 
 export async function syncRegistryForClientYear(admin, clientId, taxYear) {
-  // Ordered by uploaded_at: this re-syncs personal details from EVERY
-  // eligible document every time, and force-apply fields (name, marital
-  // status, address, ...) always take whichever document processed LAST —
-  // with no explicit order that would be whatever Postgres happened to
-  // return. A client who uses "fill from pasted text" more than once (each
-  // use is its own permanent document) needs the newest one to reliably win.
+  // Ordered by uploaded_at, so documents are always synced in the same,
+  // predictable order (oldest first): an empty Questionnaire field is filled
+  // by the first document that states it, and any later document saying
+  // something different becomes a suggestion — never an overwrite.
   const { data: documents, error: docsError } = await admin
     .from('client_documents')
     .select('id, category_code, status, uploaded_at')
