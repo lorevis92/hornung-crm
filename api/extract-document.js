@@ -33,6 +33,7 @@ import { syncRegistryForClientYear } from './_registrySync.js'
 import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL } from '../src/lib/rowBasedFields.js'
 import { resolveModel } from '../src/lib/aiModels.js'
 import { buildPersonOptions, describePersonOptions, normalizePersonChoice } from '../src/lib/documentPerson.js'
+import { normalizeStoredImage } from './_imageNormalize.js'
 import {
   buildOtherFindingRows,
   capturedValuesOf,
@@ -159,10 +160,14 @@ export async function runExtraction(
   }
 }
 
-async function extractClaimedDocument(admin, anthropic, documentId, claimed, {
+async function extractClaimedDocument(admin, anthropic, documentId, claimedRow, {
   forcedCategoryCode = null,
   throwOnRegistrySyncError = false
 } = {}) {
+  // An uploaded image (HEIC from an iPhone included) is first replaced in
+  // Storage by a reasonably sized JPEG — see api/_imageNormalize.js — so the
+  // extraction, the viewer and the download all work on that version.
+  const claimed = await normalizeStoredImage(admin, claimedRow, STORAGE_BUCKET)
 
   const mimeType = claimed.mime_type || ''
   const isPdf = mimeType === 'application/pdf'
