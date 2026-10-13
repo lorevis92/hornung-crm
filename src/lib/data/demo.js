@@ -734,6 +734,13 @@ export const demoApi = {
     return wait(s.extractedDocumentFields.filter((f) => f.document_id === documentId))
   },
 
+  async listExtractedFieldsForDocuments(documentIds) {
+    if (!documentIds?.length) return []
+    const s = store()
+    const wanted = new Set(documentIds)
+    return wait(s.extractedDocumentFields.filter((f) => wanted.has(f.document_id)))
+  },
+
   async listExtractedFields(caseDocumentId) {
     return this.listExtractedFieldsForDocument(caseDocumentId)
   },

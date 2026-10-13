@@ -445,6 +445,15 @@ export const supabaseApi = {
     )
   },
 
+  // The same for many documents in ONE query — Tax Summary loads a whole
+  // case this way instead of one request per document.
+  async listExtractedFieldsForDocuments(documentIds) {
+    if (!documentIds?.length) return []
+    return unwrap(
+      await supabase.from('extracted_document_fields').select('*').in('document_id', documentIds)
+    )
+  },
+
   // "Other information found" — values a document holds that no whitelist
   // field covers (document_other_findings, migration 46). Read-only here:
   // they are written exclusively by api/extract-document.js and replaced

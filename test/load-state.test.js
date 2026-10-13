@@ -32,7 +32,7 @@ function fakeApi({ failing } = {}) {
     listDocumentCategories: async () => [],
     listFieldDefinitions: async () => [],
     getQuestionnaire: async () => ({ persons: [], children: [], properties: [] }),
-    listExtractedFieldsForDocument: async () => [],
+    listExtractedFieldsForDocuments: async () => [],
     listOtherFindingsForDocuments: async () => []
   }
   if (failing) ok[failing] = async () => { throw missingTable }
@@ -53,7 +53,7 @@ describe('loading a page', () => {
   })
 
   it('ends in "error" whichever query fails, including the very first one', async () => {
-    for (const failing of ['getCase', 'listClientDocuments', 'getQuestionnaire', 'listExtractedFieldsForDocument']) {
+    for (const failing of ['getCase', 'listClientDocuments', 'getQuestionnaire', 'listExtractedFieldsForDocuments']) {
       const states = await statesOf(() => loadTaxSummary(fakeApi({ failing }), 'case-1'))
       expect(states.at(-1).status, failing).toBe('error')
     }

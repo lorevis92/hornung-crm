@@ -20,11 +20,13 @@ export async function loadTaxSummary(api, caseId) {
     api.listFieldDefinitions(),
     api.getQuestionnaire(caseRow.client_id)
   ])
-  const [fieldsPerDocument, otherFindings] = await Promise.all([
-    Promise.all(documents.map((d) => api.listExtractedFieldsForDocument(d.id))),
-    api.listOtherFindingsForDocuments(documents.map((d) => d.id))
+  // One query each for all the documents' fields and findings — never one
+  // request per document, which made a case with many documents slow.
+  const documentIds = documents.map((d) => d.id)
+  const [extractedFields, otherFindings] = await Promise.all([
+    api.listExtractedFieldsForDocuments(documentIds),
+    api.listOtherFindingsForDocuments(documentIds)
   ])
-  const extractedFields = documents.flatMap((d, i) => fieldsPerDocument[i].map((f) => ({ ...f, document_id: d.id })))
   return { caseRow, documents, categories, fieldDefs, questionnaire, extractedFields, otherFindings }
 }
 
