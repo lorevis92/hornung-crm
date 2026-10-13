@@ -19,6 +19,7 @@ import { CANTONS, LANGUAGES } from '../lib/constants'
 import { formatDate, fullName } from '../lib/format'
 import { describeSuggestion } from '../lib/suggestions'
 import { catchUpRegistrySyncInBackground } from '../lib/recalc'
+import { loadClientPage } from '../lib/clientPageData'
 
 export default function SpecialistClient() {
   const { clientId } = useParams()
@@ -48,23 +49,34 @@ export default function SpecialistClient() {
   const [suggestions, setSuggestions] = useState([])
   const [resolvingId, setResolvingId] = useState(null)
   const [questionnaireRefreshToken, setQuestionnaireRefreshToken] = useState(0)
+  const [catchUpToken, setCatchUpToken] = useState(0)
 
-  const load = useCallback(async () => {
-    const [row, rows] = await Promise.all([api.getClient(clientId), api.listCases(clientId)])
-    setClient(row)
-    setNotes(row?.internal_notes || '')
-    setCases(rows)
-    // A document can sit fully extracted for a long time without its data
-    // ever having reached client_persons/client_field_suggestions — the
-    // sync only used to fire as a side effect of a FRESH extraction. Catch
-    // it up here, before reading suggestions, so both the suggestion feed
-    // below and the Questionnaire tab (which fetches client_persons
-    // independently on its own mount, always after this resolves) show the
-    // client's actual data the first time this page is opened, not just
-    // after their next document upload.
-    await catchUpRegistrySyncInBackground(clientId, rows)
-    setSuggestions(await api.listFieldSuggestions(clientId))
-  }, [clientId])
+  // What is on file shows at once; the registry catch-up (documents whose
+  // data never reached the Questionnaire) runs in the background afterwards
+  // and, if the specialist is still here, refreshes the suggestions and the
+  // Questionnaire — see src/lib/clientPageData.js.
+  const load = useCallback(
+    async (isCurrent) => {
+      const data = await loadClientPage({
+        api,
+        clientId,
+        catchUp: catchUpRegistrySyncInBackground,
+        isCurrent,
+        onCatchUpDone: async () => {
+          const fresh = await api.listFieldSuggestions(clientId)
+          if (!isCurrent()) return
+          setSuggestions(fresh)
+          setCatchUpToken((n) => n + 1)
+        }
+      })
+      if (!isCurrent()) return
+      setClient(data.client)
+      setNotes(data.client?.internal_notes || '')
+      setCases(data.cases)
+      setSuggestions(data.suggestions)
+    },
+    [clientId]
+  )
   const loadState = useLoad(load)
 
   const saveNotes = async () => {
@@ -391,7 +403,12 @@ export default function SpecialistClient() {
               setQuestionnaireRefreshToken((n) => n + 1)
             }}
           />
-          <QuestionnaireForm key={questionnaireRefreshToken} clientId={clientId} client={client} />
+          <QuestionnaireForm
+            key={questionnaireRefreshToken}
+            clientId={clientId}
+            client={client}
+            refreshToken={catchUpToken}
+          />
         </section>
       ) : null}
 

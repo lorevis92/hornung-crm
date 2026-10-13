@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftRight, Plus, Save, Trash2, Users, Car, Home, User, Info, MessageSquare } from 'lucide-react'
 import { LoadGate } from './LoadState'
 import { Checkbox, Field, Select, Spinner, TextInput, Textarea } from './ui'
@@ -164,7 +164,21 @@ function RowCard({ children, onRemove, disabled, label }) {
   )
 }
 
-export default function QuestionnaireForm({ clientId, client, readOnly = false, onSaved }) {
+// The form's contents as one comparable string — equal snapshots mean no
+// unsaved edits.
+export function formSnapshot({ details, primary, spouse, children, vehicles, properties }) {
+  return JSON.stringify([details, primary, spouse, children, vehicles, properties])
+}
+
+// A refresh from the server is safe only when nothing was edited since the
+// last load or save.
+export function shouldRefreshFromServer(savedSnapshot, currentSnapshot) {
+  return savedSnapshot != null && savedSnapshot === currentSnapshot
+}
+
+// refreshToken: bumped by the client page when its background registry
+// catch-up finishes (src/lib/clientPageData.js), to show what it filled in.
+export default function QuestionnaireForm({ clientId, client, readOnly = false, onSaved, refreshToken = 0 }) {
   const { t } = useI18n()
   const { isStaff } = useAuth()
   const toast = useToast()
@@ -208,6 +222,11 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
   const [confirmingSwap, setConfirmingSwap] = useState(false)
   const [swapping, setSwapping] = useState(false)
 
+  // What the form held when it was last loaded or saved — to tell whether
+  // the specialist has unsaved edits.
+  const savedSnapshot = useRef(null)
+  const currentSnapshot = () => formSnapshot({ details, primary, spouse, children, vehicles, properties })
+
   const swapPersons = async () => {
     setSwapping(true)
     try {
@@ -232,24 +251,31 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
       if (!clientId) return
       const data = await api.getQuestionnaire(clientId)
       if (!isCurrent()) return
-      setDetails(data.details || {})
-      // A client's name lives on `clients` from the moment they're invited,
-      // but the questionnaire's own primary-person row only exists once
-      // someone has saved this form at least once. Seed the name from the
-      // client record so the taxpayer section never shows blank where the
-      // header just showed a real name — and so saving here (which mirrors
-      // primary's name back onto `clients`) doesn't quietly blank it out.
-      setPrimary(
-        data.persons.find((p) => p.person_type === 'primary') || {
+      const loaded = {
+        details: data.details || {},
+        // A client's name lives on `clients` from the moment they're invited,
+        // but the questionnaire's own primary-person row only exists once
+        // someone has saved this form at least once. Seed the name from the
+        // client record so the taxpayer section never shows blank where the
+        // header just showed a real name — and so saving here (which mirrors
+        // primary's name back onto `clients`) doesn't quietly blank it out.
+        primary: data.persons.find((p) => p.person_type === 'primary') || {
           ...emptyPerson('primary'),
           first_name: client?.first_name || '',
           last_name: client?.last_name || ''
-        }
-      )
-      setSpouse(data.persons.find((p) => p.person_type === 'spouse') || null)
-      setChildren(data.children || [])
-      setVehicles(data.vehicles || [])
-      setProperties(data.properties || [])
+        },
+        spouse: data.persons.find((p) => p.person_type === 'spouse') || null,
+        children: data.children || [],
+        vehicles: data.vehicles || [],
+        properties: data.properties || []
+      }
+      setDetails(loaded.details)
+      setPrimary(loaded.primary)
+      setSpouse(loaded.spouse)
+      setChildren(loaded.children)
+      setVehicles(loaded.vehicles)
+      setProperties(loaded.properties)
+      savedSnapshot.current = formSnapshot(loaded)
       // A link into this form (e.g. the Tax Summary completeness banner's
       // "Fix this" action) can target a specific section via the URL hash —
       // only scrollable once its data has actually rendered.
@@ -263,6 +289,21 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [clientId])
   )
+
+  // The client page's background catch-up finished (refreshToken changes):
+  // re-read the Questionnaire in place, without the spinner — unless the
+  // specialist has unsaved edits, which a refresh must never wipe. A signal
+  // that arrives while the form is still loading is handled once it is
+  // ready (that first load may have read the data before the catch-up).
+  // Starts at the token the form was mounted with: a form opened after the
+  // catch-up already reads its result.
+  const handledRefresh = useRef(refreshToken)
+  useEffect(() => {
+    if (refreshToken === handledRefresh.current || loadState.status !== 'ready') return
+    handledRefresh.current = refreshToken
+    if (shouldRefreshFromServer(savedSnapshot.current, currentSnapshot())) loadState.refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken, loadState.status])
 
   const setDetail = (key) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
@@ -296,6 +337,7 @@ export default function QuestionnaireForm({ clientId, client, readOnly = false, 
         vehicles,
         properties
       })
+      savedSnapshot.current = currentSnapshot()
       toast.success(t('data.savedOk'))
       onSaved?.()
     } catch (error) {
