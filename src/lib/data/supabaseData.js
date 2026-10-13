@@ -495,6 +495,14 @@ export const supabaseApi = {
     )
   },
 
+  // One document, for the full-page viewer (src/pages/DocumentViewer.jsx).
+  // RLS decides who may read it, exactly as for the lists above.
+  async getClientDocument(documentId) {
+    const { data, error } = await supabase.from('client_documents').select('*').eq('id', documentId).maybeSingle()
+    if (error) throw error
+    return data
+  },
+
   async retryExtraction(documentId) {
     return callApi('/api/retry-extraction', { documentId })
   },

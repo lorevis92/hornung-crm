@@ -6,14 +6,15 @@ import { useI18n } from '../i18n'
 import { useToast } from '../context/ToastContext'
 import { api } from '../lib/data'
 import { parseAssistantMessage } from '../lib/citations'
+import { openDocumentViewer } from '../lib/documentViewer'
 
 // One assistant reply, with its document references (src/lib/citations.js)
 // rendered as click-throughs: a reference to an extracted value opens the
 // document at its page with its sentence highlighted, a reference to a
-// document in general opens it from the start. onViewDocument(documentId,
-// { page, quote }) is Tax Summary's own viewer, or — on the case page — a
-// jump to Tax Summary opened on that point.
-function AssistantMessageContent({ content, onViewDocument }) {
+// document in general opens it from the start — always in a new browser tab
+// on the full-page viewer (src/lib/documentViewer.js), from whichever page
+// the chat is open on.
+function AssistantMessageContent({ content }) {
   const { t } = useI18n()
   const parts = parseAssistantMessage(content)
   return (
@@ -24,7 +25,7 @@ function AssistantMessageContent({ content, onViewDocument }) {
             key={i}
             type="button"
             className="mx-0.5 inline-flex items-center gap-1 rounded-md bg-gold-50 px-1.5 py-0.5 text-[12.5px] font-medium text-gold-800 underline decoration-gold-300 underline-offset-2 hover:bg-gold-100"
-            onClick={() => onViewDocument(part.documentId, { page: part.page, quote: part.quote })}
+            onClick={() => openDocumentViewer(part.documentId, { page: part.page, quote: part.quote })}
             title={part.quote || undefined}
           >
             <Eye size={11} aria-hidden="true" />
@@ -44,7 +45,7 @@ function AssistantMessageContent({ content, onViewDocument }) {
 // (api/case-assistant.js) rebuilds the case's context from the database on
 // every question; this component only ever sends the caseId and the
 // specialist's own message text.
-export default function CaseAssistant({ caseId, onViewDocument }) {
+export default function CaseAssistant({ caseId }) {
   const { t } = useI18n()
   const toast = useToast()
   const [open, setOpen] = useState(false)
@@ -173,7 +174,7 @@ export default function CaseAssistant({ caseId, onViewDocument }) {
             </div>
           ) : (
             <div key={i} className="mr-auto max-w-[92%] rounded-xl rounded-tl-sm bg-sand px-3 py-2 text-ink-800">
-              <AssistantMessageContent content={m.content} onViewDocument={onViewDocument} />
+              <AssistantMessageContent content={m.content} />
             </div>
           )
         )}

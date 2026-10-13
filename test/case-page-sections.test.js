@@ -84,14 +84,11 @@ describe('the assistant opened from the case page is the same conversation as th
     expect(caseAssistant).not.toMatch(/localStorage|sessionStorage/)
   })
 
-  it('still lets a document reference be opened from the case page, which has no viewer of its own', () => {
-    // It hands off to Tax Summary with that document already open
-    // (?doc=<id>, plus the page and sentence when it points at a value)
-    // rather than rendering a dead badge.
-    expect(casePage).toMatch(/summaryLinkFor\(caseId/)
-    expect(taxSummary).toMatch(/searchParams\.get\('doc'\)/)
-    expect(taxSummary).toMatch(/searchParams\.get\('page'\)/)
-    expect(taxSummary).toMatch(/searchParams\.get\('quote'\)/)
+  it('opens a document reference the same way from both pages: a new tab on the viewer', () => {
+    // The chat opens the full-page viewer itself, so neither page needs a
+    // viewer of its own or a way to hand the click to the other.
+    expect(caseAssistant).toMatch(/openDocumentViewer\(part\.documentId/)
+    for (const page of [casePage, taxSummary]) expect(page).not.toMatch(/onViewDocument/)
   })
 })
 

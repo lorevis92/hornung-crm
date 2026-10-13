@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Spinner } from './ui'
 import { useI18n } from '../i18n'
 import { findQuoteItemIndexes } from '../lib/pdfHighlight'
@@ -178,10 +178,10 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
     return (
       <div className="space-y-3">
         <button type="button" className="btn-secondary btn-sm" onClick={onBack}>
-          <ArrowLeft size={16} aria-hidden="true" />
-          {t('extraction.backToList')}
+          <X size={16} aria-hidden="true" />
+          {t('common.close')}
         </button>
-        <div className="max-h-[65vh] overflow-auto rounded-xl border border-line bg-sand/40 p-4">
+        <div className="max-h-[85vh] overflow-auto rounded-xl border border-line bg-sand/40 p-4">
           {loading ? (
             <div className="flex min-h-[30vh] items-center justify-center">
               <Spinner size={22} />
@@ -212,12 +212,12 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
     return (
       <div className="space-y-3">
         <button type="button" className="btn-secondary btn-sm" onClick={onBack}>
-          <ArrowLeft size={16} aria-hidden="true" />
-          {t('extraction.backToList')}
+          <X size={16} aria-hidden="true" />
+          {t('common.close')}
         </button>
         <div className="flex items-center justify-center rounded-xl border border-line bg-sand/40 p-4">
           {fileUrl ? (
-            <img src={fileUrl} alt={fileName} className="max-h-[65vh] max-w-full rounded-lg object-contain" />
+            <img src={fileUrl} alt={fileName} className="max-h-[85vh] max-w-full rounded-lg object-contain" />
           ) : (
             <Spinner size={22} />
           )}
@@ -230,8 +230,8 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" className="btn-secondary btn-sm" onClick={onBack}>
-          <ArrowLeft size={16} aria-hidden="true" />
-          {t('extraction.backToList')}
+          <X size={16} aria-hidden="true" />
+          {t('common.close')}
         </button>
         {numPages ? (
           <div className="flex items-center gap-1 text-[14px] text-ink-600">
@@ -258,7 +258,7 @@ export default function PdfSourceViewer({ fileUrl, isPdf, isText, fileName, page
         ) : null}
       </div>
 
-      <div ref={containerRef} className="relative max-h-[65vh] overflow-auto rounded-xl border border-line bg-sand/40 p-4">
+      <div ref={containerRef} className="relative max-h-[85vh] overflow-auto rounded-xl border border-line bg-sand/40 p-4">
         {loading ? (
           <div className="flex min-h-[50vh] items-center justify-center">
             <Spinner size={22} />

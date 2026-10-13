@@ -526,9 +526,12 @@ export default {
     deletePricingConfirmBody: 'Ceci supprimera "{label}" de la grille tarifaire.'
   },
 
+  viewer: {
+    notFound: 'Document introuvable, ou vous n’y avez pas accès.'
+  },
+
   extraction: {
     viewSource: 'Voir dans le document',
-    backToList: 'Retour à la liste',
     previousPage: 'Page précédente',
     nextPage: 'Page suivante',
     pageOf: 'Page {page} sur {total}',

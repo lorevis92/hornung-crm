@@ -524,9 +524,12 @@ export default {
     deletePricingConfirmBody: 'Questo rimuoverà "{label}" dal listino.'
   },
 
+  viewer: {
+    notFound: 'Documento non trovato, oppure non hai accesso.'
+  },
+
   extraction: {
     viewSource: 'Vedi nel documento',
-    backToList: 'Torna all’elenco',
     previousPage: 'Pagina precedente',
     nextPage: 'Pagina successiva',
     pageOf: 'Pagina {page} di {total}',

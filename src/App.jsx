@@ -17,6 +17,7 @@ import SpecialistHome from './pages/SpecialistHome'
 import SpecialistClient from './pages/SpecialistClient'
 import TaxSettings from './pages/TaxSettings'
 import TaxSummary from './pages/TaxSummary'
+import DocumentViewer from './pages/DocumentViewer'
 import Account from './pages/Account'
 import NotFound from './pages/NotFound'
 
@@ -29,7 +30,9 @@ function NoAccess() {
   )
 }
 
-function Protected({ children, staffOnly = false }) {
+// bare: no app navigation around the page — the full-page document viewer,
+// opened in its own tab.
+function Protected({ children, staffOnly = false, bare = false }) {
   const { loading, profile, access, isStaff } = useAuth()
   const location = useLocation()
   const { t } = useI18n()
@@ -45,6 +48,7 @@ function Protected({ children, staffOnly = false }) {
   if (!profile) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   if (staffOnly && !isStaff) return <Navigate to="/" replace />
 
+  if (bare) return <main className="min-h-screen bg-white p-3 sm:p-5">{children}</main>
   return <Layout>{children}</Layout>
 }
 
@@ -99,6 +103,14 @@ export default function App() {
         element={
           <Protected staffOnly>
             <TaxSummaryBoundary />
+          </Protected>
+        }
+      />
+      <Route
+        path="/documents/:documentId/view"
+        element={
+          <Protected staffOnly bare>
+            <DocumentViewer />
           </Protected>
         }
       />

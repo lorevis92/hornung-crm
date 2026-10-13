@@ -60,12 +60,3 @@ export function parseAssistantMessage(content) {
   if (lastIndex < text.length) parts.push({ type: 'text', text: text.slice(lastIndex) })
   return parts
 }
-
-// Where a click on a reference leads from a page without its own viewer
-// (the case page): Tax Summary, opened directly on that point.
-export function summaryLinkFor(caseId, { documentId, page = null, quote = null }) {
-  const params = new URLSearchParams({ doc: documentId })
-  if (page) params.set('page', String(page))
-  if (quote) params.set('quote', quote)
-  return `/year/${caseId}/summary?${params.toString()}`
-}

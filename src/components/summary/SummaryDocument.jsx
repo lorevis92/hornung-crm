@@ -5,6 +5,7 @@ import ExtractedRows from './ExtractedRows'
 import { Spinner } from '../ui'
 import { useI18n } from '../../i18n'
 import { docTypeLabel } from '../../lib/labels'
+import { openDocumentViewer } from '../../lib/documentViewer'
 
 const STATUS_LABEL_KEY = {
   uploaded: 'extraction.statusUploaded',
@@ -33,16 +34,18 @@ export function personText(person, t) {
 // it is and how its extraction went; opened, everything that was read from
 // it. Read-only — the only action is "Riprova estrazione".
 // item: one entry of buildDocumentList() (src/lib/taxSummaryData.js).
-// onViewSource(document, { source_page, source_quote }) opens the viewer;
-// without a page and quote it opens the document from the start.
-export default function SummaryDocument({ item, open, onToggle, onViewSource, onRetry, retrying, innerRef }) {
+// Every source link opens the document in a new tab (src/lib/documentViewer.js),
+// at the value's page with its sentence highlighted; without a page and
+// sentence, from the start.
+export default function SummaryDocument({ item, open, onToggle, onRetry, retrying }) {
   const { t, lang } = useI18n()
   const { doc, category, person, rows, findings, notes, needsReview } = item
-  const viewAt = (source) => onViewSource(doc, source)
+  const viewAt = ({ source_page = null, source_quote = null } = {}) =>
+    openDocumentViewer(doc.id, { page: source_page, quote: source_quote })
   const pending = doc.status === 'uploaded' || doc.status === 'extracting'
 
   return (
-    <li ref={innerRef} className="overflow-hidden rounded-xl border border-line bg-white">
+    <li className="overflow-hidden rounded-xl border border-line bg-white">
       <button
         type="button"
         onClick={onToggle}

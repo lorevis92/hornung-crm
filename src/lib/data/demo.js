@@ -1035,6 +1035,11 @@ export const demoApi = {
     return wait(s.documents.filter((d) => caseIds.has(d.case_id)))
   },
 
+  async getClientDocument(documentId) {
+    const s = store()
+    return wait(s.documents.find((d) => d.id === documentId) || null)
+  },
+
   // Demo mode has no real AI extraction to retry — simulates the same
   // outcome a real retry has when it succeeds (status flips back to
   // 'extracted', the error clears) so the completeness banner's "Retry"

@@ -25,7 +25,6 @@ import { fullName } from '../lib/format'
 import { computeQuestionnaireConsistency, computeQuestionnaireCompleteness } from '../lib/questionnaireConsistency'
 import { describeSuggestion } from '../lib/suggestions'
 import { viewerCopy } from '../lib/viewerCopy'
-import { summaryLinkFor } from '../lib/citations'
 
 export default function CasePage() {
   const { caseId } = useParams()
@@ -288,13 +287,6 @@ export default function CasePage() {
     } finally {
       setSavingNotes(false)
     }
-  }
-
-  // The case page has no source viewer of its own; Tax Summary does. A
-  // reference in an assistant answer therefore opens Tax Summary directly on
-  // that document — at the page and sentence, when it points at a value.
-  const viewDocumentInSummary = (documentId, source = {}) => {
-    navigate(summaryLinkFor(caseId, { documentId, ...source }))
   }
 
   const toggleCaseOption = async (patch) => {
@@ -683,7 +675,7 @@ export default function CasePage() {
               it is the same conversation, not a second one. Placed right
               before the Tax Summary button so a quick question about the
               case can be asked without opening that page first. */}
-          <CaseAssistant caseId={caseId} onViewDocument={viewDocumentInSummary} />
+          <CaseAssistant caseId={caseId} />
 
           <div className="flex justify-end">
             <Link to={`/year/${caseId}/summary`} className="btn-secondary btn-sm">

@@ -526,9 +526,12 @@ export default {
     deletePricingConfirmBody: 'This will remove "{label}" from the price list.'
   },
 
+  viewer: {
+    notFound: 'Document not found, or you do not have access to it.'
+  },
+
   extraction: {
     viewSource: 'View in document',
-    backToList: 'Back to the list',
     previousPage: 'Previous page',
     nextPage: 'Next page',
     pageOf: 'Page {page} of {total}',

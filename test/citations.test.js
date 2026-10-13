@@ -2,13 +2,13 @@
 // where that value came from: the context gives every value its own marker
 // carrying page and sentence (src/lib/citations.js), the chat turns it into a
 // click with that page and sentence, Tax Summary hands both to the same
-// viewer the fields use — and from the case page the click lands on Tax
-// Summary opened on that exact point. A reference to a document in general
-// still opens it from the start.
+// viewer the fields use, in a new tab, from whichever page the chat is open
+// on. A reference to a document in general still opens it from the start.
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildCaseAssistantContext } from '../src/lib/caseAssistantContext.js'
-import { documentMarker, parseAssistantMessage, sourceMarker, summaryLinkFor } from '../src/lib/citations.js'
+import { documentMarker, parseAssistantMessage, sourceMarker } from '../src/lib/citations.js'
+import { documentViewerLink, readViewerParams } from '../src/lib/documentViewer.js'
 import { findQuoteItemIndexes } from '../src/lib/pdfHighlight.js'
 
 const doc = { id: 'doc-7', file_name: '07_premi_cassa_malati.pdf', category_code: 'health_insurance_policy', status: 'extracted' }
@@ -72,36 +72,27 @@ describe('a reply that cites the value', () => {
     expect(findQuoteItemIndexes(pageItems, parts[0].quote)).toEqual(expect.arrayContaining([1, 2]))
   })
 
-  it('from the case page, leads to Tax Summary opened on that page and sentence', () => {
-    const link = summaryLinkFor('case-1', parts[0])
-    const url = new URL(link, 'https://example.test')
-    expect(url.pathname).toBe('/year/case-1/summary')
-    expect(url.searchParams.get('doc')).toBe('doc-7')
-    expect(url.searchParams.get('page')).toBe('3')
-    expect(url.searchParams.get('quote')).toBe(parts[0].quote)
+  it('leads to the viewer opened on that page and sentence', () => {
+    const url = new URL(documentViewerLink(parts[0].documentId, parts[0]), 'https://example.test')
+    expect(url.pathname).toBe('/documents/doc-7/view')
+    expect(readViewerParams(url.searchParams)).toEqual({ page: 3, quote: parts[0].quote })
     // A general reference carries no page or sentence.
-    expect(summaryLinkFor('case-1', parts[1])).toBe('/year/case-1/summary?doc=doc-7')
+    expect(documentViewerLink(parts[1].documentId, parts[1])).toBe('/documents/doc-7/view')
   })
 })
 
 describe('the wiring between chat, pages and viewer', () => {
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
-  it('the chat passes page and sentence on every click', () => {
+  it('the chat opens the viewer with page and sentence on every click', () => {
     expect(read('src/components/CaseAssistant.jsx')).toMatch(
-      /onViewDocument\(part\.documentId, \{ page: part\.page, quote: part\.quote \}\)/
+      /openDocumentViewer\(part\.documentId, \{ page: part\.page, quote: part\.quote \}\)/
     )
   })
 
-  it('Tax Summary opens the same viewer the fields use, at that page with that sentence', () => {
-    const taxSummary = read('src/pages/TaxSummary.jsx')
-    expect(taxSummary).toMatch(/source_page: sourcePoint\.page/)
-    expect(taxSummary).toMatch(/source_quote: sourcePoint\.quote/)
-    expect(taxSummary).toMatch(/page=\{source\.page\}/)
-    expect(taxSummary).toMatch(/quote=\{source\.quote\}/)
-  })
-
-  it('the case page, which has no viewer, sends the click to Tax Summary', () => {
-    expect(read('src/pages/CasePage.jsx')).toMatch(/navigate\(summaryLinkFor\(caseId, \{ documentId, \.\.\.source \}\)\)/)
+  it('Tax Summary\'s source links open the same viewer, at the value\'s page and sentence', () => {
+    expect(read('src/components/summary/SummaryDocument.jsx')).toMatch(
+      /openDocumentViewer\(doc\.id, \{ page: source_page, quote: source_quote \}\)/
+    )
   })
 })
