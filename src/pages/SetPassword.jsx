@@ -9,13 +9,23 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { IS_DEMO } from '../lib/config'
-import { supabase } from '../lib/supabaseClient'
+
+// The invite / reset e-mail links to /set-password#token=... (in the
+// fragment, so the token never reaches a server log).
+function readLinkToken() {
+  try {
+    return new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token') || ''
+  } catch {
+    return ''
+  }
+}
 
 export default function SetPassword() {
   const { t } = useI18n()
   const toast = useToast()
   const navigate = useNavigate()
-  const { updatePassword } = useAuth()
+  const { updatePassword, checkPasswordLink } = useAuth()
+  const [token] = useState(readLinkToken)
   const [ready, setReady] = useState(IS_DEMO)
   const [linkValid, setLinkValid] = useState(true)
   const [password, setPassword] = useState('')
@@ -25,18 +35,20 @@ export default function SetPassword() {
 
   useEffect(() => {
     if (IS_DEMO) return
-    // Supabase parses the invite/recovery token from the URL automatically
-    // (detectSessionInUrl), we only have to wait for the resulting session.
+    // Keep the token out of the address bar / history once read.
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
     let cancelled = false
-    supabase.auth.getSession().then(({ data }) => {
+    checkPasswordLink(token).then((result) => {
       if (cancelled) return
-      setLinkValid(Boolean(data.session))
+      setLinkValid(Boolean(result?.valid))
       setReady(true)
     })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [checkPasswordLink, token])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -51,7 +63,7 @@ export default function SetPassword() {
         navigate('/login')
         return
       }
-      await updatePassword(password)
+      await updatePassword(password, token)
       toast.success(t('common.saved'))
       navigate('/')
     } catch (err) {

@@ -2,16 +2,16 @@
 //   { email, preferred_language }
 //
 // Public (no auth required — this is exactly the "I forgot my password" flow,
-// called before the person has a session). Generates the recovery link with
-// the service-role admin API and sends it through our own Hornung-branded
-// e-mail (emailLayout + Resend), instead of calling
-// supabase.auth.resetPasswordForEmail() straight from the browser, which
-// makes Supabase send its own generic, unbranded e-mail — the same problem
-// already solved for self sign-up in api/register.js.
+// called before the person has a session). Issues a single-use recovery
+// token (auth_tokens, valid 1 hour — see api/_auth.js) and sends the
+// /set-password link through our own Hornung-branded e-mail (emailLayout +
+// Resend). Using the link (POST /api/auth/set-password) signs every other
+// session of that account out.
 //
 // Never reveals whether the address exists: a missing/unknown e-mail simply
 // results in no e-mail being sent, but the response is identical either way.
 import { emailLayout, httpError, readBody, sendEmail, serviceClient, siteUrl } from './_lib.js'
+import { assertSameOrigin, findAccountByEmail, issueToken, normalizeEmail, setPasswordLink } from './_auth.js'
 
 const COPY = {
   en: {
@@ -48,8 +48,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' })
 
   try {
+    assertSameOrigin(req)
     const body = readBody(req)
-    const email = String(body.email || '').trim().toLowerCase()
+    const email = normalizeEmail(body.email)
     if (!email) throw httpError(400, 'EMAIL_REQUIRED', 'An e-mail address is required.')
 
     const language = ['en', 'de', 'fr', 'it'].includes(body.preferred_language)
@@ -58,25 +59,20 @@ export default async function handler(req, res) {
     const copy = COPY[language]
 
     const admin = serviceClient()
-    const { data: link, error: linkError } = await admin.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-      options: { redirectTo: `${siteUrl()}/set-password` }
-    })
+    const account = await findAccountByEmail(admin, email)
 
-    if (linkError || !link?.properties?.action_link) {
-      // Unknown e-mail (or a transient admin API error) — never let the
-      // caller distinguish this from a successful send.
-      console.error('[reset-password]', linkError)
-    } else {
+    // Unknown e-mail: nothing is sent, and the answer is the same as below —
+    // the caller can never tell the two apart.
+    if (account) {
+      const token = await issueToken(admin, account.id, 'recovery')
       const mail = await sendEmail({
-        to: email,
+        to: account.email,
         subject: copy.subject,
         html: emailLayout({
           title: copy.title,
           intro: copy.intro,
           ctaLabel: copy.cta,
-          ctaUrl: link.properties.action_link,
+          ctaUrl: setPasswordLink(siteUrl(), token),
           footerNote: copy.footer
         })
       })

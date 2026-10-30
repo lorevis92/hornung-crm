@@ -3,8 +3,8 @@
 //
 // Called once by the client app right after a successful login when no
 // app_profiles row exists yet for this app (see AuthContext.jsx). Turns a
-// bare Supabase auth user (created either by self sign-up on /register or by
-// the invite-client / invite-staff flows) into an app_profiles row:
+// bare login (an auth_accounts row created by self sign-up on /register —
+// the invite flows create the profile themselves) into an app_profiles row:
 //   - OWNER_EMAIL (case-insensitive match)              -> role 'specialist'
 //   - everyone else                                      -> role 'client'
 //     + a matching `clients` row (or linking to one already created by a
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     const email = String(user.email || '').trim().toLowerCase()
     const ownerEmail = String(process.env.OWNER_EMAIL || '').trim().toLowerCase()
     const isOwner = Boolean(ownerEmail) && email === ownerEmail
-    const displayName = user.user_metadata?.full_name || email
+    const displayName = email
 
     if (isOwner) {
       const { data: profile, error } = await admin

@@ -3,11 +3,13 @@
 //
 // Lets an existing Hornung Consulting specialist invite a second one. Only
 // creates an app_profiles row (role 'specialist') — never a `clients` row.
-// Reuses the shared-database behaviour of api/invite-client.js: if the
-// e-mail already has an auth.users account (e.g. from WisiHealth, or already
-// a client here), no second login is created — the person keeps their
-// password and simply gets an extra, specialist-level profile.
+// Reuses the behaviour of api/invite-client.js: if the e-mail already has a
+// login (auth_accounts — e.g. already a client here), no second login is
+// created — the person keeps their password and simply gets an extra,
+// specialist-level profile. Otherwise a password-less account is created
+// and the e-mail carries a single-use /set-password link (valid 7 days).
 import { APP_ID, emailLayout, httpError, readBody, requireStaff, sendEmail, siteUrl } from './_lib.js'
+import { findOrCreateInvitedAccount, issueToken, normalizeEmail, setPasswordLink } from './_auth.js'
 
 const COPY = {
   en: {
@@ -62,9 +64,8 @@ export default async function handler(req, res) {
   try {
     const { admin } = await requireStaff(req)
     const body = readBody(req)
-    const redirectTo = `${siteUrl()}/set-password`
 
-    const email = String(body.email || '').trim().toLowerCase()
+    const email = normalizeEmail(body.email)
     if (!email) throw httpError(400, 'EMAIL_REQUIRED', 'An e-mail address is required.')
 
     const language = ['en', 'de', 'fr', 'it'].includes(body.preferred_language)
@@ -73,25 +74,11 @@ export default async function handler(req, res) {
     const copy = COPY[language]
     const displayName = String(body.full_name || '').trim() || email
 
-    // Does this person already have a login (possibly from another app, or
-    // as an existing client of this one)?
-    const { data: existingUserId } = await admin.rpc('auth_user_id_by_email', { p_email: email })
-
-    let userId = existingUserId || null
-    let actionLink = null
-    let isNewAccount = false
-
-    if (!userId) {
-      const { data: invite, error: inviteError } = await admin.auth.admin.generateLink({
-        type: 'invite',
-        email,
-        options: { redirectTo, data: { full_name: displayName } }
-      })
-      if (inviteError) throw httpError(400, 'INVITE_FAILED', inviteError.message)
-      userId = invite.user.id
-      actionLink = invite.properties.action_link
-      isNewAccount = true
-    }
+    // Does this person already have a login (e.g. as an existing client of
+    // this app)?
+    const { account, isNewAccount } = await findOrCreateInvitedAccount(admin, email)
+    const userId = account.id
+    const actionLink = isNewAccount ? setPasswordLink(siteUrl(), await issueToken(admin, userId, 'invite')) : null
 
     // Profile scoped to THIS app — upsert so re-inviting an existing client
     // (or a colleague invited twice) simply promotes them to specialist.

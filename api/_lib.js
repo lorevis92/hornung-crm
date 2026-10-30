@@ -1,7 +1,10 @@
 // Shared helpers for the serverless functions (Vercel · Node runtime).
-// These run on the server only: the service-role key never reaches the browser.
+// These run on the server only: the service-role key never reaches the browser,
+// and the browser never talks to the database itself — every read/write goes
+// through a function here that checks the session first.
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import { assertSameOrigin, readSession } from './_auth.js'
 
 export const APP_ID = 'hornung_crm'
 
@@ -18,7 +21,6 @@ if (RAW_SUPABASE_URL && !SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL)) {
 }
 const SUPABASE_URL = SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL) ? RAW_SUPABASE_URL.replace(/\/$/, '') : ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-const ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
 
 export function serviceClient() {
   if (!SUPABASE_URL || !SERVICE_KEY) {
@@ -40,37 +42,62 @@ export function httpError(status, code, message) {
   return error
 }
 
-/** Verifies the caller's JWT. Does NOT require any app_profiles row to exist
- * yet — used by endpoints (like claim-profile) that create the first one. */
+/** The signed-in caller (session cookie, see api/_auth.js). Does NOT
+ * require any app_profiles row to exist yet — used by endpoints (like
+ * claim-profile) that create the first one. Also refuses a state-changing
+ * request coming from another site. */
 export async function requireUser(req) {
-  const header = req.headers.authorization || ''
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null
-  if (!token) throw httpError(401, 'NO_TOKEN', 'Missing authorization header.')
-
-  const anon = createClient(SUPABASE_URL, ANON_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
-  const { data: userData, error: userError } = await anon.auth.getUser(token)
-  if (userError || !userData?.user) throw httpError(401, 'INVALID_TOKEN', 'Invalid session.')
-
-  return { user: userData.user, admin: serviceClient() }
+  assertSameOrigin(req)
+  const admin = serviceClient()
+  const current = await readSession(admin, req)
+  if (!current) throw httpError(401, 'NOT_SIGNED_IN', 'Not signed in.')
+  return {
+    user: { id: current.account.id, email: current.account.email },
+    session: current.session,
+    admin
+  }
 }
 
-/** Verifies the caller's JWT and returns their Hornung profile (staff only). */
-export async function requireStaff(req) {
-  const { user, admin } = await requireUser(req)
-
-  const { data: profile } = await admin
+/** The caller's Hornung profile (or null) and, for a client, their clients
+ * row id — everything an authorization decision needs. */
+export async function requireActor(req) {
+  const { user, session, admin } = await requireUser(req)
+  const { data: profile, error } = await admin
     .from('app_profiles')
     .select('*')
     .eq('user_id', user.id)
     .eq('app_id', APP_ID)
     .maybeSingle()
+  if (error) throw httpError(500, 'PROFILE_LOOKUP_FAILED', error.message)
 
-  if (!profile || !['specialist', 'admin'].includes(profile.role)) {
+  let clientId = null
+  if (profile?.role === 'client') {
+    const { data: client } = await admin
+      .from('clients')
+      .select('id')
+      .eq('app_id', APP_ID)
+      .eq('profile_id', profile.id)
+      .limit(1)
+      .maybeSingle()
+    clientId = client?.id || null
+  }
+  return {
+    user,
+    session,
+    admin,
+    profile: profile || null,
+    clientId,
+    isStaff: ['specialist', 'admin'].includes(profile?.role)
+  }
+}
+
+/** The caller's Hornung profile (staff only). */
+export async function requireStaff(req) {
+  const actor = await requireActor(req)
+  if (!actor.isStaff) {
     throw httpError(403, 'NOT_STAFF', 'Only Hornung Consulting staff may perform this action.')
   }
-  return { user, profile, admin }
+  return actor
 }
 
 export function readBody(req) {

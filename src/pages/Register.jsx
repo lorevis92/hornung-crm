@@ -10,12 +10,9 @@ import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { IS_DEMO } from '../lib/config'
 import { PROFILE_WAIT_TIMEOUT_MS } from '../lib/constants'
-import { supabase } from '../lib/supabaseClient'
 
-// Goes through our own /api/register instead of calling supabase.auth.signUp()
-// directly from the browser — see api/register.js for why: it keeps the
-// confirmation e-mail (if ever re-enabled) fully under our control, branded,
-// and independent from the Supabase dashboard's "Confirm email" toggle.
+// Our own /api/register (see api/register.js): creates the login and, only
+// if REQUIRE_EMAIL_CONFIRMATION is on, sends a branded confirmation e-mail.
 async function registerAccount({ email, password, preferred_language }) {
   const res = await fetch('/api/register', {
     method: 'POST',
@@ -34,7 +31,7 @@ async function registerAccount({ email, password, preferred_language }) {
 export default function Register() {
   const { t, lang } = useI18n()
   const toast = useToast()
-  const { profile, loading, access } = useAuth()
+  const { profile, loading, access, signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -71,8 +68,9 @@ export default function Register() {
       setCreated(true)
       toast.success(t('auth.accountCreated'))
       setSigningIn(true)
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-      if (signInError) {
+      try {
+        await signIn(email, password)
+      } catch (signInError) {
         console.error(signInError)
         setSigningIn(false)
         setEntryError(t('auth.autoSignInFailed'))

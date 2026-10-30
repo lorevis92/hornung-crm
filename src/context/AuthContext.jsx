@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
-import { APP_ID, IS_DEMO } from '../lib/config'
+import { IS_DEMO } from '../lib/config'
 import { api } from '../lib/data'
 import { useI18n } from '../i18n'
 
@@ -27,6 +26,26 @@ const DEMO_USERS = {
       email: 'marco.bianchi@example.ch'
     }
   }
+}
+
+// Our own login (api/auth/[action].js). The session lives in an httpOnly
+// cookie the page can't read — the browser just sends it along; there is no
+// token to store or refresh here.
+async function authRequest(action, { method = 'POST', body } = {}) {
+  const res = await fetch(`/api/auth/${action}`, {
+    method,
+    credentials: 'same-origin',
+    headers: method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
+    body: method === 'POST' ? JSON.stringify(body ?? {}) : undefined
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(json.error || 'REQUEST_FAILED')
+    err.code = json.code
+    err.status = res.status
+    throw err
+  }
+  return json
 }
 
 export function AuthProvider({ children }) {
@@ -67,38 +86,18 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  // Best-effort: flips a client's status from 'invited' to 'active' on their
-  // first login. NOTE: supabase-js's `.rpc()` returns a PostgrestBuilder,
-  // which is "thenable" (has `.then()`) but is NOT a real Promise — it has no
-  // `.catch()` method. Calling `.catch()` on it directly throws
-  // "TypeError: ...catch is not a function" *synchronously*, which — since
-  // this runs inside an async function that nothing here awaits/catches from
-  // the caller's caller — used to abort loadProfile() before it ever reached
-  // its final `setLoading(false)`, leaving the app stuck in the loading
-  // state forever for every client login. A plain try/catch avoids relying
-  // on `.catch()` existing on the returned builder.
-  const markClientActive = async () => {
-    try {
-      await supabase.rpc('mark_client_active')
-    } catch (err) {
-      console.error('[markClientActive] mark_client_active RPC failed', err)
-    }
-  }
-
-  // Attempts, at most once per user id, to turn a bare auth user into an
+  // Attempts, at most once per user id, to turn a bare login into an
   // app_profiles row (self sign-up on /register, or the owner's first
   // login). Best-effort: any failure (network, 4xx…) is swallowed and the
   // caller falls back to the existing 'no-profile' behaviour.
-  const claimProfile = useCallback(async (activeSession) => {
-    const userId = activeSession?.user?.id
-    const token = activeSession?.access_token
-    if (!userId || !token || claimAttempted.current.has(userId)) return null
+  const claimProfile = useCallback(async (userId) => {
+    if (!userId || claimAttempted.current.has(userId)) return null
     claimAttempted.current.add(userId)
-
     try {
       const res = await fetch('/api/claim-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ locale: langRef.current })
       })
       if (!res.ok) {
@@ -114,89 +113,76 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  // -------------------------------------------------------------- supabase --
-  const loadProfile = useCallback(async (activeSession) => {
-    if (!activeSession?.user) {
-      setProfile(null)
-      setClient(null)
-      setAccess('ok')
-      setLoading(false)
-      return
-    }
-    const { data, error } = await supabase
-      .from('app_profiles')
-      .select('*')
-      .eq('user_id', activeSession.user.id)
-      .eq('app_id', APP_ID)
-      .maybeSingle()
-
-    if (error) {
-      console.error(error)
-      setLoading(false)
-      return
-    }
-    if (!data) {
-      const claimed = await claimProfile(activeSession)
-      if (claimed) {
+  // ------------------------------------------------------------- session --
+  // `me` is what /api/auth/me, /login and /set-password answer:
+  // { user, profile, client } — the server has already flipped an invited
+  // client to 'active' (what mark_client_active() used to do).
+  const applyMe = useCallback(
+    async (me) => {
+      if (!me?.user) {
+        setSession(null)
+        setProfile(null)
+        setClient(null)
         setAccess('ok')
-        setProfile(claimed)
-        if (claimed.role === 'client') {
-          await markClientActive()
-          setClient(await api.getMyClient(claimed.id))
-        } else {
-          setClient(null)
+        setLoading(false)
+        return
+      }
+      setSession({ user: me.user })
+
+      if (!me.profile) {
+        const claimed = await claimProfile(me.user.id)
+        if (claimed) {
+          // Re-read so a freshly linked/created clients row comes back too.
+          const again = await authRequest('me', { method: 'GET' }).catch(() => null)
+          setAccess('ok')
+          setProfile(again?.profile || claimed)
+          setClient(again?.client || null)
+          setLoading(false)
+          return
         }
+        // Authenticated, but this person has no profile in this app.
+        setProfile(null)
+        setClient(null)
+        setAccess('no-profile')
         setLoading(false)
         return
       }
 
-      // Authenticated, but this person has no profile in this app.
-      setProfile(null)
-      setClient(null)
-      setAccess('no-profile')
+      setAccess('ok')
+      setProfile(me.profile)
+      setClient(me.profile.role === 'client' ? me.client || null : null)
       setLoading(false)
-      return
-    }
+    },
+    [claimProfile]
+  )
 
-    setAccess('ok')
-    setProfile(data)
-
-    if (data.role === 'client') {
-      await markClientActive()
-      setClient(await api.getMyClient(data.id))
-    } else {
-      setClient(null)
+  const loadSession = useCallback(async () => {
+    try {
+      await applyMe(await authRequest('me', { method: 'GET' }))
+    } catch (err) {
+      console.error('[auth] could not load the session', err)
+      await applyMe(null)
     }
-    setLoading(false)
-  }, [])
+  }, [applyMe])
 
   useEffect(() => {
     if (IS_DEMO) {
       loadDemoSession()
       return undefined
     }
-    let active = true
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return
-      setSession(data.session)
-      loadProfile(data.session)
-    })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession)
-      setLoading(true)
-      loadProfile(nextSession)
-    })
-    return () => {
-      active = false
-      sub?.subscription?.unsubscribe()
-    }
-  }, [loadDemoSession, loadProfile])
+    loadSession()
+    return undefined
+  }, [loadDemoSession, loadSession])
 
   // ----------------------------------------------------------------- api ----
-  const signIn = useCallback(async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-  }, [])
+  const signIn = useCallback(
+    async (email, password) => {
+      const me = await authRequest('login', { body: { email, password } })
+      setLoading(true)
+      await applyMe(me)
+    },
+    [applyMe]
+  )
 
   const signInDemo = useCallback(
     async (role) => {
@@ -223,15 +209,18 @@ export function AuthProvider({ children }) {
       setClient(null)
       return
     }
-    await supabase.auth.signOut()
-  }, [])
+    try {
+      await authRequest('logout')
+    } catch (err) {
+      console.error('[auth] logout failed', err)
+    }
+    await applyMe(null)
+  }, [applyMe])
 
-  // Goes through our own /api/reset-password instead of calling
-  // supabase.auth.resetPasswordForEmail() directly from the browser — same
-  // reason as api/register.js: keeps the e-mail branded and sent through
-  // Resend instead of Supabase's own generic template. In demo mode there is
-  // nothing to send; pretend it worked so the caller's existing
-  // toast.success(auth.resetSent) still makes sense.
+  // Our own /api/reset-password: branded e-mail through Resend with a
+  // single-use /set-password link. In demo mode there is nothing to send;
+  // pretend it worked so the caller's toast.success(auth.resetSent) still
+  // makes sense.
   const sendResetEmail = useCallback(async (email) => {
     if (IS_DEMO) return
     const res = await fetch('/api/reset-password', {
@@ -245,18 +234,35 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const updatePassword = useCallback(async (password) => {
-    const { error } = await supabase.auth.updateUser({ password })
-    if (error) throw error
+  // Whether an invite / reset link (the token in /set-password#token=...)
+  // can still be used.
+  const checkPasswordLink = useCallback(async (token) => {
+    if (!token) return { valid: false }
+    try {
+      return await authRequest('check-link', { body: { token } })
+    } catch {
+      return { valid: false }
+    }
   }, [])
 
-  // Lets the signed-in user (client or staff) set their own display name.
-  // Uses the same update_my_contact() RPC as saveQuestionnaire() — clients
-  // have no direct UPDATE policy on `clients`, only on their own
-  // app_profiles row, so this SECURITY DEFINER RPC is the only way for a
-  // client to do it themselves. For staff it simply updates app_profiles.
-  // full_name (my_client_id() resolves to nothing for them, so the `clients`
-  // side of the RPC is a harmless no-op).
+  // With a link token (invite / reset): sets the password and signs in.
+  // Without (Account page): the signed-in user changes their own; every other
+  // browser signed in as them is signed out.
+  const updatePassword = useCallback(
+    async (password, token = null) => {
+      if (token) {
+        const me = await authRequest('set-password', { body: { token, password } })
+        setLoading(true)
+        await applyMe(me)
+        return
+      }
+      await authRequest('change-password', { body: { password } })
+    },
+    [applyMe]
+  )
+
+  // Lets the signed-in user (client or staff) set their own display name —
+  // for a client also on their clients row (server-side, own record only).
   const updateProfileName = useCallback(async (firstName, lastName) => {
     const fullName = [firstName, lastName].filter(Boolean).join(' ').trim()
 
@@ -266,13 +272,7 @@ export function AuthProvider({ children }) {
       return
     }
 
-    const { error } = await supabase.rpc('update_my_contact', {
-      p_first_name: firstName || null,
-      p_last_name: lastName || null,
-      p_phone: null,
-      p_language: null
-    })
-    if (error) throw error
+    await api.updateMyContact({ first_name: firstName || null, last_name: lastName || null })
 
     setProfile((p) => (p ? { ...p, full_name: fullName || p.full_name } : p))
     if (profile?.role === 'client') {
@@ -285,10 +285,7 @@ export function AuthProvider({ children }) {
     setClient(await api.getMyClient(profile.id))
   }, [profile])
 
-  // Same update_my_contact() RPC as updateProfileName — a client has no
-  // direct UPDATE policy on `clients`, canton included, so this is the only
-  // way for them to set it themselves. Passing null for the name/phone/
-  // language params leaves those columns untouched (see the migration).
+  // A client sets their own canton (own clients row only, server-side).
   const updateMyCanton = useCallback(async (canton) => {
     if (IS_DEMO) {
       // Goes through api.updateClient (the same call the specialist's own
@@ -301,14 +298,7 @@ export function AuthProvider({ children }) {
       }
       return
     }
-    const { error } = await supabase.rpc('update_my_contact', {
-      p_first_name: null,
-      p_last_name: null,
-      p_phone: null,
-      p_language: null,
-      p_canton: canton || null
-    })
-    if (error) throw error
+    await api.updateMyContact({ canton: canton || null })
     setClient((c) => (c ? { ...c, canton } : c))
   }, [client])
 
@@ -326,6 +316,7 @@ export function AuthProvider({ children }) {
       signInDemo,
       signOut,
       sendResetEmail,
+      checkPasswordLink,
       updatePassword,
       updateProfileName,
       updateMyCanton,
@@ -333,7 +324,8 @@ export function AuthProvider({ children }) {
     }),
     [
       loading, session, profile, client, access,
-      signIn, signInDemo, signOut, sendResetEmail, updatePassword, updateProfileName, updateMyCanton, refreshClient
+      signIn, signInDemo, signOut, sendResetEmail, checkPasswordLink, updatePassword, updateProfileName,
+      updateMyCanton, refreshClient
     ]
   )
 

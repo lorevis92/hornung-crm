@@ -3,16 +3,14 @@
 //
 // This must run server-side with the service-role key because it needs to:
 //   1. See app_profiles rows for OTHER apps (RLS normally scopes visibility to
-//      app_id = 'hornung_crm' only), to decide whether the shared login is
-//      still used elsewhere.
-//   2. Call the Supabase Auth admin API to delete the user outright when it
-//      isn't.
+//      app_id = 'hornung_crm' only), to decide whether the login is still
+//      used elsewhere.
+//   2. Delete the login itself (auth_accounts — its sessions and pending
+//      links go with it, ON DELETE CASCADE) when it isn't.
 //
-// Order matters: app_profiles.user_id references auth.users(id) ON DELETE
-// CASCADE, so deleting auth.users first would silently wipe app_profiles rows
-// for every app that person uses. We therefore always read the profile/user
-// first, remove the clients row + this app's app_profiles row explicitly, and
-// only THEN decide whether auth.users can go too.
+// We always read the profile/user first, remove the clients row + this app's
+// app_profiles row explicitly, and only THEN decide whether the login can go
+// too.
 import { APP_ID, httpError, readBody, requireStaff } from './_lib.js'
 
 // src/lib/config.js can't be imported here (it's Vite-only, uses
@@ -97,7 +95,7 @@ export default async function handler(req, res) {
         .limit(1)
 
       if (!otherProfiles?.length) {
-        const { error: deleteUserError } = await admin.auth.admin.deleteUser(userId)
+        const { error: deleteUserError } = await admin.from('auth_accounts').delete().eq('id', userId)
         if (deleteUserError) throw httpError(400, 'DELETE_USER_FAILED', deleteUserError.message)
         authUserDeleted = true
       }

@@ -147,3 +147,21 @@ Settings → API, annota:
 - [ ] Fase 2 — estrazione AI dei dati dai documenti (`extracted_fields` è già pronta)
 - [ ] Fase 3 — export verso Doctor Tax (`export_jobs`), da verificare con loro
 - [ ] Eventuale backup/retention dei documenti e informativa privacy
+
+---
+
+## Login proprio (branch `migrazione-infra`, passo 1 dell'uscita da Supabase)
+
+Login, sessioni e link (invito / reset / conferma e-mail) non usano più Supabase Auth, e il
+browser non interroga più il database: tutto passa da `/api` (vedi `api/_auth.js`,
+`api/auth/[action].js`, `api/data/[op].js`, `api/_dataOps.js`).
+
+- [ ] SQL Editor: esegui `supabase/migrations/20260101000052_own_auth.sql` **prima** di provare
+      il branch. È compatibile con `main` (stesso database): copia gli account Hornung esistenti
+      con la loro password, e finché `main` resta online rispecchia nel nuovo login gli account
+      creati o modificati da `main`.
+- [ ] Nessuna nuova variabile d'ambiente obbligatoria. `VITE_SUPABASE_ANON_KEY` e
+      `SUPABASE_ANON_KEY` non servono più al branch (lasciale per `main`).
+      Opzionale: `VITE_DEMO_MODE=false` per dichiarare esplicitamente la modalità live.
+- [ ] I link nelle e-mail ora puntano a `PUBLIC_SITE_URL/set-password#token=...`: le
+      "Redirect URLs" di Supabase Auth non contano più per questo branch.

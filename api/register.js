@@ -1,30 +1,20 @@
 // POST /api/register  { email, password, preferred_language } -> self sign-up
 //
-// Why this exists instead of calling supabase.auth.signUp() straight from the
-// browser (which the app used to do): that client-side call is at the mercy
-// of the "Confirm email" toggle in the Supabase dashboard — when it's on,
-// Supabase sends its own generic "Confirm your email address" mail and the
-// confirmation link depends on the Site URL / Redirect URLs configured
-// there, which is exactly what broke on 2026-09-22 (a corrupted env var
-// produced a dead link, wrapped in an unbranded email).
-//
-// This endpoint uses the service-role ("admin") API instead, which gives us
-// full control and removes that whole class of failure:
+// Creates the login in our own auth_accounts table (api/_auth.js) — no
+// Supabase Auth involved:
 //   - REQUIRE_EMAIL_CONFIRMATION unset/"false" (the current default): the
-//     account is created already confirmed (email_confirm: true) and no
-//     e-mail is sent by Supabase at all — the client signs the person in
-//     immediately with the password they just chose. Nothing depends on
-//     Supabase's mailer or its Site URL setting, so there is nothing left to
-//     break.
-//   - REQUIRE_EMAIL_CONFIRMATION="true" (for later, if ever needed): the
-//     account is created unconfirmed and we generate the confirmation link
-//     ourselves, then send it through our own Resend-based, Hornung-branded
-//     e-mail (emailLayout) — the same pattern already used for client
-//     invites in invite-client.js — instead of Supabase's default template.
-//     The redirect target is computed from PUBLIC_SITE_URL server-side
-//     (siteUrl()), so it always matches the domain this API is actually
-//     deployed on.
+//     account is created already confirmed and no e-mail is sent; the client
+//     signs the person in right away (POST /api/auth/login) with the password
+//     they just chose.
+//   - REQUIRE_EMAIL_CONFIRMATION="true": the account is created unconfirmed
+//     (login refuses it with EMAIL_NOT_CONFIRMED) and a single-use link to
+//     /api/auth/confirm-email is sent through our own Resend-based,
+//     Hornung-branded e-mail. The link is built from PUBLIC_SITE_URL
+//     server-side (siteUrl()).
+// The app_profiles / clients rows are created on first sign-in by
+// api/claim-profile.js, exactly as before.
 import { emailLayout, httpError, readBody, sendEmail, serviceClient, siteUrl } from './_lib.js'
+import { assertSameOrigin, createAccount, findAccountByEmail, issueToken, normalizeEmail, validatePassword } from './_auth.js'
 
 const COPY = {
   en: {
@@ -61,33 +51,32 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' })
 
   try {
+    assertSameOrigin(req)
     const body = readBody(req)
-    const email = String(body.email || '').trim().toLowerCase()
+    const email = normalizeEmail(body.email)
     const password = String(body.password || '')
 
-    if (!email) throw httpError(400, 'EMAIL_REQUIRED', 'An e-mail address is required.')
-    if (password.length < 8) throw httpError(400, 'PASSWORD_TOO_SHORT', 'Password must be at least 8 characters.')
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw httpError(400, 'EMAIL_REQUIRED', 'An e-mail address is required.')
+    }
+    validatePassword(password)
 
     const admin = serviceClient()
-
-    const { data: existingUserId } = await admin.rpc('auth_user_id_by_email', { p_email: email })
-    if (existingUserId) throw httpError(409, 'EMAIL_IN_USE', 'An account with this e-mail already exists.')
+    if (await findAccountByEmail(admin, email)) {
+      throw httpError(409, 'EMAIL_IN_USE', 'An account with this e-mail already exists.')
+    }
 
     const language = ['en', 'de', 'fr', 'it'].includes(body.preferred_language) ? body.preferred_language : 'en'
-    const requireConfirmation = process.env.REQUIRE_EMAIL_CONFIRMATION === 'true'
-    const redirectTo = `${siteUrl()}/login`
+    // OWNER_EMAIL becomes a specialist on first sign-in (api/claim-profile.js),
+    // so whoever registers that address must prove they own the mailbox —
+    // always, whatever REQUIRE_EMAIL_CONFIRMATION says.
+    const isOwnerEmail = Boolean(process.env.OWNER_EMAIL) && email === normalizeEmail(process.env.OWNER_EMAIL)
+    const requireConfirmation = process.env.REQUIRE_EMAIL_CONFIRMATION === 'true' || isOwnerEmail
+
+    const account = await createAccount(admin, { email, password, confirmed: !requireConfirmation })
 
     if (requireConfirmation) {
-      // Creates the (unconfirmed) user and hands back a one-time link, all in
-      // one call — we never let Supabase send its own mail for it.
-      const { data: link, error: linkError } = await admin.auth.admin.generateLink({
-        type: 'signup',
-        email,
-        password,
-        options: { redirectTo }
-      })
-      if (linkError) throw httpError(400, 'SIGNUP_FAILED', linkError.message)
-
+      const token = await issueToken(admin, account.id, 'confirm_email')
       const copy = COPY[language]
       const mail = await sendEmail({
         to: email,
@@ -96,23 +85,11 @@ export default async function handler(req, res) {
           title: copy.title,
           intro: copy.intro,
           ctaLabel: copy.cta,
-          ctaUrl: link?.properties?.action_link,
+          ctaUrl: `${siteUrl()}/api/auth/confirm-email?token=${encodeURIComponent(token)}`,
           footerNote: copy.footer
         })
       })
       return res.status(200).json({ needsConfirmation: true, emailSent: mail.sent })
-    }
-
-    const { error: createError } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true
-    })
-    if (createError) {
-      if (/registered|exists/i.test(createError.message)) {
-        throw httpError(409, 'EMAIL_IN_USE', 'An account with this e-mail already exists.')
-      }
-      throw httpError(400, 'SIGNUP_FAILED', createError.message)
     }
 
     return res.status(200).json({ needsConfirmation: false })

@@ -2,11 +2,13 @@
 //   { first_name, last_name, email, phone, preferred_language, canton }  -> create + invite
 //   { clientId, resend: true }                                           -> resend the link
 //
-// Shared-database behaviour: if the e-mail already exists in auth.users (for
-// example because the person uses WisiHealth), NO second auth user is created.
-// The person keeps one login and simply receives a brand new, isolated profile
-// and client record inside this app.
+// If the e-mail already has a login (auth_accounts — e.g. a colleague, or a
+// client deleted and invited again), NO second login is created: the person
+// keeps their password and simply receives a brand new, isolated profile and
+// client record. Otherwise a password-less account is created and the e-mail
+// carries a single-use /set-password link (valid 7 days, see api/_auth.js).
 import { APP_ID, emailLayout, httpError, readBody, requireStaff, sendEmail, siteUrl } from './_lib.js'
+import { findAccountById, findOrCreateInvitedAccount, issueToken, normalizeEmail, setPasswordLink } from './_auth.js'
 
 const COPY = {
   en: {
@@ -61,7 +63,6 @@ export default async function handler(req, res) {
   try {
     const { admin, profile: staffProfile } = await requireStaff(req)
     const body = readBody(req)
-    const redirectTo = `${siteUrl()}/set-password`
 
     // ---------------------------------------------------------- resend ----
     if (body.resend && body.clientId) {
@@ -73,12 +74,18 @@ export default async function handler(req, res) {
       if (!client) throw httpError(404, 'CLIENT_NOT_FOUND', 'Client not found.')
 
       const copy = COPY[client.preferred_language] || COPY.en
-      const { data: link, error: linkError } = await admin.auth.admin.generateLink({
-        type: 'recovery',
-        email: client.email,
-        options: { redirectTo }
-      })
-      if (linkError) throw httpError(400, 'LINK_FAILED', linkError.message)
+      // A fresh single-use link for the login this client's profile points at.
+      let account = null
+      if (client.profile_id) {
+        const { data: profileRow } = await admin
+          .from('app_profiles')
+          .select('user_id')
+          .eq('id', client.profile_id)
+          .maybeSingle()
+        if (profileRow?.user_id) account = await findAccountById(admin, profileRow.user_id)
+      }
+      if (!account) throw httpError(400, 'LINK_FAILED', 'This client has no login to send a link for.')
+      const linkUrl = setPasswordLink(siteUrl(), await issueToken(admin, account.id, 'invite'))
 
       const mail = await sendEmail({
         to: client.email,
@@ -87,7 +94,7 @@ export default async function handler(req, res) {
           title: copy.title,
           intro: copy.intro,
           ctaLabel: copy.cta,
-          ctaUrl: link.properties.action_link,
+          ctaUrl: linkUrl,
           footerNote: copy.footer
         })
       })
@@ -95,7 +102,7 @@ export default async function handler(req, res) {
     }
 
     // ------------------------------------------------------- create -------
-    const email = String(body.email || '').trim().toLowerCase()
+    const email = normalizeEmail(body.email)
     if (!email) throw httpError(400, 'EMAIL_REQUIRED', 'An e-mail address is required.')
 
     const { data: existingClient } = await admin
@@ -112,24 +119,10 @@ export default async function handler(req, res) {
     const copy = COPY[language]
     const displayName = [body.first_name, body.last_name].filter(Boolean).join(' ').trim() || email
 
-    // Does this person already have a login (possibly from another app)?
-    const { data: existingUserId } = await admin.rpc('auth_user_id_by_email', { p_email: email })
-
-    let userId = existingUserId || null
-    let actionLink = null
-    let isNewAccount = false
-
-    if (!userId) {
-      const { data: invite, error: inviteError } = await admin.auth.admin.generateLink({
-        type: 'invite',
-        email,
-        options: { redirectTo, data: { full_name: displayName } }
-      })
-      if (inviteError) throw httpError(400, 'INVITE_FAILED', inviteError.message)
-      userId = invite.user.id
-      actionLink = invite.properties.action_link
-      isNewAccount = true
-    }
+    // Does this person already have a login?
+    const { account, isNewAccount } = await findOrCreateInvitedAccount(admin, email)
+    const userId = account.id
+    const actionLink = isNewAccount ? setPasswordLink(siteUrl(), await issueToken(admin, userId, 'invite')) : null
 
     // Profile scoped to THIS app (unique per user_id + app_id)
     const { data: appProfile, error: profileError } = await admin
