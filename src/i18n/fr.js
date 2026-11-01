@@ -22,6 +22,10 @@ export default {
     none: '—',
     error: "Une erreur s'est produite",
     retry: 'Réessayer',
+    backendNotConfiguredTitle: "Le portail n'est pas configuré",
+    backendNotConfiguredBody: "Il manque à ce déploiement sa configuration serveur (variables d'environnement de la base de données) : rien ne peut être chargé. La personne qui gère le déploiement doit les définir et redéployer.",
+    backendUnavailableTitle: "Le portail n'arrive pas à joindre son serveur",
+    backendUnavailableBody: "Le serveur n'a pas répondu ou a signalé une erreur : rien ne peut être chargé pour le moment. Réessayez dans un instant ; si le problème persiste, contactez-nous.",
     loadFailed: 'Impossible de charger cette page.',
     loadFailedHelp: 'Réessayez dans un instant. Si l’erreur persiste, signalez-la-nous.',
     technicalDetail: 'Détail technique',
@@ -33,7 +37,6 @@ export default {
     logout: 'Se déconnecter',
     notProvided: 'Non renseigné',
     all: 'Tous',
-    demoBadge: 'Mode démo — données d’exemple, rien n’est enregistré sur un serveur',
     confidential: 'Vos données sont traitées de manière confidentielle.',
   },
 
@@ -47,10 +50,6 @@ export default {
     inviteOnlyHelp:
       "Les comptes sont créés par Hornung Consulting. Si vous n'avez pas encore reçu d'invitation, contactez-nous.",
     wrongCredentials: "L'e-mail ou le mot de passe est incorrect.",
-    demoTitle: 'Aperçu sans base de données',
-    demoClient: 'Entrer comme client',
-    demoSpecialist: 'Entrer comme spécialiste',
-    demoHint: "Données d'exemple uniquement. Connectez Supabase pour des fichiers réels.",
     setPassword: 'Choisissez votre mot de passe',
     setPasswordHelp: 'Bienvenue. Définissez un mot de passe pour activer votre accès.',
     newPassword: 'Nouveau mot de passe',
@@ -67,8 +66,6 @@ export default {
     createAccess: 'Créer mon accès',
     registerTitle: 'Créer votre accès',
     registerSubtitle: 'Pour les clients à qui Hornung Consulting a transmis ce lien.',
-    registerDemoNotice:
-      "Mode démo — l'inscription est désactivée ici. Utilisez les boutons de démo sur la page de connexion.",
     registerCheckEmail: 'Presque terminé — confirmez votre e-mail puis connectez-vous.',
     emailInUse: 'Cette adresse e-mail est déjà enregistrée.',
     noAccessTitle: 'Aucun accès à ce portail',

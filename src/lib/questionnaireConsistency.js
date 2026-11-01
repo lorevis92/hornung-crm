@@ -2,8 +2,7 @@
 // properties, employment) against what the uploaded documents actually
 // show for the same client/tax year, for a specialist reviewing a case.
 // Pure function, no I/O — same shape as personalDetails.js so it can be
-// unit-tested and shared between the demo and Supabase data layers without
-// duplicating the comparison logic in either.
+// unit-tested without a database.
 
 // A couple filing together: either the primary person says so, or a spouse
 // record with any identity at all exists. (Used to live in the tax

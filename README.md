@@ -9,21 +9,20 @@ Stack: **React + Vite + Tailwind** (frontend), **Supabase** (database, auth, sto
 
 ---
 
-## 1. Avvio rapido (modalità demo, senza database)
+## 1. Avvio in locale
+
+L'app parla sempre e solo con il backend reale (le funzioni in `/api`): non esiste più una
+modalità demo con dati di esempio. In locale servono quindi le funzioni serverless e le
+variabili d'ambiente del server (vedi `.env.example`: almeno `SUPABASE_URL` e
+`SUPABASE_SERVICE_ROLE_KEY`):
 
 ```bash
 npm install
-npm run dev
+vercel dev
 ```
 
-Apri http://localhost:5173 e usa i due pulsanti in fondo alla pagina di login:
-
-- **Entra come cliente** → vedi il portale dal punto di vista del cliente
-- **Entra come specialista** → vedi la dashboard, i clienti e l'area riservata
-
-In modalità demo tutti i dati sono di esempio e vivono nel browser (localStorage): nessun server,
-nessuna configurazione. Serve per rivedere e discutere l'interfaccia prima di collegare Supabase.
-La modalità demo si attiva automaticamente quando mancano le variabili `VITE_SUPABASE_*`.
+Se le variabili del server mancano, l'app mostra la pagina "Il portale non è configurato"
+invece della schermata di login.
 
 ---
 
@@ -41,9 +40,9 @@ hornung-crm/
 │   ├── context/              Auth e notifiche
 │   ├── i18n/                 EN · DE · FR · IT
 │   ├── lib/
-│   │   ├── config.js         APP_ID, demo mode, anno fiscale corrente, limiti upload
+│   │   ├── config.js         APP_ID, anno fiscale corrente, limiti upload
 │   │   ├── pricing.js        Calcolo della stima onorario dal tariffario
-│   │   └── data/             Livello dati: demo.js e supabaseData.js (stessa interfaccia)
+│   │   └── data/             Livello dati: supabaseData.js (chiamate a /api)
 │   └── pages/                Login, home cliente, pratica, dati, tariffe, dashboard specialista
 └── .env.example              Tutte le variabili d'ambiente
 ```

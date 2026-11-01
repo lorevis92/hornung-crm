@@ -22,6 +22,10 @@ export default {
     none: '—',
     error: 'Si è verificato un errore',
     retry: 'Riprova',
+    backendNotConfiguredTitle: "Il portale non è configurato",
+    backendNotConfiguredBody: "A questo deployment manca la configurazione del server (variabili d'ambiente del database), quindi non è possibile caricare nulla. Chi gestisce il deployment deve impostarle e ripubblicare.",
+    backendUnavailableTitle: "Il portale non riesce a raggiungere il server",
+    backendUnavailableBody: "Il server non ha risposto o ha segnalato un errore, quindi al momento non è possibile caricare nulla. Riprova tra poco; se continua, contattaci.",
     loadFailed: 'Non è stato possibile caricare questa pagina.',
     loadFailedHelp: 'Riprova tra un momento. Se l’errore resta, segnalacelo.',
     technicalDetail: 'Dettaglio tecnico',
@@ -33,7 +37,6 @@ export default {
     logout: 'Esci',
     notProvided: 'Non indicato',
     all: 'Tutti',
-    demoBadge: 'Modalità demo — dati di esempio, nulla viene salvato su un server',
     confidential: 'I suoi dati sono trattati in modo confidenziale.',
   },
 
@@ -47,10 +50,6 @@ export default {
     inviteOnlyHelp:
       'Gli account vengono creati da Hornung Consulting. Se non hai ancora ricevuto un invito, contattaci.',
     wrongCredentials: 'E-mail o password non corretti.',
-    demoTitle: 'Anteprima senza database',
-    demoClient: 'Entra come cliente',
-    demoSpecialist: 'Entra come specialista',
-    demoHint: 'Solo dati di esempio. Collega Supabase per lavorare con file reali.',
     setPassword: 'Scegli la tua password',
     setPasswordHelp: 'Benvenuto. Imposta una password per attivare il tuo accesso.',
     newPassword: 'Nuova password',
@@ -66,8 +65,6 @@ export default {
     createAccess: 'Crea il mio accesso',
     registerTitle: 'Crea il tuo accesso',
     registerSubtitle: 'Per i clienti a cui Hornung Consulting ha condiviso questo link.',
-    registerDemoNotice:
-      'Modalità demo — la registrazione qui è disattivata. Usa i pulsanti demo nella pagina di accesso.',
     registerCheckEmail: 'Quasi fatto — controlla la tua casella per confermare l\'e-mail, poi accedi.',
     emailInUse: 'Questo indirizzo e-mail è già registrato.',
     noAccessTitle: 'Nessun accesso a questo portale',

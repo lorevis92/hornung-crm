@@ -1,17 +1,13 @@
 // Swapping who is "primary" and who is "spouse" (Questionnaire action;
-// src/lib/personSwap.js, migration 51, demo mirror in src/lib/data/demo.js).
+// src/lib/personSwap.js, migration 51).
 //
 // What it must do: each person's own data follows the person, the couple's
 // data (marital status, addresses) stays put, every document already
 // extracted keeps pointing at the right person — without a new extraction —
 // and the husband-first order on screen does not change.
-import { describe, expect, it, beforeAll } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { COUPLE_FIELDS, PERSONAL_FIELDS, flipOrderOverride, swapPersonRows, swapRoleRef, swapSuggestionPerson } from '../src/lib/personSwap.js'
-import { describeDocumentPerson } from '../src/lib/documentPerson.js'
-import { resolvePersonDisplayOrder } from '../src/lib/personOrder.js'
-import { householdOf } from '../src/lib/taxSummaryData.js'
-import { currentTaxYear } from '../src/lib/config.js'
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
@@ -149,59 +145,5 @@ describe('the field lists cover the whole table, and match the SQL function', ()
     expect(swapped.sort()).toEqual([...PERSONAL_FIELDS].sort())
     expect(sql).toContain("target_field not in ('marital_status', 'current_address', 'address_dec31')")
     expect(sql).toContain("when 'taxpayer' then 'spouse' else 'taxpayer'")
-  })
-})
-
-describe('in the demo data layer: a document already extracted stays with the right person', () => {
-  let demoApi
-  beforeAll(async () => {
-    const memory = new Map()
-    globalThis.localStorage = {
-      getItem: (k) => (memory.has(k) ? memory.get(k) : null),
-      setItem: (k, v) => memory.set(k, String(v)),
-      removeItem: (k) => memory.delete(k)
-    }
-    ;({ demoApi } = await import('../src/lib/data/demo.js'))
-  })
-
-  it('swaps the persons and keeps the salary statement on Marco, without re-extracting it', async () => {
-    const clientId = 'client-1'
-    const year = currentTaxYear() // the demo case with the extracted salary statement
-    const salary = (await demoApi.listClientDocuments(clientId, year)).find((d) => d.person_ref === 'taxpayer')
-    const before = await demoApi.getQuestionnaire(clientId)
-    expect(describeDocumentPerson(salary, householdOf(before)).name).toBe('Marco Bianchi')
-    await demoApi.updateClient(clientId, { person_order_override: 'primary_first' })
-    const orderBefore = resolvePersonDisplayOrder({
-      primaryPerson: householdOf(before).primary,
-      spousePerson: householdOf(before).spouse,
-      overrideOrder: 'primary_first'
-    }).ordered.map((o) => o.person.first_name)
-
-    const after = await demoApi.swapPrimaryAndSpouse(clientId)
-    const household = householdOf(after)
-
-    // The persons moved...
-    expect(household.primary.first_name).toBe('Elena')
-    expect(household.spouse.first_name).toBe('Marco')
-    // ...the couple's data did not.
-    expect(household.primary.marital_status).toBe(householdOf(before).primary.marital_status)
-    expect(household.primary.current_address).toBe(householdOf(before).primary.current_address)
-
-    // The same document, as it is now stored, still names Marco.
-    const salaryAfter = (await demoApi.listClientDocuments(clientId, year)).find((d) => d.id === salary.id)
-    expect(salaryAfter.person_ref).toBe('spouse')
-    expect(describeDocumentPerson(salaryAfter, household)).toEqual({ kind: 'spouse', name: 'Marco Bianchi' })
-    // Its extracted values were not touched.
-    expect(await demoApi.listExtractedFieldsForDocument(salary.id)).toHaveLength(3)
-
-    // And the order on screen is the same two people in the same order.
-    const client = await demoApi.getClient(clientId)
-    expect(client.person_order_override).toBe('spouse_first')
-    const orderAfter = resolvePersonDisplayOrder({
-      primaryPerson: household.primary,
-      spousePerson: household.spouse,
-      overrideOrder: client.person_order_override
-    }).ordered.map((o) => o.person.first_name)
-    expect(orderAfter).toEqual(orderBefore)
   })
 })

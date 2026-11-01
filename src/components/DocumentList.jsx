@@ -90,10 +90,6 @@ export default function DocumentList({
     setBusyId(doc.id)
     try {
       const url = await api.getDownloadUrl(doc)
-      if (!url) {
-        toast.info(t('common.demoBadge'))
-        return
-      }
       window.open(url, '_blank', 'noopener')
     } catch (error) {
       console.error(error)

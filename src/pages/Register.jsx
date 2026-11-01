@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { UserPlus, MailCheck, FlaskConical, CheckCircle2, LogIn } from 'lucide-react'
+import { UserPlus, MailCheck, CheckCircle2, LogIn } from 'lucide-react'
 import Brand from '../components/Brand'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { PlainLayout } from '../components/Layout'
@@ -8,7 +8,6 @@ import { Field, PasswordInput, Spinner, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
-import { IS_DEMO } from '../lib/config'
 import { PROFILE_WAIT_TIMEOUT_MS } from '../lib/constants'
 
 // Our own /api/register (see api/register.js): creates the login and, only
@@ -130,17 +129,7 @@ export default function Register() {
           <h1 className="display text-[26px] leading-tight">{t('auth.registerTitle')}</h1>
           <p className="mt-1 text-[15px] text-ink-500">{t('auth.registerSubtitle')}</p>
 
-          {IS_DEMO ? (
-            <div className="mt-6 flex gap-3 rounded-xl bg-sand px-4 py-3.5">
-              <FlaskConical size={18} className="mt-0.5 shrink-0 text-gold-600" aria-hidden="true" />
-              <div>
-                <p className="text-[14px] font-semibold text-ink-700">{t('auth.registerDemoNotice')}</p>
-                <Link to="/login" className="link mt-2 inline-block text-[14px]">
-                  {t('auth.signIn')}
-                </Link>
-              </div>
-            </div>
-          ) : created ? (
+          {created ? (
             <div className="mt-6 flex gap-3 rounded-xl bg-emerald-50 px-4 py-3.5">
               <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-700" aria-hidden="true" />
               <div>

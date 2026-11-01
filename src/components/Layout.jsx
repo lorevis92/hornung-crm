@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { LogOut, Menu, X, FlaskConical } from 'lucide-react'
+import { LogOut, Menu, X } from 'lucide-react'
 import clsx from 'clsx'
 import Brand from './Brand'
 import LanguageSwitcher from './LanguageSwitcher'
@@ -18,7 +18,7 @@ function navLinkClass({ isActive }) {
 
 export default function Layout({ children }) {
   const { t } = useI18n()
-  const { profile, isStaff, signOut, isDemo } = useAuth()
+  const { profile, isStaff, signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
 
@@ -36,13 +36,6 @@ export default function Layout({ children }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      {isDemo ? (
-        <div className="no-print flex items-center justify-center gap-2 bg-ink-900 px-4 py-1.5 text-center text-[13px] font-medium text-gold-200">
-          <FlaskConical size={14} aria-hidden="true" />
-          {t('common.demoBadge')}
-        </div>
-      ) : null}
-
       <header className="no-print sticky top-0 z-30 border-b border-line bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link to={isStaff ? '/clients' : '/'} className="shrink-0 rounded-lg">

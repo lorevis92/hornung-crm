@@ -1,33 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { IS_DEMO } from '../lib/config'
 import { api } from '../lib/data'
 import { useI18n } from '../i18n'
 
 const AuthContext = createContext(null)
-const DEMO_KEY = 'hornung.demo.session'
-
-const DEMO_USERS = {
-  specialist: {
-    profile: {
-      id: 'profile-specialist',
-      app_id: 'hornung_crm',
-      role: 'specialist',
-      full_name: 'Hornung Consulting',
-      email: 'hornungconsulting@gmail.com'
-    },
-    client: null
-  },
-  client: {
-    profile: {
-      id: 'profile-client-1',
-      app_id: 'hornung_crm',
-      role: 'client',
-      full_name: 'Marco Bianchi',
-      email: 'marco.bianchi@example.ch'
-    }
-  }
-}
-
 // Our own login (api/auth/[action].js). The session lives in an httpOnly
 // cookie the page can't read — the browser just sends it along; there is no
 // token to store or refresh here.
@@ -61,30 +36,12 @@ export function AuthProvider({ children }) {
   const [client, setClient] = useState(null)
   // 'ok' | 'no-profile' — a valid login that has no profile in THIS app
   const [access, setAccess] = useState('ok')
+  // Set when the server can't tell us who is signed in at all (not
+  // configured, unreachable, database down): the app shows that instead of a
+  // login form that could never work. { code, status }
+  const [backendError, setBackendError] = useState(null)
   // Guards the one-time self-registration / owner claim call per user id.
   const claimAttempted = useRef(new Set())
-
-  // ------------------------------------------------------------------ demo --
-  const loadDemoSession = useCallback(async () => {
-    let role = null
-    try {
-      role = localStorage.getItem(DEMO_KEY)
-    } catch {
-      /* ignore */
-    }
-    if (!role || !DEMO_USERS[role]) {
-      setSession(null)
-      setProfile(null)
-      setClient(null)
-      setLoading(false)
-      return
-    }
-    const demo = DEMO_USERS[role]
-    setSession({ demo: true, role })
-    setProfile(demo.profile)
-    setClient(role === 'client' ? await api.getMyClient(demo.profile.id) : null)
-    setLoading(false)
-  }, [])
 
   // Attempts, at most once per user id, to turn a bare login into an
   // app_profiles row (self sign-up on /register, or the owner's first
@@ -158,21 +115,27 @@ export function AuthProvider({ children }) {
 
   const loadSession = useCallback(async () => {
     try {
-      await applyMe(await authRequest('me', { method: 'GET' }))
+      const me = await authRequest('me', { method: 'GET' })
+      setBackendError(null)
+      await applyMe(me)
     } catch (err) {
       console.error('[auth] could not load the session', err)
-      await applyMe(null)
+      setBackendError({ code: err.code || 'UNREACHABLE', status: err.status || null })
+      setSession(null)
+      setProfile(null)
+      setClient(null)
+      setLoading(false)
     }
   }, [applyMe])
 
+  const retryBackend = useCallback(async () => {
+    setLoading(true)
+    await loadSession()
+  }, [loadSession])
+
   useEffect(() => {
-    if (IS_DEMO) {
-      loadDemoSession()
-      return undefined
-    }
     loadSession()
-    return undefined
-  }, [loadDemoSession, loadSession])
+  }, [loadSession])
 
   // ----------------------------------------------------------------- api ----
   const signIn = useCallback(
@@ -184,31 +147,7 @@ export function AuthProvider({ children }) {
     [applyMe]
   )
 
-  const signInDemo = useCallback(
-    async (role) => {
-      try {
-        localStorage.setItem(DEMO_KEY, role)
-      } catch {
-        /* ignore */
-      }
-      setLoading(true)
-      await loadDemoSession()
-    },
-    [loadDemoSession]
-  )
-
   const signOut = useCallback(async () => {
-    if (IS_DEMO) {
-      try {
-        localStorage.removeItem(DEMO_KEY)
-      } catch {
-        /* ignore */
-      }
-      setSession(null)
-      setProfile(null)
-      setClient(null)
-      return
-    }
     try {
       await authRequest('logout')
     } catch (err) {
@@ -218,11 +157,8 @@ export function AuthProvider({ children }) {
   }, [applyMe])
 
   // Our own /api/reset-password: branded e-mail through Resend with a
-  // single-use /set-password link. In demo mode there is nothing to send;
-  // pretend it worked so the caller's toast.success(auth.resetSent) still
-  // makes sense.
+  // single-use /set-password link.
   const sendResetEmail = useCallback(async (email) => {
-    if (IS_DEMO) return
     const res = await fetch('/api/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -266,12 +202,6 @@ export function AuthProvider({ children }) {
   const updateProfileName = useCallback(async (firstName, lastName) => {
     const fullName = [firstName, lastName].filter(Boolean).join(' ').trim()
 
-    if (IS_DEMO) {
-      setProfile((p) => (p ? { ...p, full_name: fullName || p.full_name } : p))
-      setClient((c) => (c ? { ...c, first_name: firstName || c.first_name, last_name: lastName || c.last_name } : c))
-      return
-    }
-
     await api.updateMyContact({ first_name: firstName || null, last_name: lastName || null })
 
     setProfile((p) => (p ? { ...p, full_name: fullName || p.full_name } : p))
@@ -287,20 +217,9 @@ export function AuthProvider({ children }) {
 
   // A client sets their own canton (own clients row only, server-side).
   const updateMyCanton = useCallback(async (canton) => {
-    if (IS_DEMO) {
-      // Goes through api.updateClient (the same call the specialist's own
-      // "Edit info" modal uses) so it actually lands in the demo store —
-      // not just local React state — and everything that reads
-      // client.canton straight from that store sees it too.
-      if (client) {
-        const updated = await api.updateClient(client.id, { canton })
-        setClient((c) => (c ? { ...c, ...updated } : c))
-      }
-      return
-    }
     await api.updateMyContact({ canton: canton || null })
     setClient((c) => (c ? { ...c, canton } : c))
-  }, [client])
+  }, [])
 
   const value = useMemo(
     () => ({
@@ -309,11 +228,11 @@ export function AuthProvider({ children }) {
       profile,
       client,
       access,
-      isDemo: IS_DEMO,
+      backendError,
+      retryBackend,
       isStaff: profile?.role === 'specialist' || profile?.role === 'admin',
       isClient: profile?.role === 'client',
       signIn,
-      signInDemo,
       signOut,
       sendResetEmail,
       checkPasswordLink,
@@ -323,8 +242,8 @@ export function AuthProvider({ children }) {
       refreshClient
     }),
     [
-      loading, session, profile, client, access,
-      signIn, signInDemo, signOut, sendResetEmail, checkPasswordLink, updatePassword, updateProfileName,
+      loading, session, profile, client, access, backendError, retryBackend,
+      signIn, signOut, sendResetEmail, checkPasswordLink, updatePassword, updateProfileName,
       updateMyCanton, refreshClient
     ]
   )

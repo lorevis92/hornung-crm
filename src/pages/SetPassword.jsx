@@ -8,7 +8,6 @@ import { Field, PasswordInput, Spinner } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
-import { IS_DEMO } from '../lib/config'
 
 // The invite / reset e-mail links to /set-password#token=... (in the
 // fragment, so the token never reaches a server log).
@@ -26,7 +25,7 @@ export default function SetPassword() {
   const navigate = useNavigate()
   const { updatePassword, checkPasswordLink } = useAuth()
   const [token] = useState(readLinkToken)
-  const [ready, setReady] = useState(IS_DEMO)
+  const [ready, setReady] = useState(false)
   const [linkValid, setLinkValid] = useState(true)
   const [password, setPassword] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -34,7 +33,6 @@ export default function SetPassword() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (IS_DEMO) return
     // Keep the token out of the address bar / history once read.
     if (window.location.hash) {
       window.history.replaceState(null, '', window.location.pathname + window.location.search)
@@ -58,11 +56,6 @@ export default function SetPassword() {
 
     setBusy(true)
     try {
-      if (IS_DEMO) {
-        toast.info(t('auth.demoHint'))
-        navigate('/login')
-        return
-      }
       await updatePassword(password, token)
       toast.success(t('common.saved'))
       navigate('/')

@@ -1,7 +1,7 @@
 // Maps a "current_tax_sheet" document's extracted fields onto the client's
 // registry data (clients.canton, client_persons primary/spouse) — a pure
 // function with no I/O, shared between api/_personalDetails.js (real
-// Supabase data, server-side) and the demo data layer. Given the
+// Supabase data, server-side) and the browser. Given the
 // extraction and the client's current
 // registry state, it decides — for each mappable field — whether to fill
 // it in (currently empty) or flag a conflict for the specialist to accept

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { LogIn, Mail, ArrowLeft, UserRound, Briefcase, UserPlus } from 'lucide-react'
+import { LogIn, Mail, ArrowLeft, UserPlus } from 'lucide-react'
 import Brand from '../components/Brand'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { PlainLayout } from '../components/Layout'
@@ -8,13 +8,12 @@ import { Field, PasswordInput, Spinner, TextInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
-import { IS_DEMO } from '../lib/config'
 import { PROFILE_WAIT_TIMEOUT_MS } from '../lib/constants'
 
 export default function Login() {
   const { t } = useI18n()
   const toast = useToast()
-  const { profile, loading, access, signIn, signInDemo, sendResetEmail } = useAuth()
+  const { profile, loading, access, signIn, sendResetEmail } = useAuth()
   const [mode, setMode] = useState('signin') // signin | reset
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -152,37 +151,17 @@ export default function Login() {
             )}
           </div>
 
-          {!IS_DEMO ? (
-            <div className="mt-6 rounded-xl bg-sand px-4 py-3.5">
-              <p className="text-[14px] font-semibold text-ink-700">{t('auth.newClientPrompt')}</p>
-              <p className="mt-1 text-[13.5px] leading-relaxed text-ink-500">
-                {t('auth.newClientPromptHelp')}
-              </p>
-              <Link to="/register" className="btn-secondary btn-sm mt-3">
-                <UserPlus size={16} aria-hidden="true" />
-                {t('auth.createAccess')}
-              </Link>
-            </div>
-          ) : null}
+          <div className="mt-6 rounded-xl bg-sand px-4 py-3.5">
+            <p className="text-[14px] font-semibold text-ink-700">{t('auth.newClientPrompt')}</p>
+            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-500">
+              {t('auth.newClientPromptHelp')}
+            </p>
+            <Link to="/register" className="btn-secondary btn-sm mt-3">
+              <UserPlus size={16} aria-hidden="true" />
+              {t('auth.createAccess')}
+            </Link>
+          </div>
 
-          {IS_DEMO ? (
-            <div className="mt-5 border-t border-line pt-5">
-              <p className="mb-3 text-[13px] font-semibold uppercase tracking-wide text-ink-400">
-                {t('auth.demoTitle')}
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button type="button" className="btn-secondary" onClick={() => signInDemo('client')}>
-                  <UserRound size={17} aria-hidden="true" />
-                  {t('auth.demoClient')}
-                </button>
-                <button type="button" className="btn-secondary" onClick={() => signInDemo('specialist')}>
-                  <Briefcase size={17} aria-hidden="true" />
-                  {t('auth.demoSpecialist')}
-                </button>
-              </div>
-              <p className="hint mt-2">{t('auth.demoHint')}</p>
-            </div>
-          ) : null}
         </div>
 
         <p className="mt-5 text-center text-[13px] text-ink-400">{t('common.confidential')}</p>

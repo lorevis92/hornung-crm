@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Layout, { PlainLayout } from './components/Layout'
 import { PageLoader } from './components/ui'
 import NoAccessNotice from './components/NoAccessNotice'
+import BackendUnavailable from './components/BackendUnavailable'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './context/AuthContext'
 import { useI18n } from './i18n'
@@ -76,6 +77,14 @@ function TaxSummaryBoundary() {
 }
 
 export default function App() {
+  const { backendError, retryBackend, loading } = useAuth()
+  if (backendError) {
+    return (
+      <PlainLayout>
+        <BackendUnavailable error={backendError} onRetry={retryBackend} retrying={loading} />
+      </PlainLayout>
+    )
+  }
   return (
     <Routes>
       <Route path="/login" element={<Login />} />

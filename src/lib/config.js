@@ -1,22 +1,12 @@
 // Central configuration.
-// DEMO MODE (no backend: everything works against seeded local data, so the
-// UI can be reviewed before anything is connected):
-//   VITE_DEMO_MODE=true   -> demo
-//   VITE_DEMO_MODE=false  -> live (talks to our own /api functions)
-//   unset                 -> live only if VITE_SUPABASE_URL is set, so the
-//                            existing Vercel / local env files keep working
-//                            unchanged.
-// The browser itself never connects to the database or reads any database
-// key any more: every read/write goes through /api (session cookie + access
-// checks server-side, see api/_dataOps.js). That also means no Supabase key
-// is compiled into the bundle at all — scripts/check-bundle-secrets.mjs still
-// verifies that after every build.
-const DEMO_FLAG = String(import.meta.env.VITE_DEMO_MODE || '').trim().toLowerCase()
-const HAS_LEGACY_BACKEND_ENV = Boolean(String(import.meta.env.VITE_SUPABASE_URL || '').trim())
-
+// The browser never connects to the database or reads any database key: every
+// read/write goes through our own /api functions (session cookie + access
+// checks server-side, see api/_dataOps.js), so no backend setting is needed
+// here at all. If the server isn't configured, /api/auth/me says so and the
+// app shows that (src/components/BackendUnavailable.jsx) — there is no
+// fallback that works without a backend. scripts/check-bundle-secrets.mjs
+// still verifies after every build that no key ended up in the bundle.
 export const APP_ID = import.meta.env.VITE_APP_ID || 'hornung_crm'
-
-export const IS_DEMO = DEMO_FLAG === 'true' || (DEMO_FLAG !== 'false' && !HAS_LEGACY_BACKEND_ENV)
 
 export const STORAGE_BUCKET = 'client-documents'
 export const STORAGE_ROOT = 'hornung'

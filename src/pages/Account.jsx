@@ -6,7 +6,6 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
-import { IS_DEMO } from '../lib/config'
 
 const emptyInvite = { full_name: '', email: '' }
 
@@ -61,11 +60,6 @@ export default function Account() {
     setPwError('')
     if (password.length < 8) return setPwError(t('auth.passwordTooShort'))
     if (password !== repeat) return setPwError(t('auth.passwordMismatch'))
-
-    if (IS_DEMO) {
-      toast.info(t('auth.demoHint'))
-      return
-    }
 
     setSavingPassword(true)
     try {

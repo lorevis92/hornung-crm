@@ -14,7 +14,7 @@ import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
 import { api } from '../lib/data'
 import { useLoad } from '../lib/useLoad'
-import { currentTaxYear, IS_DEMO } from '../lib/config'
+import { currentTaxYear } from '../lib/config'
 import { CANTONS, LANGUAGES } from '../lib/constants'
 import { formatDate, fullName } from '../lib/format'
 import { describeSuggestion } from '../lib/suggestions'
@@ -109,10 +109,6 @@ export default function SpecialistClient() {
   const resendInvite = async () => {
     setResending(true)
     try {
-      if (IS_DEMO || !api.resendInvite) {
-        toast.info(t('common.demoBadge'))
-        return
-      }
       await api.resendInvite(clientId)
       toast.success(t('specialist.inviteSent', { email: client.email }))
     } catch (error) {

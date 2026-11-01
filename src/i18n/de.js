@@ -22,6 +22,10 @@ export default {
     none: '—',
     error: 'Es ist ein Fehler aufgetreten',
     retry: 'Erneut versuchen',
+    backendNotConfiguredTitle: "Das Portal ist nicht konfiguriert",
+    backendNotConfiguredBody: "Diesem Deployment fehlt die Serverkonfiguration (Umgebungsvariablen der Datenbank), daher kann nichts geladen werden. Wer das Deployment verwaltet, muss sie setzen und neu deployen.",
+    backendUnavailableTitle: "Das Portal erreicht seinen Server nicht",
+    backendUnavailableBody: "Der Server hat nicht geantwortet oder einen Fehler gemeldet, daher kann gerade nichts geladen werden. Bitte versuchen Sie es gleich noch einmal; falls es anhält, kontaktieren Sie uns.",
     loadFailed: 'Diese Seite konnte nicht geladen werden.',
     loadFailedHelp: 'Bitte versuchen Sie es gleich noch einmal. Bleibt der Fehler bestehen, melden Sie ihn uns.',
     technicalDetail: 'Technisches Detail',
@@ -33,7 +37,6 @@ export default {
     logout: 'Abmelden',
     notProvided: 'Nicht angegeben',
     all: 'Alle',
-    demoBadge: 'Demo-Modus — Beispieldaten, nichts wird auf einem Server gespeichert',
     confidential: 'Ihre Daten werden vertraulich behandelt.',
   },
 
@@ -47,10 +50,6 @@ export default {
     inviteOnlyHelp:
       'Konten werden von Hornung Consulting erstellt. Falls Sie noch keine Einladung erhalten haben, kontaktieren Sie uns bitte.',
     wrongCredentials: 'E-Mail oder Passwort ist nicht korrekt.',
-    demoTitle: 'Vorschau ohne Datenbank',
-    demoClient: 'Als Kunde eintreten',
-    demoSpecialist: 'Als Spezialist eintreten',
-    demoHint: 'Nur Beispieldaten. Verbinden Sie Supabase für echte Dateien.',
     setPassword: 'Passwort festlegen',
     setPasswordHelp: 'Willkommen. Bitte legen Sie ein Passwort fest, um Ihren Zugang zu aktivieren.',
     newPassword: 'Neues Passwort',
@@ -67,8 +66,6 @@ export default {
     createAccess: 'Zugang erstellen',
     registerTitle: 'Zugang erstellen',
     registerSubtitle: 'Für Kunden, denen Hornung Consulting diesen Link mitgeteilt hat.',
-    registerDemoNotice:
-      'Demo-Modus — die Registrierung ist hier deaktiviert. Nutzen Sie die Demo-Buttons auf der Anmeldeseite.',
     registerCheckEmail: 'Fast geschafft — bestätigen Sie Ihre E-Mail und melden Sie sich dann an.',
     emailInUse: 'Diese E-Mail-Adresse ist bereits registriert.',
     noAccessTitle: 'Kein Zugang zu diesem Portal',

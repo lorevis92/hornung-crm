@@ -1,7 +1,7 @@
 # Checklist di messa online — un passo alla volta
 
 Ordine consigliato: **GitHub → Supabase → Resend → Vercel → dominio**.
-Puoi fermarti dopo ogni passo: l'app resta funzionante in modalità demo finché non colleghi Supabase.
+L'app funziona solo con il backend collegato: finché Supabase e le variabili d'ambiente del server non sono configurati, mostra la pagina «Il portale non è configurato».
 
 ---
 
@@ -162,6 +162,6 @@ browser non interroga più il database: tutto passa da `/api` (vedi `api/_auth.j
       creati o modificati da `main`.
 - [ ] Nessuna nuova variabile d'ambiente obbligatoria. `VITE_SUPABASE_ANON_KEY` e
       `SUPABASE_ANON_KEY` non servono più al branch (lasciale per `main`).
-      Opzionale: `VITE_DEMO_MODE=false` per dichiarare esplicitamente la modalità live.
+      `VITE_DEMO_MODE` non esiste più: la modalità demo è stata rimossa.
 - [ ] I link nelle e-mail ora puntano a `PUBLIC_SITE_URL/set-password#token=...`: le
       "Redirect URLs" di Supabase Auth non contano più per questo branch.

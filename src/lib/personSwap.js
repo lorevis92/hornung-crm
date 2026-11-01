@@ -1,7 +1,7 @@
 // Swapping who is "primary" and who is "spouse" for one client (the
 // Questionnaire's "Scambia contribuente e coniuge"). The real backend does it
-// in one SQL function (migration 51, swap_primary_and_spouse); demo mode
-// does it with these pure helpers. Both follow the same rules:
+// in one SQL function (migration 51, swap_primary_and_spouse); these pure
+// helpers state the same rules so tests can check the SQL against them:
 //   - each person's OWN data moves with the person (PERSONAL_FIELDS);
 //   - the data of the couple as a whole stays on its row (COUPLE_FIELDS):
 //     it describes the household, not one of the two;

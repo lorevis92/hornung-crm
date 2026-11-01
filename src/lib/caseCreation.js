@@ -1,11 +1,8 @@
 // Client-side mirror of the "cases: client insert own" RLS policy
 // (supabase/migrations/20260101000041_client_created_tax_year.sql) — a pure
 // function with no I/O, so the exact same rule can be asserted in tests
-// without a live database, and demo mode (which has no RLS at all) still
-// enforces the identical rule instead of silently allowing more than the
-// real backend would. The database is still the real gate (see the
-// migration) — this exists so a bug shows up here first, and so demo mode
-// isn't more permissive than production.
+// without a live database. The server (createOwnCase in api/_dataOps.js) is
+// the real gate — this exists so a bug shows up here first.
 import { currentTaxYear } from './config'
 
 // requestedClientId/sessionClientId: the client_id the caller is trying to

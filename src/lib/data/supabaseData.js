@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Live data layer. Same method signatures as the demo layer.
+// The app's data layer.
 //
 // The browser never talks to the database: every method below is one call to
 // our own serverless functions — POST /api/data/<op> (api/data/[op].js +
@@ -56,8 +56,6 @@ async function putToSignedUrl(signedUrl, file) {
 }
 
 export const supabaseApi = {
-  isDemo: false,
-
   async listDocumentTypes() {
     return data('listDocumentTypes')
   },
