@@ -1,13 +1,10 @@
-// POST /api/extract-document
-//   { documentId }  -- a client_documents.id
+// The document extraction: runExtraction(admin, anthropic, documentId).
 //
-// Called automatically by a Postgres trigger (pg_net, see migrations
-// 20260101000010_ai_extraction.sql and 20260101000011_ai_extraction_settings.sql)
-// right after a row lands in client_documents with status = 'uploaded' —
-// never called from the browser,
-// and never carries a user session. Authenticated with a shared secret
-// instead (same pattern as the existing CRON_SECRET check in
-// api/open-tax-year.js).
+// Run by the extraction queue's consumer (api/_extractionQueue.js), for an
+// upload (queued by registerUploadedDocument, where the pg_net trigger of
+// migrations 10/11 used to call an HTTP webhook here), "Riprova estrazione",
+// "Estrai tutto" and the Questionnaire's "fill from a document". No HTTP
+// endpoint of its own any more.
 //
 // Three-phase pipeline against the Anthropic API:
 //   1. Classification — pick one of the active document_categories.
@@ -28,7 +25,6 @@
 //      failure here leaves the whitelist extraction (which succeeded)
 //      alone.
 import Anthropic from '@anthropic-ai/sdk'
-import { httpError, readBody, serviceClient } from './_lib.js'
 import { syncRegistryForClientYear } from './_registrySync.js'
 import { isRowBasedCategory, ROW_IDENTITY_FIELDS, ROW_KEY_DOCUMENT_LEVEL } from '../src/lib/rowBasedFields.js'
 import { resolveModel } from '../src/lib/aiModels.js'
@@ -51,17 +47,6 @@ const STORAGE_BUCKET = 'client-documents'
 // since the database value can change without a redeploy.
 const ENV_MODEL = process.env.ANTHROPIC_EXTRACTION_MODEL
 const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
-
-function requireWebhookSecret(req) {
-  const secret = process.env.EXTRACTION_WEBHOOK_SECRET
-  if (!secret) {
-    throw httpError(500, 'MISSING_WEBHOOK_SECRET', 'EXTRACTION_WEBHOOK_SECRET is not configured on the server.')
-  }
-  const header = req.headers.authorization || ''
-  if (header !== `Bearer ${secret}`) {
-    throw httpError(401, 'UNAUTHORIZED', 'Invalid webhook secret.')
-  }
-}
 
 // Claude sometimes wraps JSON in prose or a ```json fence despite instructions
 // — pull out the first bracketed structure rather than requiring a clean
@@ -116,8 +101,8 @@ export async function runExtraction(
   { fromStatuses = ['uploaded'], forcedCategoryCode = null, throwOnRegistrySyncError = false } = {}
 ) {
   // Atomic claim: only proceed if this row is still in one of the expected
-  // starting states. Prevents a duplicate webhook delivery (pg_net can
-  // retry) from processing it twice; api/retry-extraction.js passes
+  // starting states. Prevents a duplicate queue delivery (Queues deliver
+  // at least once) from processing it twice; api/retry-extraction.js passes
   // ['extraction_failed'] instead so a specialist can re-run a failed one.
   let claimQuery = admin.from('client_documents').update({ status: 'extracting' }).eq('id', documentId)
   claimQuery = fromStatuses.length === 1 ? claimQuery.eq('status', fromStatuses[0]) : claimQuery.in('status', fromStatuses)
@@ -575,37 +560,4 @@ async function extractClaimedDocument(admin, anthropic, documentId, claimedRow, 
   }
 
   return { claimed: true, documentId }
-}
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' })
-
-  let documentId
-  try {
-    requireWebhookSecret(req)
-    const body = readBody(req)
-    documentId = body.documentId
-    if (!documentId) throw httpError(400, 'DOCUMENT_ID_REQUIRED', 'A documentId is required.')
-  } catch (error) {
-    return res.status(error.status || 500).json({ error: error.message || 'UNEXPECTED_ERROR', code: error.code })
-  }
-
-  const admin = serviceClient()
-
-  try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    await runExtraction(admin, anthropic, documentId)
-    return res.status(200).json({ ok: true })
-  } catch (error) {
-    console.error(`[extract-document] failed for document ${documentId}:`, error)
-    try {
-      await admin
-        .from('client_documents')
-        .update({ status: 'extraction_failed', extraction_error: (error.message || 'EXTRACTION_FAILED').slice(0, 2000) })
-        .eq('id', documentId)
-    } catch (updateError) {
-      console.error(`[extract-document] could not mark ${documentId} as extraction_failed:`, updateError)
-    }
-    return res.status(500).json({ error: error.message || 'EXTRACTION_FAILED' })
-  }
 }

@@ -1,6 +1,6 @@
 // Regression tests for the fee estimator and the price-list display helpers
 // (src/lib/pricing.js) — pricing_items became staff-editable this round
-// (see supabase/migrations/20260101000040_pricing_items_editable.sql), but
+// (see db/migrations/20260101000040_pricing_items_editable.sql), but
 // estimateFee still matches specific, fixed codes (base_single, property,
 // ...), and "further services" (kind: 'service') never feed into the total
 // at all — a specialist adding/editing/removing one must never change a

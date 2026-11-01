@@ -7,11 +7,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => {
-  process.env.SUPABASE_URL = 'https://abcdefghijklmnopqrst.supabase.co'
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-not-a-key'
+  process.env.DATABASE_URL = 'postgresql://test:test@db.test/test'
   return { db: null }
 })
-vi.mock('@supabase/supabase-js', () => ({ createClient: () => state.db }))
+vi.mock('../api/_dbClient.js', () => ({ createServiceClient: () => state.db }))
 
 const { default: handler } = await import('../api/data/[op].js')
 const { ops } = await import('../api/_dataOps.js')
@@ -70,6 +69,7 @@ const CROSS_CLIENT = {
   listExtractedFieldsForDocument: { documentId: IDS.cdB },
   listExtractedFieldsForDocuments: { documentIds: [IDS.cdB] },
   listOtherFindingsForDocuments: { documentIds: [IDS.cdB] },
+  getExtractionJob: { jobId: 'job-of-staff' },
   listExtractedFields: { caseDocumentId: IDS.docB1 },
   listCaseAssistantMessages: { caseId: IDS.caseB },
   listAiModelSettings: {},

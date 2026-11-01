@@ -10,8 +10,8 @@
 //
 // Reads every credential from the environment — never hardcode a URL, key,
 // email or password here, and never commit a version of this file that does.
-import { createClient } from '@supabase/supabase-js'
 import { writeFileSync } from 'node:fs'
+import { createServiceClient } from '../api/_dbClient.js'
 
 function must(label, { data, error }) {
   if (error) {
@@ -22,27 +22,14 @@ function must(label, { data, error }) {
 }
 
 // clientEmail/taxYear/outFile: the one client/year this fixture is for.
+// Reads the Neon database directly (DATABASE_URL, read-only queries).
 export async function exportClientFixture({ clientEmail, taxYear, outFile }) {
-  const url = process.env.SUPABASE_URL
-  const anonKey = process.env.SUPABASE_ANON_KEY
-  const specialistEmail = process.env.SPECIALIST_EMAIL
-  const specialistPassword = process.env.SPECIALIST_PASSWORD
-
-  if (!url || !anonKey || !specialistEmail || !specialistPassword) {
-    console.error('Missing one of SUPABASE_URL / SUPABASE_ANON_KEY / SPECIALIST_EMAIL / SPECIALIST_PASSWORD in the environment.')
+  const databaseUrl = process.env.DATABASE_URL
+  if (!databaseUrl) {
+    console.error('Missing DATABASE_URL in the environment.')
     process.exit(1)
   }
-
-  const supabase = createClient(url, anonKey, { auth: { autoRefreshToken: false, persistSession: false } })
-
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: specialistEmail,
-    password: specialistPassword
-  })
-  if (signInError) {
-    console.error('Sign-in failed:', signInError)
-    process.exit(1)
-  }
+  const supabase = createServiceClient(databaseUrl)
 
   const client = must(
     'lookup client',

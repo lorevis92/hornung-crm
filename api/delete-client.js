@@ -1,10 +1,10 @@
 // POST /api/delete-client
 //   { clientId } -> permanently deletes a client (staff only)
 //
-// This must run server-side with the service-role key because it needs to:
-//   1. See app_profiles rows for OTHER apps (RLS normally scopes visibility to
-//      app_id = 'hornung_crm' only), to decide whether the login is still
-//      used elsewhere.
+// Server-side, staff only, because it needs to:
+//   1. See app_profiles rows for OTHER apps (everything else in this app is
+//      scoped to app_id = 'hornung_crm'), to decide whether the login is
+//      still used elsewhere.
 //   2. Delete the login itself (auth_accounts — its sessions and pending
 //      links go with it, ON DELETE CASCADE) when it isn't.
 //
@@ -18,9 +18,9 @@ import { APP_ID, httpError, readBody, requireStaff } from './_lib.js'
 const STORAGE_BUCKET = 'client-documents'
 const STORAGE_ROOT = 'hornung'
 
-// Supabase Storage's `.list()` only returns the immediate children of a path
-// — "folders" come back as entries with `id: null` (there's no real folder
-// row, just a shared path prefix among files). Recurses into every such
+// storage.list() (api/_storage.js, on R2) only returns the immediate children
+// of a path — "folders" come back as entries with `id: null` (there's no real
+// folder object, just a shared path prefix among files). Recurses into every such
 // entry to collect the full, flat list of actual file paths under `prefix`.
 async function listAllStorageObjectPaths(admin, prefix) {
   const { data, error } = await admin.storage.from(STORAGE_BUCKET).list(prefix, { limit: 1000 })

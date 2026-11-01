@@ -1,5 +1,5 @@
 // Regression tests for the client-side mirror of the "cases: client insert
-// own" RLS policy (supabase/migrations/20260101000041_client_created_tax_year.sql)
+// own" RLS policy (db/migrations/20260101000041_client_created_tax_year.sql)
 // — src/lib/caseCreation.js's validateClientCaseCreation enforces the exact
 // same rule, so the rule is testable without a live database.
 // The DB itself remains the real gate for the "another client" case — this

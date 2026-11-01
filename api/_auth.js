@@ -1,5 +1,5 @@
 // Own authentication (replaces Supabase Auth) — see
-// supabase/migrations/20260101000052_own_auth.sql for the tables.
+// db/migrations/20260101000052_own_auth.sql for the tables.
 //
 // Session mechanism:
 //   * login creates a random 32-byte token; the browser gets it in an

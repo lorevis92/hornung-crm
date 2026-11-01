@@ -24,10 +24,9 @@
 // 20260101000043_case_assistant_per_user.sql) — this app has no
 // per-specialist case assignment, so more than one specialist can open the
 // same case, and each must see and continue only their own conversation,
-// never a colleague's. RLS enforces this for the direct client-side read
-// (listCaseAssistantMessages); this endpoint runs on the service-role
-// client, which bypasses RLS entirely, so the history query and both
-// inserts below filter/tag by created_by explicitly.
+// never a colleague's. The database does not enforce this (no RLS since
+// migration 53): listCaseAssistantMessages filters by created_by, and so do
+// the history query and both inserts below.
 import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
 import { buildCaseAssistantContext } from '../src/lib/caseAssistantContext.js'
@@ -159,11 +158,9 @@ export default async function handler(req, res) {
       .insert({ case_id: caseId, role: 'user', content: message, created_by: profile.id })
     if (insertUserError) throw insertUserError
 
-    // Scoped to case_id AND created_by: this query runs on the service-role
-    // client (requireStaff's `admin`), which bypasses RLS entirely — the
-    // "case assistant: own conversation only" policy (migration
-    // 20260101000043) protects the direct client-side read
-    // (listCaseAssistantMessages) but does nothing here, so the filter has
+    // Scoped to case_id AND created_by: nothing in the database enforces the
+    // "case assistant: own conversation only" rule (migration
+    // 20260101000043's policy is gone since migration 53), so the filter has
     // to be explicit in the query itself. Without it, a second specialist
     // with access to the same client would see (and have the model
     // continue) a colleague's conversation instead of their own.

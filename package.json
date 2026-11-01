@@ -3,37 +3,49 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Hornung Consulting — Swiss tax declaration client portal / CRM",
+  "description": "Hornung Consulting — Swiss tax declaration client portal / CRM (Cloudflare Workers + Neon + R2)",
   "scripts": {
     "dev": "vite",
+    "dev:worker": "node scripts/dev-worker.mjs",
     "prebuild": "npm test",
     "build": "vite build",
-    "postbuild": "node scripts/check-bundle-secrets.mjs",
+    "postbuild": "node scripts/check-bundle-secrets.mjs && npm run check:worker",
+    "check:worker": "node scripts/e2e-worker.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "measure:image-memory": "node scripts/measure-image-memory.mjs",
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "deploy": "npm run build && wrangler deploy",
     "lint": "echo \"(no linter configured yet)\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
-    "@supabase/supabase-js": "^2.45.4",
+    "@jsquash/jpeg": "^1.6.0",
+    "@jsquash/webp": "^1.5.0",
+    "@neondatabase/serverless": "^1.2.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
-    "heic-decode": "^2.1.0",
+    "fast-png": "^8.0.0",
+    "libheif-js": "^1.23.5",
     "lucide-react": "^0.446.0",
     "pdfjs-dist": "^6.3.289",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
-    "resend": "^4.0.0",
-    "sharp": "^0.35.5"
+    "resend": "^4.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.14",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "aws4fetch": "^1.0.20",
+    "pg": "^8.23.1",
     "postcss": "^8.4.47",
+    "sharp": "^0.35.5",
     "tailwindcss": "^3.4.13",
     "vite": "^5.4.8",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "wrangler": "^4.156.0"
   }
 }

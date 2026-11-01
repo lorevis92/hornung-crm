@@ -2,9 +2,10 @@
 // anon key (src/lib/data/supabaseData.js), now run here, server-side, behind
 // POST /api/data/<op> (api/data/[op].js).
 //
-// The service-role client used here bypasses RLS, so EVERY op starts with an
-// explicit authorization check that reproduces the policy it replaces —
-// supabase/migrations/20260101000003_hornung_rls.sql and later:
+// The database has no row-level security any more (migration 53): the
+// server is its only user, so EVERY op starts with an explicit
+// authorization check that reproduces the RLS policy it replaced —
+// db/migrations/20260101000003_hornung_rls.sql and later:
 //   * staff (specialist/admin of hornung_crm)  -> everything in this app
 //   * client                                   -> only their own clients row,
 //     questionnaire, cases, documents, requested documents; may upload into
@@ -15,11 +16,10 @@
 //     the staff member's own conversation)
 //   * catalogues (document types, categories, field dictionary, active
 //     prices)                                   -> anyone signed in with a profile
-// The RLS policies stay in place underneath as a second line of defence for
-// anything still reaching PostgREST with a user JWT.
 import { APP_ID, httpError } from './_lib.js'
 import { safeFileName } from '../src/lib/format.js'
 import { normalizePropertyAddress } from '../src/lib/personalDetails.js'
+import { queueUploadedDocument, summarizeJob } from './_extractionQueue.js'
 
 // Keep in sync with src/lib/config.js (Vite-only, can't be imported here).
 export const STORAGE_BUCKET = 'client-documents'
@@ -556,7 +556,19 @@ export const ops = {
 
   async registerUploadedDocument(
     actor,
-    { caseId, path, fileName, fileSize = null, mimeType = null, documentTypeId = null, note = null, direction = 'client_upload' }
+    {
+      caseId,
+      path,
+      fileName,
+      fileSize = null,
+      mimeType = null,
+      documentTypeId = null,
+      note = null,
+      direction = 'client_upload',
+      // false: the Questionnaire's "fill from a document" starts its own
+      // extraction (api/extract-document-now.js) right after.
+      extract = true
+    }
   ) {
     assertUploadAllowed(actor, direction)
     const caseRow = await loadCaseForActor(actor, caseId)
@@ -599,7 +611,30 @@ export const ops = {
       note: String(fileName || name),
       actor_id: actor.profile.id
     })
+    // The automatic extraction (the pg_net trigger's job until migration
+    // 53): the mirror trigger has just created the client_documents row.
+    if (extract !== false) {
+      const { data: mirror } = await admin
+        .from('client_documents')
+        .select('id, status, file_name, client_id, tax_year')
+        .eq('source_case_document_id', row.id)
+        .maybeSingle()
+      await queueUploadedDocument(admin, mirror)
+    }
     return row
+  },
+
+  // The progress / outcome of an extraction job (api/_extractionQueue.js)
+  // the caller started: "Riprova estrazione", "Estrai tutto", "fill from a
+  // document". Staff only, like those actions.
+  async getExtractionJob(actor, { jobId }) {
+    requireStaffActor(actor)
+    const job = unwrap(await actor.admin.from('extraction_jobs').select('*').eq('id', requireId(jobId, 'jobId')).maybeSingle())
+    if (!job) throw httpError(404, 'NOT_FOUND', 'Extraction job not found.')
+    const items = unwrap(
+      await actor.admin.from('extraction_job_items').select('document_id, file_name, state, error').eq('job_id', job.id)
+    )
+    return summarizeJob(job, items || [])
   },
 
   // Staff: any document. Client: only their own upload ("client_upload"), and

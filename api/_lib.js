@@ -1,38 +1,29 @@
-// Shared helpers for the serverless functions (Vercel · Node runtime).
-// These run on the server only: the service-role key never reaches the browser,
-// and the browser never talks to the database itself — every read/write goes
-// through a function here that checks the session first.
-import { createClient } from '@supabase/supabase-js'
+// Shared helpers for the server code (Cloudflare Workers, see worker/index.js).
+// These run on the server only: the database credential never reaches the
+// browser, and the browser never talks to the database itself — every
+// read/write goes through a function here that checks the session first.
 import { Resend } from 'resend'
 import { assertSameOrigin, readSession } from './_auth.js'
+import { createServiceClient } from './_dbClient.js'
 
 export const APP_ID = 'hornung_crm'
 
-// Same guard as the front-end (src/lib/config.js): catch a mistyped/corrupted
-// SUPABASE_URL env var here, with a clear message, instead of letting every
-// admin call fail deep inside supabase-js with an opaque DNS/network error.
-const SUPABASE_URL_PATTERN = /^https:\/\/[a-z0-9]{20}\.supabase\.co\/?$/i
-const RAW_SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
-if (RAW_SUPABASE_URL && !SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL)) {
-  console.error(
-    `[api/_lib] SUPABASE_URL doesn't look like a valid Supabase project URL: "${RAW_SUPABASE_URL}". ` +
-      'Expected "https://xxxxxxxxxxxxxxxxxxxx.supabase.co" with no extra characters.'
-  )
-}
-const SUPABASE_URL = SUPABASE_URL_PATTERN.test(RAW_SUPABASE_URL) ? RAW_SUPABASE_URL.replace(/\/$/, '') : ''
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+// The Neon connection string (Neon console -> the project -> Connect).
+// Checked here, with a clear message, instead of letting every call fail
+// deep inside the driver with an opaque network error.
+const DATABASE_URL_PATTERN = /^postgres(ql)?:\/\/\S+$/i
 
 export function serviceClient() {
-  if (!SUPABASE_URL || !SERVICE_KEY) {
+  const url = (process.env.DATABASE_URL || '').trim()
+  if (!url || !DATABASE_URL_PATTERN.test(url)) {
+    if (url) console.error('[api/_lib] DATABASE_URL does not look like a Postgres connection string (postgresql://...).')
     throw httpError(
       500,
-      'MISSING_SUPABASE_ENV',
-      'SUPABASE_URL is missing or malformed, or SUPABASE_SERVICE_ROLE_KEY is not configured. Check the Vercel environment variables.'
+      'MISSING_DATABASE_ENV',
+      'DATABASE_URL is missing or malformed. Set it with `wrangler secret put DATABASE_URL` (or in .dev.vars locally).'
     )
   }
-  return createClient(SUPABASE_URL, SERVICE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
+  return createServiceClient(url)
 }
 
 export function httpError(status, code, message) {

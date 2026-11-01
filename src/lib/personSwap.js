@@ -13,7 +13,7 @@
 //     husband-first order on screen (src/lib/personOrder.js) stays the same.
 
 // Must match the column list in
-// supabase/migrations/20260101000051_swap_primary_and_spouse.sql.
+// db/migrations/20260101000051_swap_primary_and_spouse.sql.
 export const PERSONAL_FIELDS = [
   'first_name',
   'last_name',

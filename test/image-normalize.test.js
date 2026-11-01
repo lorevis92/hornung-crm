@@ -38,19 +38,21 @@ describe('converting an image', () => {
   })
 
   it('resizes and compresses a large phone photo of a document', async () => {
-    // A 4032×5376 photo of a printed page (12+ lines of figures, paper
-    // texture), saved at high quality like a phone camera does.
-    const W = 4032
-    const H = 5376
+    // A 2448×3264 (8 MP) photo of a printed page (lines of figures, paper
+    // texture), saved at high quality like a phone camera does. 8 MP is the
+    // most the Worker decodes itself (bigger ones go to Cloudflare Images,
+    // see test/image-memory.test.js).
+    const W = 2448
+    const H = 3264
     const lines = Array.from(
-      { length: 120 },
+      { length: 70 },
       (_, i) =>
         `<text x="200" y="${300 + i * 40}" font-size="30" font-family="Arial">Riga ${i} — Saldo al 31.12.2025 CHF 12'400.50</text>`
     ).join('')
     const svg = Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="100%" height="100%" fill="#f4f1ea"/>${lines}</svg>`
     )
-    const texture = await sharp({ create: { width: W, height: H, channels: 3, noise: { type: 'gaussian', mean: 128, sigma: 12 } } })
+    const texture = await sharp({ create: { width: W, height: H, channels: 3, noise: { type: 'gaussian', mean: 128, sigma: 40 } } })
       .png()
       .toBuffer()
     const photo = await sharp(svg).composite([{ input: texture, blend: 'soft-light' }]).jpeg({ quality: 97 }).toBuffer()

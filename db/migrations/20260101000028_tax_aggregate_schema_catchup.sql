@@ -39,5 +39,5 @@ alter table public.tax_aggregates
 -- live database. If a similar "column not found" error appears for a
 -- different table, the same root cause (a migration written but never run)
 -- is the first thing to check — run the full backlog in
--- supabase/migrations/, in filename order, not just this one.
+-- db/migrations/, in filename order, not just this one.
 -- ===========================================================================

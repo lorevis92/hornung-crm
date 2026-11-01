@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# Server secrets of the Worker — for LOCAL development only.
+# Copy to `.dev.vars` (git-ignored); `wrangler dev` / `npm run dev:worker`
+# read it. In production each one is set with
+#     npx wrangler secret put <NAME>
+# and never written to a file. None of these may ever be a VITE_ variable.
+# ---------------------------------------------------------------------------
+
+# Neon connection string (Neon console -> your project -> Connect ->
+# "Connection string", role with owner rights on the database).
+# Leave unset for `npm run dev:worker`: it uses its own local Postgres.
+# DATABASE_URL=postgresql://neondb_owner:...@ep-....neon.tech/neondb?sslmode=require
+
+# Signs the short-lived upload/download links of R2 files (api/_storage.js).
+# At least 32 random characters: `openssl rand -hex 32`.
+# Unset locally = a fresh random one per `npm run dev:worker` run.
+# FILES_SIGNING_SECRET=
+
+# AI extraction and the case assistant (api/extract-document.js, api/case-assistant.js).
+ANTHROPIC_API_KEY=
+# Optional fallback model when nothing is chosen on Tax settings -> AI.
+# ANTHROPIC_EXTRACTION_MODEL=
+
+# E-mail (invitations, password reset, status e-mails).
+RESEND_API_KEY=
+# NOTIFY_BCC=
+
+# Manual call of /api/open-tax-year ("Authorization: Bearer <value>"). The
+# monthly Cron Trigger needs no secret. `openssl rand -base64 32`.
+# CRON_SECRET=
+
+# The address that automatically receives the specialist role the first
+# time it logs in after signing up on /register.
+# OWNER_EMAIL=hornungconsulting@gmail.com
+
+# "true" requires clients to confirm their e-mail before they can sign in.
+# REQUIRE_EMAIL_CONFIRMATION=false
+
+# Images above this many pixels are not decoded inside the Worker (128 MB
+# memory) but sent to Cloudflare Images. Default 8000000; change only after
+# measuring with workers/image-memory-probe.
+# IMAGE_MAX_WORKER_PIXELS=8000000

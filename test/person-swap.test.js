@@ -121,12 +121,12 @@ describe('everything that names a row follows the person', () => {
 })
 
 describe('the field lists cover the whole table, and match the SQL function', () => {
-  const schema = read('supabase/migrations/20260101000002_hornung_schema.sql')
+  const schema = read('db/migrations/20260101000002_hornung_schema.sql')
   const table = schema.slice(schema.indexOf('create table if not exists public.client_persons'))
   const body = table.slice(0, table.indexOf(');'))
   const columns = [...body.matchAll(/^\s{2}([a-z_0-9]+)\s+(?:uuid|text|date|integer|numeric|boolean|timestamptz)/gm)].map((m) => m[1])
   // Columns added by later migrations.
-  for (const m of read('supabase/migrations/20260101000039_person_gender_and_order.sql').matchAll(
+  for (const m of read('db/migrations/20260101000039_person_gender_and_order.sql').matchAll(
     /alter table public\.client_persons\s+add column if not exists ([a-z_]+)/g
   )) {
     columns.push(m[1])
@@ -140,7 +140,7 @@ describe('the field lists cover the whole table, and match the SQL function', ()
   })
 
   it('the SQL function swaps exactly the personal fields and keeps the couple fields out', () => {
-    const sql = read('supabase/migrations/20260101000051_swap_primary_and_spouse.sql')
+    const sql = read('db/migrations/20260101000051_swap_primary_and_spouse.sql')
     const swapped = [...sql.matchAll(/^\s+(?:set\s+)?([a-z_]+)\s+= o\.\1,?$/gm)].map((m) => m[1])
     expect(swapped.sort()).toEqual([...PERSONAL_FIELDS].sort())
     expect(sql).toContain("target_field not in ('marital_status', 'current_address', 'address_dec31')")

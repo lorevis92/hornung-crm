@@ -9,8 +9,7 @@
 // email or password here, and never commit a version of this file that does.
 //
 // Usage:
-//   SUPABASE_URL=... SUPABASE_ANON_KEY=... SPECIALIST_EMAIL=... SPECIALIST_PASSWORD=... \
-//     node scripts/export-weber-fixture.mjs
+//   DATABASE_URL=... node scripts/export-weber-fixture.mjs
 import { exportClientFixture } from './export-client-fixture.mjs'
 
 exportClientFixture({

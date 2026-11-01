@@ -4,13 +4,13 @@ import { Spinner } from './ui'
 import { useI18n } from '../i18n'
 
 // Shown instead of the whole app when /api/auth/me itself fails: the server
-// isn't configured (MISSING_SUPABASE_ENV — e.g. a preview deployment without
+// isn't configured (MISSING_DATABASE_ENV — e.g. a preview deployment without
 // its environment variables), can't be reached, or can't reach the database.
 // There is no offline/sample-data fallback: without the backend nothing in
 // this app can work, so we say so plainly.
 export default function BackendUnavailable({ error, onRetry, retrying }) {
   const { t } = useI18n()
-  const notConfigured = error?.code === 'MISSING_SUPABASE_ENV'
+  const notConfigured = error?.code === 'MISSING_DATABASE_ENV'
   return (
     <div className="card card-pad w-full max-w-md text-center" role="alert">
       <div className="mb-4 flex justify-center">

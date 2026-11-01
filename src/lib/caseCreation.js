@@ -1,5 +1,5 @@
 // Client-side mirror of the "cases: client insert own" RLS policy
-// (supabase/migrations/20260101000041_client_created_tax_year.sql) — a pure
+// (db/migrations/20260101000041_client_created_tax_year.sql) — a pure
 // function with no I/O, so the exact same rule can be asserted in tests
 // without a live database. The server (createOwnCase in api/_dataOps.js) is
 // the real gate — this exists so a bug shows up here first.

@@ -1,52 +1,47 @@
 // POST /api/extract-document-now
-//   { documentId, categoryCode? }
+//   { documentId, categoryCode? }  ->  202 { jobId }
 //
-// Staff-triggered, synchronous extraction for a document that's still
-// 'uploaded' — like api/retry-extraction.js, but for the normal case
-// where nothing has failed yet, just where waiting for the async pg_net
-// webhook (see api/extract-document.js's own header comment) isn't good
-// enough: the Questionnaire's "fill from a file/pasted text" action needs
-// the specialist to see the resulting suggestions right away, not
-// whenever the webhook happens to fire. categoryCode, when given, skips
+// Staff-triggered extraction for a document that's still 'uploaded' — the
+// Questionnaire's "fill from a file/pasted text" action, which needs the
+// specialist to see the resulting suggestions right away: the page uploads
+// the file without the automatic extraction, calls this, and polls the job
+// (api/_extractionQueue.js) until it is finished. categoryCode, when given, skips
 // AI classification entirely — the specialist already knows this is a
 // personal-details document (current_tax_sheet), there's no ambiguity to
 // resolve, and classifying it anyway risks the AI picking something else
 // for an email-pasted snippet or an unusual file.
-import Anthropic from '@anthropic-ai/sdk'
 import { httpError, readBody, requireStaff } from './_lib.js'
+import { startExtractionJob } from './_extractionQueue.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' })
 
   try {
-    const { admin } = await requireStaff(req)
+    const { admin, profile } = await requireStaff(req)
     const body = readBody(req)
     const documentId = body.documentId
     if (!documentId) throw httpError(400, 'DOCUMENT_ID_REQUIRED', 'A documentId is required.')
 
     const { data: doc, error: docError } = await admin
       .from('client_documents')
-      .select('id, status')
+      .select('id, status, file_name, client_id, tax_year')
       .eq('id', documentId)
       .maybeSingle()
     if (docError) throw docError
     if (!doc) throw httpError(404, 'DOCUMENT_NOT_FOUND', 'No such document.')
 
-    // Dynamic, not static: see api/retry-extraction.js for why — a bad
-    // import anywhere in this graph must surface as a JSON error here,
-    // not a bare platform 500 with no message.
-    const { runExtraction } = await import('./extract-document.js')
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    await runExtraction(admin, anthropic, documentId, {
-      fromStatuses: [doc.status],
-      forcedCategoryCode: body.categoryCode || null,
-      // This action has no document browser for the specialist to fall back
-      // on — the registry sync (suggestions/autoFill) is the only visible
-      // outcome, so a failure there must surface as a real error instead of
-      // the usual "log it, keep the 200" leniency (see extract-document.js).
-      throwOnRegistrySyncError: true
+    // The registry sync (suggestions/autoFill) is the only visible outcome
+    // of this action, so the job runs with throwOnRegistrySyncError: a
+    // failure there is a failure of the job (see api/_extractionQueue.js).
+    const job = await startExtractionJob(admin, {
+      kind: 'now',
+      documents: [doc],
+      clientId: doc.client_id,
+      taxYear: doc.tax_year,
+      requestedBy: profile.id,
+      forcedCategoryCode: body.categoryCode || null
     })
-    return res.status(200).json({ ok: true })
+    return res.status(202).json({ jobId: job.id })
   } catch (error) {
     console.error('[extract-document-now]', error)
     return res

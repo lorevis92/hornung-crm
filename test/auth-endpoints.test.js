@@ -5,14 +5,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => {
-  process.env.SUPABASE_URL = 'https://abcdefghijklmnopqrst.supabase.co'
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-not-a-key'
+  process.env.DATABASE_URL = 'postgresql://test:test@db.test/test'
   process.env.PUBLIC_SITE_URL = 'https://app.test'
   delete process.env.RESEND_API_KEY
   delete process.env.OWNER_EMAIL
   return { db: null }
 })
-vi.mock('@supabase/supabase-js', () => ({ createClient: () => state.db }))
+vi.mock('../api/_dbClient.js', () => ({ createServiceClient: () => state.db }))
 vi.mock('@anthropic-ai/sdk', () => ({ default: class Anthropic {} }))
 
 const { default: authHandler } = await import('../api/auth/[action].js')
@@ -94,12 +93,15 @@ describe('login', () => {
     expect(cookieFrom(wrong)).toBeNull()
   })
 
+  // Four bcrypt cost-12 comparisons (the unknown-e-mail path compares
+  // against a dummy hash on purpose): seconds of CPU, more than vitest's
+  // default 5 s when the image tests run alongside.
   it('an e-mail with SQL wildcards matches nobody', async () => {
     for (const email of ['%', '%@client.test', 'b@client.tes_', '_@client.test']) {
       const res = await authCall('login', { body: { email, password: PASSWORD } })
       expect(res.statusCode).toBe(401)
     }
-  })
+  }, 30000)
 
   it('locks the account after repeated failures, even for the right password', async () => {
     for (let i = 0; i < auth.MAX_FAILED_LOGINS; i++) {

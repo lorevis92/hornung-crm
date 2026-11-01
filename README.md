@@ -4,22 +4,26 @@ Portale per la gestione delle dichiarazioni fiscali svizzere: il cliente carica 
 e segue lo stato della pratica, lo specialista gestisce clienti, anni fiscali, stati e documenti
 finali.
 
-Stack: **React + Vite + Tailwind** (frontend), **Supabase** (database, auth, storage),
-**Resend** (e-mail), **Vercel** (hosting + funzioni serverless).
+Stack: **React + Vite + Tailwind** (frontend), **Cloudflare Workers** (hosting + API, coda di
+estrazione, cron), **Neon** (Postgres), **Cloudflare R2** (documenti), **Resend** (e-mail),
+**Anthropic** (estrazione AI). Login e sessioni sono nostri (`api/_auth.js`).
+Il passaggio da Supabase/Vercel è descritto in **docs/MIGRAZIONE-CLOUDFLARE.md**.
 
 ---
 
 ## 1. Avvio in locale
 
-L'app parla sempre e solo con il backend reale (le funzioni in `/api`): non esiste più una
-modalità demo con dati di esempio. In locale servono quindi le funzioni serverless e le
-variabili d'ambiente del server (vedi `.env.example`: almeno `SUPABASE_URL` e
-`SUPABASE_SERVICE_ROLE_KEY`):
+L'app parla sempre e solo con il backend reale (il Worker, `/api`): non esiste una modalità demo.
+In locale gira tutto dentro workerd, senza account Cloudflare né Neon:
 
 ```bash
 npm install
-vercel dev
+npm run build          # test + front-end + controllo end-to-end nel runtime Workers
+npm run dev:worker     # app completa su http://127.0.0.1:8787 (Postgres locale, R2/Queue/cron emulati)
+npm run dev            # facoltativo: pagine con hot reload su :5173, /api inoltrato al Worker
 ```
+
+Chiavi facoltative (Anthropic, Resend) in `.dev.vars` (vedi `.dev.vars.example`, mai nel repo).
 
 Se le variabili del server mancano, l'app mostra la pagina "Il portale non è configurato"
 invece della schermata di login.
@@ -30,11 +34,16 @@ invece della schermata di login.
 
 ```
 hornung-crm/
-├── api/                      Funzioni serverless (Vercel) — service role, mai esposte al browser
-│   ├── _lib.js               Client Supabase admin, Resend, template e-mail, controllo ruolo
+├── worker/                   Il Worker: router delle API, cron, consumer della coda
+├── api/                      Endpoint e logica server — mai esposti al browser
+│   ├── _lib.js               Client del database, Resend, template e-mail, controllo ruolo
+│   ├── _db.js                Query builder (stessa API usata con supabase-js) -> SQL su Neon
+│   ├── _storage.js, files.js R2 + URL firmati
+│   ├── _extractionQueue.js   Estrazione documenti tramite Cloudflare Queue
 │   ├── invite-client.js      Crea cliente + invito via e-mail
 │   └── case-status.js        Cambia stato pratica + e-mail automatica al cliente
-├── supabase/migrations/      SQL da eseguire nel progetto Supabase (in ordine)
+├── db/                       Migrazioni (npm run db:migrate), strato di compatibilità, copia dati
+├── scripts/                  Sviluppo locale, controllo end-to-end, copia dati/file da Supabase
 ├── src/
 │   ├── components/           UI riutilizzabile (uploader, checklist, stepper, pannello AI…)
 │   ├── context/              Auth e notifiche
@@ -44,7 +53,8 @@ hornung-crm/
 │   │   ├── pricing.js        Calcolo della stima onorario dal tariffario
 │   │   └── data/             Livello dati: supabaseData.js (chiamate a /api)
 │   └── pages/                Login, home cliente, pratica, dati, tariffe, dashboard specialista
-└── .env.example              Tutte le variabili d'ambiente
+├── wrangler.toml             Configurazione Cloudflare (binding, coda, cron, asset)
+└── .dev.vars.example         Segreti del server (in produzione: wrangler secret put)
 ```
 
 ### Schermate
@@ -85,14 +95,15 @@ Ogni cambio di stato viene registrato nella cronologia della pratica.
 
 ---
 
-## 4. Database condiviso con WisiHealth
+## 4. Login e profili per app
 
-Il database Supabase è condiviso tra più app. La regola è:
+Il database Supabase era condiviso con WisiHealth; quello Neon contiene solo Hornung (la copia
+dei dati prende solo le righe `hornung_crm`). Lo schema conserva comunque la regola:
 
-- **una sola identità per persona** (una riga in `auth.users`, una password)
+- **una sola identità per persona** (una riga in `auth_accounts`, una password)
 - **un profilo separato per app** in `app_profiles (user_id, app_id, role)`
-- tutte le tabelle di Hornung si agganciano ad `app_profiles`, **mai** direttamente ad `auth.users`
-- ogni policy RLS filtra anche per `app_id`
+- tutte le tabelle di Hornung si agganciano ad `app_profiles`
+- ogni controllo di accesso (lato server, `api/_dataOps.js`) filtra anche per `app_id`
 
 Conseguenza pratica: se una persona è già registrata in WisiHealth e viene invitata qui, **non**
 viene creato un secondo account — riceve un profilo nuovo e completamente isolato in questa app e
@@ -110,18 +121,17 @@ Il tariffario è in tabella: i prezzi si modificano nel database senza toccare i
 
 ---
 
-## 5. Collegare Supabase, Resend e Vercel
+## 5. Messa online (Cloudflare + Neon + Resend)
 
-Segui **SETUP-CHECKLIST.md**: è la procedura passo per passo, nell'ordine giusto.
+Segui **SETUP-CHECKLIST.md**; credenziali e procedura di passaggio da Supabase in
+**docs/MIGRAZIONE-CLOUDFLARE.md**. In sintesi:
 
-In sintesi:
-
-1. Progetto Supabase → SQL Editor → esegui i 5 file di `supabase/migrations/` **in ordine**
-2. Crea l'account dello specialista (Authentication → Add user) e poi esegui
+1. Neon: crea il progetto, poi `DATABASE_URL=... npm run db:migrate`
+2. Cloudflare: bucket R2, coda, segreti (`wrangler secret put`), `npm run deploy`
+3. Specialista: registrati su /register e poi in Neon (SQL Editor)
    `select public.promote_to_specialist('email@studio.ch');`
-3. Resend: verifica il dominio mittente e crea una API key
-4. Vercel: importa il repo GitHub e inserisci le variabili d'ambiente di `.env.example`
-5. Collega il dominio definitivo e aggiorna `PUBLIC_SITE_URL` + i Redirect URL in Supabase
+4. Resend: verifica il dominio mittente e crea una API key
+5. Collega il dominio al Worker e aggiorna `PUBLIC_SITE_URL`
 
 ---
 
@@ -141,8 +151,8 @@ alla domanda "da dove viene questo dato?".
 espone delle API.
 
 **Apertura automatica dell'anno fiscale**
-`api/open-tax-year.js` è una funzione serverless protetta da `CRON_SECRET`, richiamata dal
-Vercel Cron Job definito in `vercel.json` (ogni primo del mese). Per ogni cliente `active` senza
+`api/open-tax-year.js` gira dal Cron Trigger di Cloudflare definito in `wrangler.toml` (ogni primo
+del mese, `0 6 1 * *`); si può anche chiamare a mano con `Authorization: Bearer <CRON_SECRET>`. Per ogni cliente `active` senza
 una pratica per l'anno fiscale corrente ne crea una con stato `opened`, scadenza 31 marzo
 dell'anno successivo e un evento `case_opened`. Non fa nulla prima della data configurata in
 `AUTO_OPEN_MONTH_DAY` (default `01-01`), salta i clienti `invited`/`archived` ed è idempotente.
@@ -153,9 +163,11 @@ scheda cliente resta disponibile in aggiunta.
 
 ## 7. Note tecniche
 
-- File accettati: PDF, JPG, PNG, HEIC, WebP, Word, Excel, CSV — max 25 MB (limite anche sul bucket)
-- Storage privato: `client-documents/hornung/<client_id>/<anno>/<direzione>/<file>`, download solo
-  tramite signed URL a tempo
+- File accettati: PDF, JPG, PNG, HEIC, WebP, Word, Excel, CSV — max 25 MB (controllato da `api/files.js`)
+- Storage privato su R2: `hornung/<client_id>/<anno>/<direzione>/<file>`, upload e download solo
+  tramite URL firmati a tempo emessi dal server
+- Le foto vengono convertite in JPEG (2400 px, qualità 85); oltre 8 MP la conversione passa da
+  Cloudflare Images per restare nei 128 MB di memoria del Worker
 - Il cliente può eliminare solo i propri upload e solo finché la pratica non è chiusa
 - Interfaccia in 4 lingue, e-mail automatiche nella lingua scelta per il cliente
 - Testi grandi, contrasti alti e aree cliccabili ampie: molti clienti non sono giovanissimi

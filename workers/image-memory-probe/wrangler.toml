@@ -1,0 +1,9 @@
+# Throw-away measurement Worker — see worker.js. Not part of the app.
+name = "hornung-image-memory-probe"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+rules = [{ type = "CompiledWasm", globs = ["**/*.wasm"], fallthrough = false }]
+
+[limits]
+cpu_ms = 300000

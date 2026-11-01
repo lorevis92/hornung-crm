@@ -37,7 +37,7 @@ export const DOC_CATEGORIES = ['base', 'income', 'deductions', 'assets', 'proper
 
 // Case statuses during which a client may delete a document they uploaded
 // themselves. Mirrors public.case_is_open_for_client() in
-// supabase/migrations/20260101000003_hornung_rls.sql exactly ("documents:
+// db/migrations/20260101000003_hornung_rls.sql exactly ("documents:
 // client delete own" policy) — keep both lists in sync if either changes.
 // NOTE: uploading is intentionally NOT gated by this anymore — clients can
 // always upload regardless of status (see the "documents: client upload"

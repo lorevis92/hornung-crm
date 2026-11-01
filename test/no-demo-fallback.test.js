@@ -1,19 +1,17 @@
 // There is no demo / sample-data mode any more: the app only ever talks to
 // the real backend. A deployment without its server environment variables
 // must say so clearly (BackendUnavailable, driven by /api/auth/me answering
-// MISSING_SUPABASE_ENV) instead of quietly running on fake data.
+// MISSING_DATABASE_ENV) instead of quietly running on fake data.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.hoisted(() => {
-  delete process.env.SUPABASE_URL
-  delete process.env.VITE_SUPABASE_URL
-  delete process.env.SUPABASE_SERVICE_ROLE_KEY
+  delete process.env.DATABASE_URL
   process.env.PUBLIC_SITE_URL = 'https://app.test'
 })
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => {
+vi.mock('../api/_dbClient.js', () => ({
+  createServiceClient: () => {
     throw new Error('no database client may be created without configuration')
   }
 }))
@@ -58,11 +56,11 @@ describe('the browser code has no path that works without a backend', () => {
 })
 
 describe('a server without its environment variables says so', () => {
-  it('GET /api/auth/me answers 500 MISSING_SUPABASE_ENV (what the page turns into "not configured")', async () => {
+  it('GET /api/auth/me answers 500 MISSING_DATABASE_ENV (what the page turns into "not configured")', async () => {
     const res = makeRes()
     await authHandler(makeReq({ method: 'GET', query: { action: 'me' } }), res)
     expect(res.statusCode).toBe(500)
-    expect(res.body.code).toBe('MISSING_SUPABASE_ENV')
+    expect(res.body.code).toBe('MISSING_DATABASE_ENV')
   })
 
   it('login is refused the same way — never accepted against anything else', async () => {
@@ -72,13 +70,13 @@ describe('a server without its environment variables says so', () => {
       res
     )
     expect(res.statusCode).toBe(500)
-    expect(res.body.code).toBe('MISSING_SUPABASE_ENV')
+    expect(res.body.code).toBe('MISSING_DATABASE_ENV')
   })
 
   it('a data call is refused the same way', async () => {
     const res = makeRes()
     await dataHandler(makeReq({ query: { op: 'listPricing' }, headers: { origin: 'https://app.test' }, cookie: 'hc_session=x' }), res)
     expect(res.statusCode).toBe(500)
-    expect(res.body.code).toBe('MISSING_SUPABASE_ENV')
+    expect(res.body.code).toBe('MISSING_DATABASE_ENV')
   })
 })

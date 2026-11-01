@@ -33,20 +33,54 @@ function callApi(path, body) {
   return postJson(path, body)
 }
 
+// Extractions run on the server's queue (api/_extractionQueue.js): the
+// endpoint answers with a job id at once, and this waits for the job the
+// way the page used to wait for the request — so every caller still gets
+// its result (or its error) from one await.
+const JOB_POLL_MS = 2000
+const JOB_TIMEOUT_MS = 20 * 60 * 1000
+
+async function waitForExtractionJob(jobId) {
+  const started = Date.now()
+  for (;;) {
+    const job = await data('getExtractionJob', { jobId })
+    if (job.finished) return job
+    if (Date.now() - started > JOB_TIMEOUT_MS) {
+      const err = new Error('EXTRACTION_STILL_RUNNING')
+      err.code = 'EXTRACTION_STILL_RUNNING'
+      throw err
+    }
+    await new Promise((resolve) => setTimeout(resolve, JOB_POLL_MS))
+  }
+}
+
+// A one-document job -> nothing on success; its error as a thrown Error,
+// as the synchronous endpoints did.
+function throwIfDocumentFailed(job) {
+  const failure = job.failures[0]
+  if (!failure) return
+  const already = failure.error === 'ALREADY_PROCESSING'
+  const err = new Error(already ? 'This document was already being processed — nothing was re-extracted.' : failure.error)
+  err.code = already ? 'NOT_RETRYABLE' : 'EXTRACTION_FAILED'
+  throw err
+}
+
 // One database operation, run and authorized server-side.
 async function data(op, args) {
   const json = await postJson(`/api/data/${op}`, args)
   return json.data
 }
 
-// The browser uploads straight to storage through a signed URL the server
-// issued for a path inside this case's own folder (same body shape as
-// supabase-js's uploadToSignedUrl) — no database or storage credential here.
+// The browser uploads the file itself (raw body) to a signed URL the server
+// issued for a path inside this case's own folder (api/files.js streams it
+// into R2) — no database or storage credential here.
 async function putToSignedUrl(signedUrl, file) {
-  const body = new FormData()
-  body.append('cacheControl', '3600')
-  body.append('', file)
-  const res = await fetch(signedUrl, { method: 'PUT', headers: { 'x-upsert': 'false' }, body })
+  const res = await fetch(signedUrl, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file
+  })
   if (!res.ok) {
     const json = await res.json().catch(() => ({}))
     const err = new Error(json.message || json.error || 'UPLOAD_FAILED')
@@ -178,7 +212,7 @@ export const supabaseApi = {
     return data('listDocuments', { caseId })
   },
 
-  // Catalogue for the extraction module (supabase/migrations/20260101000007_tax_extraction_schema.sql).
+  // Catalogue for the extraction module (db/migrations/20260101000007_tax_extraction_schema.sql).
   async listDocumentCategories() {
     return data('listDocumentCategories')
   },
@@ -245,26 +279,35 @@ export const supabaseApi = {
   },
 
   async retryExtraction(documentId) {
-    return callApi('/api/retry-extraction', { documentId })
+    const { jobId } = await callApi('/api/retry-extraction', { documentId })
+    throwIfDocumentFailed(await waitForExtractionJob(jobId))
+    return { ok: true }
   },
 
   // The "reload everything" safety net — re-extracts every document of a
   // client/year in one action instead of one at a time (see
   // api/reprocess-client-year.js).
   async reprocessClientYear(clientId, taxYear) {
-    return callApi('/api/reprocess-client-year', { clientId, taxYear: Number(taxYear) })
+    const { jobId } = await callApi('/api/reprocess-client-year', { clientId, taxYear: Number(taxYear) })
+    const job = await waitForExtractionJob(jobId)
+    return { processed: job.processed, failed: job.failed, failures: job.failures, mergedProperties: job.mergedProperties }
   },
 
   // Questionnaire "fill from a document/pasted text" action: routes through
   // the same upload + extraction pipeline as any other document (so the
   // result lands as client_field_suggestions to confirm, not a direct
   // write), but forces category_code so there's no classification ambiguity
-  // and triggers extraction synchronously (see api/extract-document-now.js).
+  // and starts the extraction itself — not the automatic one — waiting for
+  // its outcome (see api/extract-document-now.js).
   async fillQuestionnaireFromDocument(caseId, file, meta = {}) {
-    const caseDoc = await this.uploadDocument(caseId, file, { ...meta, direction: 'client_upload' })
+    const caseDoc = await this.uploadDocument(caseId, file, { ...meta, direction: 'client_upload', extract: false })
     const clientDocumentId = await data('getMirroredClientDocumentId', { caseDocumentId: caseDoc.id })
     if (!clientDocumentId) throw new Error('MIRROR_NOT_READY')
-    return callApi('/api/extract-document-now', { documentId: clientDocumentId, categoryCode: 'current_tax_sheet' })
+    const { jobId } = await callApi('/api/extract-document-now', { documentId: clientDocumentId, categoryCode: 'current_tax_sheet' })
+    const job = await waitForExtractionJob(jobId)
+    const failure = job.failures.find((f) => f.error !== 'ALREADY_PROCESSING')
+    if (failure) throw new Error(failure.error)
+    return { ok: true }
   },
 
   async fillQuestionnaireFromText(caseId, text, meta = {}) {
@@ -341,7 +384,8 @@ export const supabaseApi = {
       mimeType: file.type,
       documentTypeId: meta.document_type_id || null,
       note: meta.note || null,
-      direction
+      direction,
+      extract: meta.extract !== false
     })
   },
 

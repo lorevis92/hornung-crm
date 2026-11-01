@@ -1,0 +1,72 @@
+# Cloudflare Workers configuration of hornung-crm (replaces vercel.json).
+#
+#   npm run build            front-end -> dist/ (tests run first)
+#   npm run dev:worker       the whole app locally in workerd (wrangler dev),
+#                            with a local Postgres speaking Neon's protocol
+#                            (scripts/local-neon.mjs), local R2 and Queues
+#   npx wrangler deploy      publish (needs a Cloudflare account — see
+#                            docs/MIGRAZIONE-CLOUDFLARE.md)
+#
+# Secrets are NOT here: `npx wrangler secret put <NAME>` for each of
+# DATABASE_URL, FILES_SIGNING_SECRET, ANTHROPIC_API_KEY, RESEND_API_KEY,
+# CRON_SECRET (locally: .dev.vars, git-ignored — see .dev.vars.example).
+name = "hornung-crm"
+main = "worker/index.js"
+compatibility_date = "2026-10-01"
+# node:crypto, Buffer, process.env for secrets/vars — what the server code
+# used on Vercel's Node runtime.
+compatibility_flags = ["nodejs_compat"]
+
+# Bundled as pre-compiled WebAssembly modules (Workers refuse to compile
+# wasm at runtime): the image codecs of api/_imageNormalize.js.
+rules = [{ type = "CompiledWasm", globs = ["**/*.wasm"], fallthrough = false }]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+# What vercel.json's rewrite did: every non-API path serves index.html.
+not_found_handling = "single-page-application"
+# Only /api/* runs the Worker; everything else is a static file.
+run_worker_first = ["/api/*"]
+
+[vars]
+PUBLIC_SITE_URL = "https://hornung-crm.example.workers.dev" # set to the real domain before deploying
+RESEND_FROM = "Hornung Consulting <onboarding@resend.dev>"
+AUTO_OPEN_MONTH_DAY = "01-01"
+
+# The extraction AI calls run in the queue consumer: CPU time spent on
+# image conversion + JSON handling, not the minutes spent waiting on the API
+# (waiting is not CPU time). 5 minutes is the most a paid plan allows.
+[limits]
+cpu_ms = 300000
+
+# Document files (Supabase Storage bucket "client-documents" before).
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "hornung-client-documents"
+
+# Images too large to convert inside the Worker's 128 MB (api/_imageNormalize.js).
+[images]
+binding = "IMAGES"
+
+# Document extraction (api/_extractionQueue.js).
+[[queues.producers]]
+binding = "EXTRACTION_QUEUE"
+queue = "hornung-extraction"
+
+[[queues.consumers]]
+queue = "hornung-extraction"
+max_batch_size = 1
+# At most 3 extractions at the same time (the AI rate limit) — keep equal
+# to EXTRACTION_CONCURRENCY in api/_extractionQueue.js.
+max_concurrency = 3
+max_retries = 5
+retry_delay = 60
+dead_letter_queue = "hornung-extraction-dlq"
+
+# The monthly Vercel cron of vercel.json: open the new tax year.
+[triggers]
+crons = ["0 6 1 * *"]
+
+[observability]
+enabled = true
