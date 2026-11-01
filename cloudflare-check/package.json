@@ -1,0 +1,25 @@
+{
+  "name": "hornung-cloudflare-check",
+  "private": true,
+  "type": "module",
+  "description": "Test bench: does the server-side code of hornung-crm run on the Cloudflare Workers runtime (wrangler dev / workerd)?",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "check": "node run-checks.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@jsquash/jpeg": "^1.6.0",
+    "@jsquash/png": "^3.1.1",
+    "@jsquash/resize": "^2.1.1",
+    "@jsquash/webp": "^1.5.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "bcryptjs": "^3.0.3",
+    "heic-decode": "^2.1.0",
+    "libheif-js": "^1.23.5",
+    "resend": "^4.8.0"
+  }
+}

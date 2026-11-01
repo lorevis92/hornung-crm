@@ -1,0 +1,5 @@
+# Probe: the real sharp-based image code, nothing stubbed. Expected to fail.
+name = "hornung-probe-sharp"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]

@@ -1,0 +1,507 @@
+{
+  "ranAt": "2026-11-01T10:55:20.144Z",
+  "images": {
+    "HEIC iPhone (test/fixtures/sample.heic)": {
+      "input": {
+        "bytes": 718114,
+        "mime": "image/heic",
+        "size": "1280x854"
+      },
+      "worker": {
+        "works": true,
+        "changed": true,
+        "size": "1280x854",
+        "bytes": 319398,
+        "readableBySharpAs": "jpeg 1280x854",
+        "totalMsInWorker": 3467,
+        "roundTripMs": 3595,
+        "steps": {
+          "decodeMs": 987,
+          "decodedPixelBytes": 4372480,
+          "flattenAndRotateMs": 7,
+          "resizeMs": 1,
+          "encodeMs": 2439
+        }
+      },
+      "sharpToday": {
+        "changed": true,
+        "size": "1280x854",
+        "bytes": 292508,
+        "ms": 1922
+      },
+      "comparison": {
+        "sameSize": true,
+        "bytesWorkerVsSharp": 1.09,
+        "psnrDb": 40.9
+      }
+    },
+    "JPEG 12 MP document photo": {
+      "input": {
+        "bytes": 3153915,
+        "mime": "image/jpeg",
+        "size": "4032x4030"
+      },
+      "worker": {
+        "works": true,
+        "changed": true,
+        "size": "2400x2399",
+        "bytes": 314555,
+        "readableBySharpAs": "jpeg 2400x2399",
+        "totalMsInWorker": 15315,
+        "roundTripMs": 15479,
+        "steps": {
+          "decodeMs": 942,
+          "decodedPixelBytes": 64995840,
+          "flattenAndRotateMs": 66,
+          "resizeMs": 6563,
+          "encodeMs": 7744
+        }
+      },
+      "sharpToday": {
+        "changed": true,
+        "size": "2400x2399",
+        "bytes": 304327,
+        "ms": 2789
+      },
+      "comparison": {
+        "sameSize": true,
+        "bytesWorkerVsSharp": 1.03,
+        "psnrDb": 42.9
+      }
+    },
+    "JPEG sideways (EXIF orientation 6)": {
+      "input": {
+        "bytes": 2194338,
+        "mime": "image/jpeg",
+        "size": "4032x3024"
+      },
+      "worker": {
+        "works": true,
+        "changed": true,
+        "size": "1800x2400",
+        "bytes": 309992,
+        "readableBySharpAs": "jpeg 1800x2400",
+        "totalMsInWorker": 10595,
+        "roundTripMs": 10735,
+        "steps": {
+          "decodeMs": 1152,
+          "decodedPixelBytes": 48771072,
+          "flattenAndRotateMs": 605,
+          "resizeMs": 3469,
+          "encodeMs": 5369
+        }
+      },
+      "sharpToday": {
+        "changed": true,
+        "size": "1800x2400",
+        "bytes": 300294,
+        "ms": 3653
+      },
+      "comparison": {
+        "sameSize": true,
+        "bytesWorkerVsSharp": 1.03,
+        "psnrDb": 46.2
+      }
+    },
+    "PNG transparent 300x200": {
+      "input": {
+        "bytes": 333,
+        "mime": "image/png",
+        "size": "300x200"
+      },
+      "worker": {
+        "works": true,
+        "changed": true,
+        "size": "300x200",
+        "bytes": 573,
+        "readableBySharpAs": "jpeg 300x200",
+        "totalMsInWorker": 122,
+        "roundTripMs": 181,
+        "steps": {
+          "decodeMs": 46,
+          "decodedPixelBytes": 240000,
+          "flattenAndRotateMs": 13,
+          "resizeMs": 0,
+          "encodeMs": 63
+        }
+      },
+      "sharpToday": {
+        "changed": true,
+        "size": "300x200",
+        "bytes": 507,
+        "ms": 30
+      },
+      "comparison": {
+        "sameSize": true,
+        "bytesWorkerVsSharp": 1.13,
+        "psnrDb": null
+      }
+    },
+    "PNG screenshot 2880x1800": {
+      "input": {
+        "bytes": 2001476,
+        "mime": "image/png",
+        "size": "2880x1800"
+      },
+      "worker": {
+        "works": true,
+        "changed": true,
+        "size": "2400x1500",
+        "bytes": 205206,
+        "readableBySharpAs": "jpeg 2400x1500",
+        "totalMsInWorker": 4933,
+        "roundTripMs": 5084,
+        "steps": {
+          "decodeMs": 360,
+          "decodedPixelBytes": 20736000,
+          "flattenAndRotateMs": 28,
+          "resizeMs": 1177,
+          "encodeMs": 3368
+        }
+      },
+      "sharpToday": {
+        "changed": true,
+        "size": "2400x1500",
+        "bytes": 199179,
+        "ms": 1396
+      },
+      "comparison": {
+        "sameSize": true,
+        "bytesWorkerVsSharp": 1.03,
+        "psnrDb": 48.3
+      }
+    },
+    "JPEG small, already fine (untouched)": {
+      "input": {
+        "bytes": 11516,
+        "mime": "image/jpeg",
+        "size": "1200x1600"
+      },
+      "worker": {
+        "works": true,
+        "changed": false,
+        "size": "1200x1600",
+        "bytes": 11516,
+        "readableBySharpAs": "jpeg 1200x1600",
+        "totalMsInWorker": 0,
+        "roundTripMs": 25,
+        "steps": {}
+      },
+      "sharpToday": {
+        "changed": false,
+        "size": "1200x1600",
+        "bytes": 11516,
+        "ms": 3
+      },
+      "comparison": {
+        "sameSize": true,
+        "bytesWorkerVsSharp": 1,
+        "psnrDb": null
+      }
+    },
+    "WebP 3000x4000": {
+      "input": {
+        "bytes": 675854,
+        "mime": "image/webp",
+        "size": "3000x4000"
+      },
+      "worker": {
+        "works": true,
+        "changed": true,
+        "size": "1800x2400",
+        "bytes": 345385,
+        "readableBySharpAs": "jpeg 1800x2400",
+        "totalMsInWorker": 9877,
+        "roundTripMs": 9946,
+        "steps": {
+          "decodeMs": 1388,
+          "decodedPixelBytes": 48000000,
+          "flattenAndRotateMs": 79,
+          "resizeMs": 3013,
+          "encodeMs": 5397
+        }
+      },
+      "sharpToday": {
+        "changed": true,
+        "size": "1800x2400",
+        "bytes": 317420,
+        "ms": 1470
+      },
+      "comparison": {
+        "sameSize": true,
+        "bytesWorkerVsSharp": 1.09,
+        "psnrDb": 36.1
+      }
+    },
+    "GIF 64x64": {
+      "input": {
+        "bytes": 110,
+        "mime": "image/gif",
+        "size": "64x64"
+      },
+      "worker": {
+        "works": false,
+        "error": {
+          "name": "Error",
+          "message": "GIF_NOT_SUPPORTED"
+        },
+        "stack": [
+          "Error: GIF_NOT_SUPPORTED",
+          "    at normalizeImageBuffer (file:///C:/Users/loren/Desktop/hornung-crm/cloudflare-check/.wrangler/tmp/dev-fmWG3a/worker.js:150281:13)",
+          "    at async POST /image (file:///C:/Users/loren/Desktop/hornung-crm/cloudflare-check/.wrangler/tmp/dev-fmWG3a/worker.js:150393:19)",
+          "    at async Object.fetch (file:///C:/Users/loren/Desktop/hornung-crm/cloudflare-check/.wrangler/tmp/dev-fmWG3a/worker.js:150554:14)",
+          "    at async jsonError (file:///C:/Users/loren/Desktop/hornung-crm/cloudflare-check/.wrangler/tmp/dev-fmWG3a/worker.js:150593:12)",
+          "    at async drainBody (file:///C:/Users/loren/Desktop/hornung-crm/cloudflare-check/.wrangler/tmp/dev-fmWG3a/worker.js:150565:12)"
+        ]
+      },
+      "sharpToday": {
+        "changed": true,
+        "size": "64x64",
+        "bytes": 337,
+        "ms": 10
+      }
+    },
+    "JPEG 48 MP (8000x6000, stress)": {
+      "input": {
+        "bytes": 2857542,
+        "mime": "image/jpeg",
+        "size": "8000x6000"
+      },
+      "worker": {
+        "works": true,
+        "changed": true,
+        "size": "2400x1800",
+        "bytes": 161649,
+        "readableBySharpAs": "jpeg 2400x1800",
+        "totalMsInWorker": 12958,
+        "roundTripMs": 13103,
+        "steps": {
+          "decodeMs": 3822,
+          "decodedPixelBytes": 192000000,
+          "flattenAndRotateMs": 328,
+          "resizeMs": 4321,
+          "encodeMs": 4487
+        }
+      },
+      "sharpToday": {
+        "changed": true,
+        "size": "2400x1800",
+        "bytes": 152839,
+        "ms": 1865
+      },
+      "comparison": {
+        "sameSize": true,
+        "bytesWorkerVsSharp": 1.06,
+        "psnrDb": 43.2
+      }
+    }
+  },
+  "other": {
+    "heicDecodeAsIs": {
+      "works": false,
+      "error": {
+        "name": "CompileError",
+        "message": "WebAssembly.Module(): Wasm code generation disallowed by embedder"
+      }
+    },
+    "bcrypt": {
+      "hash": "$2b$12$ooa/Vr39UcjlchEwbmo/kOoJ0sp2qmjXpGVZQVQn9ic97O3wt0HRe",
+      "hashMs": 1475,
+      "verifyMs": 1949,
+      "verifiesOwn": true,
+      "rejectsWrong": true,
+      "verifiesNodeHash": true,
+      "unknownAccountIsFalse": true,
+      "workerHashVerifiesInNode": true
+    },
+    "nodeApis": {
+      "newToken": {
+        "length": 43,
+        "urlSafe": true
+      },
+      "hashToken": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "validatePasswordBytes": "PASSWORD_TOO_LONG",
+      "parseCookies": {
+        "a": "1",
+        "hc_session": "tok/en"
+      },
+      "setSessionCookie": {
+        "Set-Cookie": [
+          "hc_session=TOKEN; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1209600"
+        ]
+      },
+      "processEnv": {
+        "PUBLIC_SITE_URL_seenByRealSiteUrl": "https://check.example",
+        "varFromWranglerToml": "from-wrangler-toml",
+        "sameAsEnvBinding": true
+      },
+      "supabaseSelect": {
+        "rows": [
+          {
+            "id": "c1"
+          }
+        ],
+        "error": null
+      },
+      "storageUpload": "ok",
+      "storageDownload": {
+        "size": 5,
+        "type": "Blob"
+      },
+      "storageSignedUrl": true
+    },
+    "apiModules": {
+      "modules": {
+        "_auth.js": {
+          "imports": true,
+          "exports": 31
+        },
+        "_childSuggestion.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "_dataOps.js": {
+          "imports": true,
+          "exports": 7
+        },
+        "_imageNormalize.js (sharp stubbed)": {
+          "imports": false,
+          "error": {
+            "name": "CompileError",
+            "message": "WebAssembly.Module(): Wasm code generation disallowed by embedder"
+          }
+        },
+        "_lib.js": {
+          "imports": true,
+          "exports": 10
+        },
+        "_personalDetails.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "_propertySuggestion.js": {
+          "imports": true,
+          "exports": 2
+        },
+        "_registrySync.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "auth/[action].js": {
+          "imports": true,
+          "exports": 2
+        },
+        "data/[op].js": {
+          "imports": true,
+          "exports": 1
+        },
+        "case-assistant.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "case-status.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "claim-profile.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "delete-client.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "extract-document.js": {
+          "imports": false,
+          "error": {
+            "name": "CompileError",
+            "message": "WebAssembly.Module(): Wasm code generation disallowed by embedder"
+          }
+        },
+        "extract-document-now.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "invite-client.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "invite-staff.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "notify-late-upload.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "open-tax-year.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "register.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "reprocess-client-year.js": {
+          "imports": true,
+          "exports": 2
+        },
+        "reset-password.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "retry-extraction.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "sync-child-suggestions.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "sync-personal-details.js": {
+          "imports": true,
+          "exports": 1
+        },
+        "sync-property-suggestion.js": {
+          "imports": true,
+          "exports": 1
+        }
+      },
+      "meWithoutDb": {
+        "status": 500,
+        "body": {
+          "error": "SUPABASE_URL is missing or malformed, or SUPABASE_SERVICE_ROLE_KEY is not configured. Check the Vercel environment variables.",
+          "code": "MISSING_SUPABASE_ENV"
+        },
+        "headers": {}
+      }
+    },
+    "anthropic": {
+      "works": false,
+      "keyProvided": false,
+      "ms": 321,
+      "error": {
+        "name": "Error",
+        "message": "401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011Cgc67NZ23JyqnsXUcZuFx\"}",
+        "status": 401
+      }
+    },
+    "resend": {
+      "keyProvided": false,
+      "ms": 262,
+      "result": {
+        "sent": false,
+        "reason": "NO_RESEND_KEY"
+      },
+      "withoutKeyReachesResend": {
+        "answered": true,
+        "name": "validation_error",
+        "message": "API key is invalid"
+      }
+    }
+  },
+  "worker": {
+    "ok": true,
+    "runtime": "Cloudflare-Workers"
+  }
+}

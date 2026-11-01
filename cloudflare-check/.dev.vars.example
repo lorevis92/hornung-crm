@@ -1,0 +1,3 @@
+# Copy to .dev.vars (git-ignored) to run the real Anthropic / Resend calls.
+ANTHROPIC_API_KEY=
+RESEND_API_KEY=

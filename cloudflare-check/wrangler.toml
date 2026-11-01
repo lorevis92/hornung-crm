@@ -1,0 +1,17 @@
+# Local test bench only (wrangler dev) — never deployed.
+name = "hornung-cloudflare-check"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+# Node APIs used by the app (node:crypto, Buffer, process.env).
+compatibility_flags = ["nodejs_compat"]
+
+# sharp is a native binary and cannot be bundled for Workers; stub it so the
+# rest of the real api/ module graph can be imported (see src/stubs/sharp.js).
+[alias]
+"sharp" = "./src/stubs/sharp.js"
+
+[vars]
+PUBLIC_SITE_URL = "https://check.example"
+CHECK_VAR = "from-wrangler-toml"
+# ANTHROPIC_API_KEY / RESEND_API_KEY: put them in .dev.vars (git-ignored),
+# see .dev.vars.example.
