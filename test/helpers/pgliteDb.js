@@ -26,9 +26,12 @@ export function toPgText(value) {
 const RAW_OIDS = [...Object.keys(TYPE_PARSERS).map(Number), 1009, 1015, 2951, 1007, 1016, 1231, 1182, 1185]
 const PARSERS = Object.fromEntries(RAW_OIDS.map((oid) => [oid, (text) => parserFor(oid)(text)]))
 
-export async function createPgliteDb({ until = null } = {}) {
+// prepare: SQL run before the migrations (e.g. to look like a fresh Neon
+// database, which already has Neon's own auth schema and roles).
+export async function createPgliteDb({ until = null, prepare = null } = {}) {
   const pg = await PGlite.create({ extensions: { pgcrypto } })
   await pg.exec("set timezone to 'UTC'")
+  if (prepare) await pg.exec(prepare)
   const query = async (text, params = []) => {
     const result = await pg.query(text, params.map(toPgText), { parsers: PARSERS })
     return { rows: result.rows, rowCount: result.affectedRows ?? result.rows.length }

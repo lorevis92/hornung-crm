@@ -3,13 +3,16 @@
 // scripts/local-neon.mjs (local development) and the tests (PGlite), so
 // all three run exactly the same SQL.
 //
-// The migrations were written for Supabase. Two things make them apply
-// unchanged on Neon:
+// The migrations were written for Supabase. Three things make them apply
+// on Neon without editing the files:
 //   * db/supabase-compat.sql, run first, creates the few Supabase objects
-//     they reference (roles, auth.users, auth.uid(), storage.*, net.*) —
-//     empty stand-ins that migration 53 removes again;
+//     they reference (roles, users + uid(), storage.*, net.*) — empty
+//     stand-ins that migration 53 removes again;
+//   * Supabase's "auth" schema is read as "supabase_auth" (prepareMigration):
+//     on Neon "auth" already exists and belongs to Neon (Neon Auth / Data
+//     API, owner cloud_admin), so the stand-ins cannot live there;
 //   * the only statement Neon refuses outright, `create extension pg_net`
-//     (the extension doesn't exist there), is skipped — see prepareMigration.
+//     (the extension doesn't exist there), is skipped.
 import { readdirSync, readFileSync } from 'node:fs'
 
 const MIGRATIONS_DIR = new URL('./migrations/', import.meta.url)
@@ -25,14 +28,21 @@ export function migrationFiles() {
 }
 
 export function readMigration(name) {
-  return prepareMigration(readFileSync(new URL(name, MIGRATIONS_DIR), 'utf8'))
+  return prepareMigration(readFileSync(new URL(name, MIGRATIONS_DIR), 'utf8'), name)
 }
 
-export function prepareMigration(sql) {
-  return sql.replace(
+export function prepareMigration(sql, name = '') {
+  let out = sql.replace(
     /^\s*create extension if not exists pg_net;\s*$/gim,
     '-- (skipped by db/migrate.js: no pg_net on Neon — see db/supabase-compat.sql)'
   )
+  // Only the Supabase-era files (01–52) mean Supabase's auth schema.
+  if (!name || name < LEAVE_SUPABASE_MIGRATION) {
+    out = out
+      .replace(/\bauth\.(users|uid)\b/g, 'supabase_auth.$1')
+      .replace(/search_path = public, auth\b/g, 'search_path = public, supabase_auth')
+  }
+  return out
 }
 
 /**

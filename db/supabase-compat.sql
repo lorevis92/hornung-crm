@@ -17,18 +17,30 @@
 -- Idempotent. Nothing here ever holds data in the new setup.
 -- ===========================================================================
 
+-- The three Supabase roles the migrations grant to. A role that already
+-- exists is NOT ours (on Neon, "authenticated" belongs to Neon's Data API):
+-- it is used as it is, and migration 53 only takes our grants away from it.
+-- The ones created here are marked, so 53 knows it may drop them.
 do $$
+declare
+  role_name text;
 begin
-  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
-  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
-  if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin; end if;
+  foreach role_name in array array['anon', 'authenticated', 'service_role'] loop
+    if not exists (select 1 from pg_roles where rolname = role_name) then
+      execute format('create role %I nologin', role_name);
+      execute format('comment on role %I is %L', role_name, 'hornung supabase-compat stand-in');
+    end if;
+  end loop;
 end $$;
 
-create schema if not exists auth;
+-- Supabase's "auth" schema, under another name: db/migrate.js reads
+-- auth.users / auth.uid() of migrations 01–52 as supabase_auth.* (on Neon,
+-- "auth" is Neon's own schema).
+create schema if not exists supabase_auth;
 
 -- Only the columns the migrations read (52 copies existing logins from here
 -- on Supabase; on a fresh Neon database there are none).
-create table if not exists auth.users (
+create table if not exists supabase_auth.users (
   id                 uuid primary key default gen_random_uuid(),
   email              text,
   encrypted_password text,
@@ -38,7 +50,7 @@ create table if not exists auth.users (
 
 -- No Supabase JWT ever reaches this database: no caller is "logged in" at
 -- the SQL level (the server checks the session, api/_auth.js).
-create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+create or replace function supabase_auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
 
 create schema if not exists storage;
 

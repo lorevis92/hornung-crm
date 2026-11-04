@@ -14,8 +14,10 @@
 --   3. every RLS policy and RLS itself (redundant: no anon/authenticated
 --      connection exists any more), plus the SQL helpers that only policies
 --      and the browser-side RPCs used (they all read auth.uid());
---   4. the Supabase stand-ins of db/supabase-compat.sql (auth, storage, net
---      schemas; anon/authenticated/service_role roles).
+--   4. the Supabase stand-ins of db/supabase-compat.sql (supabase_auth,
+--      storage, net schemas; the roles it created) and every grant to the
+--      Supabase roles — on Neon "authenticated" is Neon's Data API role,
+--      which must not keep access once RLS is gone.
 --
 -- Kept: auth_accounts / auth_sessions / auth_tokens (the login), every table
 -- and its data, the triggers that keep data consistent (updated_at, the
@@ -108,8 +110,11 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 4. The Supabase stand-ins
 -- ---------------------------------------------------------------------------
--- Foreign keys from public tables into auth.users first, by name, so that
--- dropping the schema never takes anything of ours along by surprise.
+-- Only what db/supabase-compat.sql created: the supabase_auth schema (where
+-- db/migrate.js puts Supabase's "auth"), storage and net — and only when they
+-- are ours. Neon's own "auth" schema (Neon Auth / Data API) is never touched.
+-- Foreign keys from public tables into them first, by name, so that
+-- dropping a schema never takes anything of ours along by surprise.
 do $$
 declare
   r record;
@@ -119,16 +124,19 @@ begin
       from pg_constraint c
       join pg_class t on t.oid = c.confrelid
       join pg_namespace n on n.oid = t.relnamespace
-     where c.contype = 'f' and n.nspname in ('auth', 'storage')
+     where c.contype = 'f' and n.nspname in ('supabase_auth', 'storage')
        and c.conrelid in (select oid from pg_class where relnamespace = 'public'::regnamespace)
   loop
     execute format('alter table %s drop constraint %I', r.tbl, r.conname);
   end loop;
+  for r in
+    select nspname from pg_namespace
+     where nspname in ('supabase_auth', 'storage', 'net')
+       and pg_get_userbyid(nspowner) = current_user
+  loop
+    execute format('drop schema %I cascade', r.nspname);
+  end loop;
 end $$;
-
-drop schema if exists auth cascade;
-drop schema if exists storage cascade;
-drop schema if exists net cascade;
 
 -- Helpers of the policies (also used by the storage.objects policies just
 -- dropped with their schema) and of the RPCs the browser used to call with
@@ -151,17 +159,44 @@ begin
   end loop;
 end $$;
 
+-- The Supabase roles. Every grant migrations 01–52 gave them on our objects
+-- goes — this matters on Neon, where "authenticated" (and "anonymous") are
+-- the roles of Neon's Data API: with RLS gone, a grant left behind would let
+-- anyone holding a Neon Auth token read the tables through it. A role that
+-- db/supabase-compat.sql created (marked with its comment) is then dropped;
+-- one that is not ours stays, without access to anything of this app.
 do $$
 declare
   role_name text;
 begin
-  foreach role_name in array array['anon', 'authenticated', 'service_role'] loop
+  foreach role_name in array array['anon', 'authenticated', 'service_role', 'anonymous'] loop
     if exists (select 1 from pg_roles where rolname = role_name) then
-      execute format('drop owned by %I', role_name); -- their grants (they own nothing)
-      execute format('drop role %I', role_name);
+      execute format('revoke all on all tables in schema public from %I', role_name);
+      execute format('revoke all on all sequences in schema public from %I', role_name);
+      execute format('revoke all on all functions in schema public from %I', role_name);
+      execute format('alter default privileges in schema public revoke all on tables from %I', role_name);
+      execute format('alter default privileges in schema public revoke all on sequences from %I', role_name);
+      execute format('alter default privileges in schema public revoke all on functions from %I', role_name);
+      execute format('revoke all on schema public from %I', role_name);
+      -- Not "drop owned by": Neon only allows it to members of the role.
+      -- The stand-in owns nothing and, after the revokes, holds nothing; if
+      -- something unexpected still depends on it, it stays (no login, no
+      -- access) rather than failing the migration.
+      if shobj_description((select oid from pg_roles where rolname = role_name), 'pg_authid') = 'hornung supabase-compat stand-in' then
+        begin
+          execute format('drop role %I', role_name);
+        exception when dependent_objects_still_exist then
+          raise notice 'role % kept (no privileges left): %', role_name, sqlerrm;
+        end;
+      end if;
     end if;
   end loop;
 end $$;
+
+-- Functions are executable by PUBLIC by default; the server-only ones are
+-- not for anyone but the owner (the Data API's roles included).
+revoke all on function public.swap_primary_and_spouse_server(uuid) from public;
+revoke all on function public.promote_to_specialist(text) from public;
 
 -- Timestamps leave the database in UTC (the server code compares them as
 -- ISO strings, as PostgREST returned them).

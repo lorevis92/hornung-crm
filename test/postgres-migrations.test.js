@@ -47,7 +47,7 @@ describe('after migration 53', () => {
   })
 
   it('no Supabase schema, role, webhook or auth.users mirror', async () => {
-    const schemas = await query("select nspname from pg_namespace where nspname in ('auth', 'storage', 'net')")
+    const schemas = await query("select nspname from pg_namespace where nspname in ('auth', 'supabase_auth', 'storage', 'net')")
     expect(schemas.rows).toEqual([])
     const roles = await query("select rolname from pg_roles where rolname in ('anon', 'authenticated', 'service_role')")
     expect(roles.rows).toEqual([])
@@ -262,5 +262,47 @@ describe('api/_db.js on Postgres: the supabase-js subset the server code uses', 
     const result = await db.from('clients').select('id').eq('id; drop table clients', 'x')
     expect(result.error.message).toMatch(/refusing identifier/)
     expect((await one('select count(*)::int as n from clients')).n).toBeGreaterThan(0)
+  })
+})
+
+// What `neon init` leaves in a new Neon database before our first migration:
+// Neon Auth / Data API's own "auth" schema (owner cloud_admin, with its own
+// auth.uid()), and the Data API roles "authenticated" and "anonymous".
+const NEON_LIKE = `
+  create role cloud_admin nologin;
+  create role authenticated nologin;
+  create role anonymous nologin;
+  create schema auth authorization cloud_admin;
+  create function auth.uid() returns text language sql stable as $$ select null::text $$;
+  alter function auth.uid() owner to cloud_admin;
+`
+
+describe('on a database that already has Neon Auth / the Data API', () => {
+  let neon
+  beforeAll(async () => {
+    neon = await createPgliteDb({ prepare: NEON_LIKE })
+  }, 120000)
+
+  it('every migration still applies', () => {
+    expect(neon.applied).toEqual(migrationFiles())
+  })
+
+  it("Neon's auth schema and roles are left alone", async () => {
+    const { rows } = await neon.query("select nspname, pg_get_userbyid(nspowner) as owner from pg_namespace where nspname in ('auth', 'supabase_auth')")
+    expect(rows).toEqual([{ nspname: 'auth', owner: 'cloud_admin' }])
+    const roles = await neon.query("select rolname from pg_roles where rolname in ('anon', 'authenticated', 'anonymous', 'service_role') order by 1")
+    expect(roles.rows.map((r) => r.rolname)).toEqual(['anonymous', 'authenticated'])
+  })
+
+  it('the Data API roles have no access to anything of this app', async () => {
+    const { rows } = await neon.query(
+      `select table_name, privilege_type from information_schema.role_table_grants
+        where table_schema = 'public' and grantee in ('authenticated', 'anonymous')`
+    )
+    expect(rows).toEqual([])
+    const fn = await neon.query(
+      "select has_function_privilege('authenticated', 'public.swap_primary_and_spouse_server(uuid)', 'execute') as can"
+    )
+    expect(fn.rows[0].can).toBe(false)
   })
 })

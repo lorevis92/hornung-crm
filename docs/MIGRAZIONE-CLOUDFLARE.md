@@ -16,10 +16,10 @@ Configurazione: `wrangler.toml`. Le migrazioni ora stanno in `db/migrations/` (p
 
 ## Database
 
-- Le migrazioni 01–52 si applicano **senza modifiche** su un Postgres normale. `db/supabase-compat.sql`
-  crea prima, vuoti, i pochi oggetti Supabase che nominano: i ruoli `anon`/`authenticated`/`service_role`,
-  `auth.users`, `auth.uid()`, `storage.*` e `net.http_post`. Il runner (`db/migrate.js`) salta solo la riga
-  `create extension pg_net`, che su Neon non esiste.
+- Le migrazioni 01–52 si applicano **senza modificare i file** su un Postgres normale:
+  - `db/supabase-compat.sql` crea prima, vuoti, i pochi oggetti Supabase che nominano (ruoli, utenti e `uid()`, `storage.*`, `net.http_post`);
+  - il runner (`db/migrate.js`) legge lo schema Supabase `auth` come `supabase_auth`, perché su Neon `auth` esiste già ed è di Neon (Neon Auth / Data API, proprietario `cloud_admin`);
+  - salta la riga `create extension pg_net`, che su Neon non esiste.
 - **53 `leave_supabase`** rimuove:
   - tutte le policy RLS e la RLS stessa;
   - il trigger pg_net dell'estrazione;
@@ -31,6 +31,15 @@ Configurazione: `wrangler.toml`. Le migrazioni ora stanno in `db/migrations/` (p
   Supabase**, dove vive ancora `main`.
 - **54 `extraction_jobs`** aggiunge le tabelle e le funzioni dei job di estrazione.
 - `npm run db:migrate` applica le migrazioni a Neon, con `DATABASE_URL` preso dall'ambiente.
+
+### Il database Neon di produzione (4 novembre 2026)
+
+Progetto `hornung-crm`, organizzazione *Lorenzo G.*, regione `aws-eu-central-1` (Frankfurt): **54 migrazioni applicate**.
+
+`neon init` vi ha attivato anche **Neon Auth / Data API** (schema `auth` e `neon_auth`, ruoli `authenticated` e `anonymous`).
+L'app non li usa, perché ha un login suo. La migrazione 53 li lascia dove sono, ma toglie a quei ruoli ogni permesso
+sulle tabelle dell'app: senza RLS, un permesso rimasto aprirebbe le tabelle a chiunque abbia un token Neon Auth.
+Se non ti servono, puoi disattivarli dalla console Neon (Auth e Data API).
 
 ## Estrazione documenti
 
