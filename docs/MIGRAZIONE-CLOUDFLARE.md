@@ -130,6 +130,7 @@ Worker `hornung-crm` su `https://hornung-crm.lorewhiskey.workers.dev` (Workers P
 | Subrequest per invocazione | **10.000** (la 10.001ª fallisce: "Too many subrequests") |
 | Latenza Worker → Neon | **~10 ms** a query a caldo (p90 11 ms); **~650 ms** la prima dopo la sospensione di Neon |
 | Cookie | `hc_session`: `HttpOnly; Secure; SameSite=Lax`, 14 giorni |
+| Resend + link e-mail | reset password: e-mail **consegnata** (stato Resend `delivered`), in italiano, link `https://hornung-crm.lorewhiskey.workers.dev/set-password#token=…`; la pagina si apre, il link imposta la password e apre la sessione, **riusato dà 400**, login con la nuova password OK, logout chiude la sessione. Mittente di prova `onboarding@resend.dev`: consegna solo all'indirizzo dell'account Resend, per i clienti serve un dominio verificato |
 | Upload R2 firmato + coda | PUT 200, documento registrato, job in coda, conversione in JPEG: OK |
 
 Per rifare la misura: `workers/image-memory-probe` (POST `/convert`, `/app` con Images, GET `/neon` con il
