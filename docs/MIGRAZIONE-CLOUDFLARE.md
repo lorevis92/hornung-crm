@@ -125,7 +125,8 @@ Worker `hornung-crm` su `https://hornung-crm.lorewhiskey.workers.dev` (Workers P
 | Soglia `IMAGE_MAX_WORKER_PIXELS` | 8 MP resta giusta: margine per HEIC (10 MP passa) e ampio per JPEG |
 | Sopra 8 MP: Cloudflare Images vero | JPEG 12/24 MP, PNG trasparente, HEIC 12 MP → JPEG ≤ 2400 px, **rotazione EXIF applicata, trasparenza su bianco**. Oltre 20 MB di file: rifiutato con messaggio chiaro |
 | CPU conversione | probe: 1,9–4,1 s; nell'app (consumer della coda): HEIC 8 MP nel Worker **5,2 s**, via Images **0,13–0,40 s**. Limite 300 s |
-| CPU bcrypt (login, costo 12) | **~300 ms** (register, login giusto e sbagliato) |
+| Estrazione vera (Anthropic) | certificato di salario sintetico JPEG 8 MP: convertito nel Worker ed estratto, **campi corretti** (lordo, netto, AVS, LPP, periodo, datore). Consumer: **CPU 1,98 s**, wall 54 s |
+| CPU bcrypt (login, costo 12) | **~300–500 ms** (register, login giusto e sbagliato) |
 | Subrequest per invocazione | **10.000** (la 10.001ª fallisce: "Too many subrequests") |
 | Latenza Worker → Neon | **~10 ms** a query a caldo (p90 11 ms); **~650 ms** la prima dopo la sospensione di Neon |
 | Cookie | `hc_session`: `HttpOnly; Secure; SameSite=Lax`, 14 giorni |
