@@ -113,6 +113,27 @@ Su Postgres vero (PGlite) i test verificano anche:
 - la queue: concorrenza, duplicati, ripresa (`test/extraction-queue.test.js`);
 - la copia dei dati da un database "tipo Supabase", senza le righe di WisiHealth (`test/copy-data.test.js`).
 
+## Misure sul deployment vero (16 novembre 2026)
+
+Worker `hornung-crm` su `https://hornung-crm.lorewhiskey.workers.dev` (Workers Paid), R2 `hornung-client-documents`
+(WEUR), code `hornung-extraction` e `-dlq`, Neon Frankfurt. CPU e wall time letti da `wrangler tail`.
+
+| Cosa | Risultato reale |
+|---|---|
+| Memoria, JPEG convertito nel Worker | passa fino a **24,5 MP** (anche 3 in parallelo); **32 MP: "Worker exceeded memory limit"** |
+| Memoria, HEIC convertito nel Worker | passa fino a **10 MP** (anche 3 in parallelo); **12 MP: memoria superata** |
+| Soglia `IMAGE_MAX_WORKER_PIXELS` | 8 MP resta giusta: margine per HEIC (10 MP passa) e ampio per JPEG |
+| Sopra 8 MP: Cloudflare Images vero | JPEG 12/24 MP, PNG trasparente, HEIC 12 MP → JPEG ≤ 2400 px, **rotazione EXIF applicata, trasparenza su bianco**. Oltre 20 MB di file: rifiutato con messaggio chiaro |
+| CPU conversione | probe: 1,9–4,1 s; nell'app (consumer della coda): HEIC 8 MP nel Worker **5,2 s**, via Images **0,13–0,40 s**. Limite 300 s |
+| CPU bcrypt (login, costo 12) | **~300 ms** (register, login giusto e sbagliato) |
+| Subrequest per invocazione | **10.000** (la 10.001ª fallisce: "Too many subrequests") |
+| Latenza Worker → Neon | **~10 ms** a query a caldo (p90 11 ms); **~650 ms** la prima dopo la sospensione di Neon |
+| Cookie | `hc_session`: `HttpOnly; Secure; SameSite=Lax`, 14 giorni |
+| Upload R2 firmato + coda | PUT 200, documento registrato, job in coda, conversione in JPEG: OK |
+
+Per rifare la misura: `workers/image-memory-probe` (POST `/convert`, `/app` con Images, GET `/neon` con il
+segreto `DATABASE_URL`). Va cancellato dopo l'uso (`wrangler delete`): le sue route sono aperte.
+
 ## Cosa resta da confermare con un deployment vero
 
 - **Memoria a 128 MB** delle conversioni nel Worker: si misura con `workers/image-memory-probe`.

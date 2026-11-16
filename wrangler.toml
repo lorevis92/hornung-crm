@@ -30,7 +30,7 @@ not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
 [vars]
-PUBLIC_SITE_URL = "https://hornung-crm.example.workers.dev" # set to the real domain before deploying
+PUBLIC_SITE_URL = "https://hornung-crm.lorewhiskey.workers.dev" # test address; the real domain on cut-over day
 RESEND_FROM = "Hornung Consulting <onboarding@resend.dev>"
 AUTO_OPEN_MONTH_DAY = "01-01"
 

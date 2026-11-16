@@ -7,3 +7,7 @@ rules = [{ type = "CompiledWasm", globs = ["**/*.wasm"], fallthrough = false }]
 
 [limits]
 cpu_ms = 300000
+
+# POST /app: the Cloudflare Images fallback of the app, for real.
+[images]
+binding = "IMAGES"
