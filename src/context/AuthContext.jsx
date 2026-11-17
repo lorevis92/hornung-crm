@@ -170,7 +170,7 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  // Whether an invite / reset link (the token in /set-password#token=...)
+  // Whether an invite / reset link (the token in /set-password?token=...)
   // can still be used.
   const checkPasswordLink = useCallback(async (token) => {
     if (!token) return { valid: false }

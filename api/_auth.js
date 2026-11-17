@@ -342,6 +342,12 @@ export async function consumeToken(admin, token, purposes) {
 }
 
 export function setPasswordLink(siteUrl, token) {
-  // In the fragment: never sent to the server, so never in access logs.
-  return `${siteUrl}/set-password#token=${encodeURIComponent(token)}`
+  // In the query string, not the fragment: mail link rewriters (Gmail's
+  // safe-browsing redirect and similar) can drop what follows "#", and the
+  // link then arrives without its token. /set-password is a static asset
+  // (wrangler.toml: only /api/* runs the Worker), so the token does not end
+  // up in the Worker's logs; the page removes it from the address bar as
+  // soon as it has read it (src/lib/linkToken.js), and it is single-use and
+  // short-lived (TOKEN_TTL_MS).
+  return `${siteUrl}/set-password?token=${encodeURIComponent(token)}`
 }

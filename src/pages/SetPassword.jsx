@@ -8,15 +8,22 @@ import { Field, PasswordInput, Spinner } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useI18n } from '../i18n'
+import { addressWithoutToken, readLinkToken } from '../lib/linkToken'
 
-// The invite / reset e-mail links to /set-password#token=... (in the
-// fragment, so the token never reaches a server log).
-function readLinkToken() {
-  try {
-    return new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token') || ''
-  } catch {
-    return ''
+// The invite / reset e-mail links to /set-password?token=... (older links:
+// #token=..., still read).
+// Remembered once read: the address no longer has it, and StrictMode calls
+// a useState initializer twice.
+let linkToken = null
+function readTokenAndClearAddress() {
+  const fresh = readLinkToken(window.location)
+  if (fresh) {
+    linkToken = fresh
+    // Out of the address bar and the history at once, before anything else
+    // on the page can see it.
+    window.history.replaceState(null, '', addressWithoutToken(window.location))
   }
+  return linkToken || ''
 }
 
 export default function SetPassword() {
@@ -24,7 +31,7 @@ export default function SetPassword() {
   const toast = useToast()
   const navigate = useNavigate()
   const { updatePassword, checkPasswordLink } = useAuth()
-  const [token] = useState(readLinkToken)
+  const [token] = useState(readTokenAndClearAddress)
   const [ready, setReady] = useState(false)
   const [linkValid, setLinkValid] = useState(true)
   const [password, setPassword] = useState('')
@@ -33,10 +40,6 @@ export default function SetPassword() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    // Keep the token out of the address bar / history once read.
-    if (window.location.hash) {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search)
-    }
     let cancelled = false
     checkPasswordLink(token).then((result) => {
       if (cancelled) return
